@@ -4,20 +4,9 @@ import type {
   HierarchyPointNode,
   HierarchyPointLink,
 } from "d3-hierarchy";
+import type { MindNode, NodesMap } from "@/src/types/tree";
 
-export type MindNode = {
-  id: string;
-  prompt: string;
-  response: string;
-  children: string[];
-  parentId: string | null;
-  timestamp: number;
-  offsetX?: number;
-  offsetY?: number;
-  layer: number;
-};
-
-export type NodesMap = Record<string, MindNode>;
+export type { MindNode, NodesMap };
 
 type HierarchyNodeData = MindNode & {
   children: HierarchyNodeData[];

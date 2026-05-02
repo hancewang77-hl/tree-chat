@@ -1,8 +1,5 @@
 import { useEffect, useState } from "react";
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
-}
+import { clamp } from "@/src/lib/utils";
 
 export function useResizableSidebar(initialWidth = 420) {
   const [sidebarWidth, setSidebarWidth] = useState(initialWidth);

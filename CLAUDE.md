@@ -35,11 +35,35 @@ This is a **tree-structured AI conversation tool** ("智构树语"). Users explo
 
 ```
 app/
-├── page.tsx             # The entire SPA — 1600+ line client component
-├── layout.tsx           # Root layout (Geist fonts, CSS import)
-├── globals.css          # Tailwind import, scrollbar styles, theme vars
-├── api/chat/route.ts    # POST /api/chat — proxies to DeepSeek API
+├── page.tsx              # Root page — state + handlers + JSX composition (~480 lines)
+├── layout.tsx            # Root layout (Geist fonts, CSS import)
+├── globals.css            # Tailwind import, scrollbar styles, theme vars
+├── api/chat/route.ts      # POST /api/chat — proxies to DeepSeek API
 └── favicon.ico
+
+src/
+├── types/
+│   └── tree.ts           # MindNode, NodesMap, ToolMode
+├── lib/
+│   └── utils.ts          # clamp, truncateText, roundRect, drawWrappedText, noRaycast
+├── components/
+│   ├── scene/
+│   │   ├── TreeScene.tsx       # Main 3D scene (canvas, lights, camera, layers)
+│   │   ├── LayerPlane.tsx      # Glass-pane layer background
+│   │   ├── Node3D.tsx          # Single 3D node with selection UI
+│   │   ├── CardTexture.tsx     # Canvas2D → THREE.CanvasTexture card rendering
+│   │   └── CameraModeRig.tsx   # Camera position switching effect
+│   ├── sidebar/
+│   │   └── PathSidebar.tsx     # Right sidebar: path cards, typing indicator, composer
+│   ├── toolbar/
+│   │   ├── SceneToolbar.tsx    # Bottom toolbar: mode buttons
+│   │   └── ZoomControls.tsx    # Zoom in/out + display
+│   └── LayerNameDialog.tsx     # Plane naming modal
+
+hooks/
+├── useTreeLayout.ts      # D3 tree layout + shared types & constants
+├── useAIChat.ts          # DeepSeek API interaction + typing state
+└── useResizableSidebar.ts # Sidebar drag-to-resize behavior
 ```
 
 ### Key data model (`page.tsx`)
@@ -82,9 +106,9 @@ POST endpoint that wraps DeepSeek's chat completions. Expects `{ messages, model
 
 ### State management
 
-All state lives in the `Page` component via 15+ `useState` hooks. No external state library. Layer transitions use `requestAnimationFrame` for smooth interpolation.
+All state lives in `app/page.tsx` via 15+ `useState` hooks. No external state library. Layer transitions use `requestAnimationFrame` for smooth interpolation. Extracted components receive state as props.
 
-### Important constants (in `page.tsx`)
+### Important constants (in `hooks/useTreeLayout.ts`)
 
 - `NODE_W = 3.4`, `NODE_H = 1.75` — card dimensions in 3D world units
 - `LAYER_SPACING = 4.2` — z-distance between layers
@@ -92,6 +116,5 @@ All state lives in the `Page` component via 15+ `useState` hooks. No external st
 
 ### Known quirks
 
-- The `.env.local` file is committed (contains `DEEPSEEK_API_KEY`), despite `.gitignore` having `.env*`. The `.gitignore` also tracks `next-env.d.ts` but the file exists in the repo.
+- The `.env.local` file contains `DEEPSEEK_API_KEY` — ensure it stays in `.gitignore`.
 - No tests exist in this project.
-- `@xyflow/react` CSS is imported in `globals.css` but React Flow components aren't used in the current `page.tsx` — possibly for future use or a previous iteration.
