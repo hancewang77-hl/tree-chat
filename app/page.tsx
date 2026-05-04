@@ -61,6 +61,7 @@ export default function Page() {
   const [planeNameInput, setPlaneNameInput] = useState("");
   const [movingNodeId, setMovingNodeId] = useState<string | null>(null);
   const [pendingNodeLayer, setPendingNodeLayer] = useState<number | null>(null);
+  const [dialogTargetLayer, setDialogTargetLayer] = useState(0);
 
   // Animate displayLayer toward selectedLayer
   useEffect(() => {
@@ -139,7 +140,7 @@ export default function Page() {
     if (is3DMode) {
       setZoom3D((prev) => clamp(prev + 0.2, 0.1, 4.0));
     } else {
-      setZoom2D((prev) => clamp(prev + 14, 40, 260));
+      setZoom2D((prev) => clamp(prev + 14, 10, 260));
     }
   }
 
@@ -147,7 +148,7 @@ export default function Page() {
     if (is3DMode) {
       setZoom3D((prev) => clamp(prev - 0.2, 0.1, 4.0));
     } else {
-      setZoom2D((prev) => clamp(prev - 14, 40, 260));
+      setZoom2D((prev) => clamp(prev - 14, 10, 260));
     }
   }
 
@@ -250,13 +251,14 @@ export default function Page() {
   function openPlaneNameDialog(layer: number) {
     if (!is3DMode) return;
 
+    setDialogTargetLayer(layer);
     const currentName = planeNames[layer] ?? "";
     setPlaneNameInput(currentName);
     setIsPlaneNameDialogOpen(true);
   }
 
   function confirmPlaneName() {
-    const layer = selectedLayer;
+    const layer = dialogTargetLayer;
     const next = planeNameInput.trim();
 
     setPlaneNames((prev) => {
@@ -289,14 +291,21 @@ export default function Page() {
   function confirmLayerMove() {
     if (!movingNodeId || pendingNodeLayer === null) return;
 
+    const node = nodes[movingNodeId];
+    if (!node || node.layer === pendingNodeLayer) {
+      setMovingNodeId(null);
+      setPendingNodeLayer(null);
+      return;
+    }
+
     setNodes((prev) => {
-      const node = prev[movingNodeId];
-      if (!node) return prev;
+      const targetNode = prev[movingNodeId];
+      if (!targetNode) return prev;
 
       return {
         ...prev,
         [movingNodeId]: {
-          ...node,
+          ...targetNode,
           layer: pendingNodeLayer,
         },
       };

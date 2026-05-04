@@ -5,6 +5,7 @@ import {
   BrainCircuit,
   GitBranch,
   Move,
+  Pencil,
   RotateCcw,
   ScanSearch,
 } from "lucide-react";
@@ -16,12 +17,14 @@ function ToolCircle({
   label,
   title,
   onClick,
+  dimmed,
 }: {
   active: boolean;
   icon: ReactNode;
   label: string;
   title: string;
   onClick: () => void;
+  dimmed?: boolean;
 }) {
   return (
     <button
@@ -31,7 +34,7 @@ function ToolCircle({
         active
           ? "bg-indigo-600 text-white shadow-[0_10px_24px_rgba(99,102,241,0.28)]"
           : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-      }`}
+      } ${dimmed ? "cursor-not-allowed opacity-40" : ""}`}
     >
       <div className="flex h-8 w-8 items-center justify-center">{icon}</div>
       <span className="text-[11px] font-medium tracking-[0.02em]">{label}</span>
@@ -99,9 +102,10 @@ export function SceneToolbar({
 
         <ToolCircle
           active={false}
-          icon={<GitBranch size={18} />}
+          icon={<Pencil size={18} />}
           label="命名"
-          title="命名当前平面"
+          title={is3DMode ? "命名当前平面" : "仅 3D 模式下可用"}
+          dimmed={!is3DMode}
           onClick={() => {
             if (is3DMode) onOpenNameDialog(selectedLayer);
           }}

@@ -127,15 +127,10 @@ export function useTreeLayout({
     );
   }, [fullTreeLayout.links, is3DMode, visibleIds]);
 
-  const currentPath = useMemo(
-    () => getContextPath(nodes, selectedNodeId),
-    [nodes, selectedNodeId],
-  );
-
-  const currentPathIds = useMemo(
-    () => new Set(currentPath.map((n) => n.id)),
-    [currentPath],
-  );
+  const currentPathIds = useMemo(() => {
+    const path = getContextPath(nodes, selectedNodeId);
+    return new Set(path.map((n) => n.id));
+  }, [nodes, selectedNodeId]);
 
   function effectiveLayer(node: MindNode) {
     if (movingNodeId === node.id && pendingNodeLayer !== null) {
@@ -202,78 +197,16 @@ export function useTreeLayout({
     };
   }, [fullTreeLayout.descendants]);
 
-  const layerBoundsMap = useMemo(() => {
-    const map = new Map<
-      number,
-      { width: number; height: number; centerX: number; centerY: number }
-    >();
-
-    const allLayers = Object.values(nodes).map((n) => n.layer);
-    const minLayer = Math.min(...allLayers, selectedLayer, 0);
-    const maxLayer = Math.max(...allLayers, selectedLayer, 0);
-
-    for (let layer = minLayer - 2; layer <= maxLayer + 2; layer++) {
-      const layerNodes = fullTreeLayout.descendants.filter(
-        (n) => n.data.layer === layer,
-      );
-
-      if (layerNodes.length === 0) {
-        map.set(layer, {
-          width: 8,
-          height: 4.8,
-          centerX: 2.5,
-          centerY: -1.2,
-        });
-        continue;
-      }
-
-      const minX = Math.min(
-        ...layerNodes.map((n) => n.y + (n.data.offsetX ?? 0) / 100),
-      );
-      const minY = Math.min(
-        ...layerNodes.map((n) => -n.x - (n.data.offsetY ?? 0) / 100),
-      );
-      const maxX = Math.max(
-        ...layerNodes.map((n) => n.y + (n.data.offsetX ?? 0) / 100 + NODE_W),
-      );
-      const maxY = Math.max(
-        ...layerNodes.map((n) => -n.x - (n.data.offsetY ?? 0) / 100 + NODE_H),
-      );
-
-      const paddingX = 1;
-      const paddingY = 0.8;
-
-      const left = minX - paddingX;
-      const right = maxX + paddingX;
-      const bottom = minY - paddingY;
-      const top = maxY + paddingY;
-
-      map.set(layer, {
-        width: right - left,
-        height: top - bottom,
-        centerX: (left + right) / 2,
-        centerY: (bottom + top) / 2,
-      });
-    }
-
-    return map;
-  }, [fullTreeLayout.descendants, nodes, selectedLayer]);
-
   const allLayers = Object.values(nodes).map((n) => n.layer);
   const minLayer = Math.min(...allLayers, selectedLayer, 0);
   const maxLayer = Math.max(...allLayers, selectedLayer, 0);
 
   return {
-    visibleIds,
-    fullTreeLayout,
     renderedNodes,
     renderedLinks,
-    currentPath,
     currentPathIds,
     effectiveLayer,
     globalPlaneBounds,
-    layerBoundsMap,
-    allLayers,
     minLayer,
     maxLayer,
   };

@@ -57,7 +57,6 @@ export function TreeScene({
   const {
     renderedNodes,
     renderedLinks,
-    currentPath,
     currentPathIds,
     effectiveLayer,
     globalPlaneBounds,
@@ -164,8 +163,8 @@ export function TreeScene({
           ];
 
           const isPathEdge =
-            currentPath.some((n) => n.id === link.source.data.id) &&
-            currentPath.some((n) => n.id === link.target.data.id);
+            currentPathIds.has(link.source.data.id) &&
+            currentPathIds.has(link.target.data.id);
 
           return (
             <Line

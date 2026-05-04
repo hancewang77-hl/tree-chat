@@ -11,8 +11,19 @@ export async function POST(req: Request) {
       );
     }
 
-    const body = await req.json();
-    const { messages, model = "deepseek-chat" } = body ?? {};
+    let body: Record<string, unknown>;
+    try {
+      body = await req.json();
+    } catch {
+      return Response.json(
+        { error: "请求体格式错误，需要有效的 JSON" },
+        { status: 400 },
+      );
+    }
+    const { messages, model = "deepseek-chat" } = body as {
+      messages?: unknown;
+      model?: string;
+    };
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return Response.json(
