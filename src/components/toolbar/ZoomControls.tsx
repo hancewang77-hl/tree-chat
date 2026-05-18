@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Minus } from "lucide-react";
+import { Plus, Minus, TreePine } from "lucide-react";
 
 export function ZoomControls({
   zoom,
@@ -14,26 +14,41 @@ export function ZoomControls({
   onZoomOut: () => void;
 }) {
   return (
-    <div className="absolute bottom-7 right-7 z-30">
-      <div className="flex flex-col items-center gap-2 rounded-2xl border border-white/20 bg-[rgba(255,255,255,0.14)] p-2 shadow-[0_20px_50px_rgba(15,23,42,0.18)] backdrop-blur-2xl">
+    <div className="absolute bottom-[104px] right-4 z-30">
+      <div
+        className="flex flex-col items-center gap-1 rounded-2xl px-1.5 py-1.5 shadow-lg"
+        style={{
+          background: "rgba(251, 247, 240, 0.9)",
+          border: "1px solid var(--border-warm)",
+        }}
+      >
         <button
           onClick={onZoomIn}
-          className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/80 text-slate-700 transition-all hover:bg-white"
-          title="放大"
+          className="flex h-9 w-9 items-center justify-center rounded-xl transition-all hover:bg-white/80"
+          style={{ color: "var(--text-charcoal)" }}
+          title="放大 — 靠近树冠"
         >
-          <Plus size={18} />
+          <Plus size={15} />
         </button>
 
-        <div className="px-2 text-[11px] font-medium text-slate-600">
-          {is3DMode ? `${zoom.toFixed(2)}x` : `${Math.round(zoom)}%`}
+        {/* Zoom level indicator with ring accent */}
+        <div
+          className="flex flex-col items-center gap-0.5 select-none"
+          style={{ color: "var(--text-muted)" }}
+        >
+          <span className="text-[9px] font-medium leading-none">
+            {is3DMode ? `${zoom.toFixed(1)}×` : `${Math.round(zoom)}%`}
+          </span>
+          <TreePine size={10} style={{ color: "var(--accent-sage)", opacity: 0.6 }} />
         </div>
 
         <button
           onClick={onZoomOut}
-          className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/80 text-slate-700 transition-all hover:bg-white"
-          title="缩小"
+          className="flex h-9 w-9 items-center justify-center rounded-xl transition-all hover:bg-white/80"
+          style={{ color: "var(--text-charcoal)" }}
+          title="缩小 — 俯瞰全景"
         >
-          <Minus size={18} />
+          <Minus size={15} />
         </button>
       </div>
     </div>

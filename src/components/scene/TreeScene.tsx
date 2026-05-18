@@ -15,6 +15,39 @@ import {
   useTreeLayout,
 } from "@/hooks/useTreeLayout";
 import { noRaycast } from "@/src/lib/utils";
+
+function curvedBranchPoints(
+  source: [number, number, number],
+  target: [number, number, number],
+  segments: number = 10,
+  offset: number = 0,
+): [number, number, number][] {
+  const points: [number, number, number][] = [];
+  const mx = (source[0] + target[0]) / 2;
+  const my = (source[1] + target[1]) / 2;
+  const mz = (source[2] + target[2]) / 2;
+
+  const dx = target[0] - source[0];
+  const dy = target[1] - source[1];
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const px = -dy / len;
+  const py = dx / len;
+  const bow = Math.min(len * 0.1, 0.45);
+
+  const cx = mx + px * (bow + offset);
+  const cy = my + py * (bow + offset);
+  const cz = mz;
+
+  for (let i = 0; i <= segments; i++) {
+    const t = i / segments;
+    points.push([
+      (1 - t) ** 2 * source[0] + 2 * (1 - t) * t * cx + t ** 2 * target[0],
+      (1 - t) ** 2 * source[1] + 2 * (1 - t) * t * cy + t ** 2 * target[1],
+      (1 - t) ** 2 * source[2] + 2 * (1 - t) * t * cz + t ** 2 * target[2],
+    ]);
+  }
+  return points;
+}
 import { CameraModeRig } from "./CameraModeRig";
 import { Node3D } from "./Node3D";
 import { LayerPlane } from "./LayerPlane";
@@ -75,7 +108,7 @@ export function TreeScene({
     <Canvas
       style={{
         background:
-          "radial-gradient(circle at 50% 42%, rgba(244,247,250,0.48) 0%, rgba(220,225,232,0.72) 42%, rgba(196,202,211,0.94) 100%)",
+          "radial-gradient(circle at 50% 42%, rgba(251,247,240,0.6) 0%, rgba(240,235,225,0.8) 42%, rgba(225,218,205,0.95) 100%)",
       }}
     >
       {is3DMode ? (
@@ -166,18 +199,32 @@ export function TreeScene({
             currentPathIds.has(link.source.data.id) &&
             currentPathIds.has(link.target.data.id);
 
+          const mainPoints = curvedBranchPoints(source, target, isPathEdge ? 16 : 12);
+          const highlightPoints = curvedBranchPoints(source, target, isPathEdge ? 16 : 12, 0.018);
+
           return (
-            <Line
-              key={`line-${i}`}
-              points={[source, target]}
-              color={isPathEdge ? "#4338CA" : "#94A3B8"}
-              lineWidth={isPathEdge ? 2.8 : 1.55}
-              transparent
-              opacity={isPathEdge ? 0.98 : 0.78}
-              depthTest={false}
-              renderOrder={12}
-              raycast={noRaycast}
-            />
+            <group key={`line-${i}`}>
+              <Line
+                points={mainPoints}
+                color={isPathEdge ? "#8A6A32" : "#8B7A62"}
+                lineWidth={isPathEdge ? 2.35 : 1.25}
+                transparent
+                opacity={isPathEdge ? 0.88 : 0.46}
+                depthTest={false}
+                renderOrder={11}
+                raycast={noRaycast}
+              />
+              <Line
+                points={highlightPoints}
+                color={isPathEdge ? "#D4A84A" : "#B7A88C"}
+                lineWidth={isPathEdge ? 0.75 : 0.35}
+                transparent
+                opacity={isPathEdge ? 0.58 : 0.26}
+                depthTest={false}
+                renderOrder={13}
+                raycast={noRaycast}
+              />
+            </group>
           );
         })}
 

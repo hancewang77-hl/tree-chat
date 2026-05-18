@@ -21,9 +21,9 @@ export function LayerPlane({
   onClick: () => void;
   onDoubleClick: () => void;
 }) {
-  const baseColor = active ? "#D8E2FF" : "#F5F7FA";
-  const glowColor = active ? "#8EA2FF" : "#C9D2E3";
-  const labelColor = active ? "#3146B8" : "#5F6B7C";
+  const baseColor = active ? "#F0ECD8" : "#FBF7F0";
+  const glowColor = active ? "#C4A882" : "#D8CFBC";
+  const labelColor = active ? "#3D2E1C" : "#6B5F4F";
 
   return (
     <group
@@ -94,7 +94,7 @@ export function LayerPlane({
         raycast={noRaycast}
       >
         <meshBasicMaterial
-          color={active ? "#EAF0FF" : "#FFFFFF"}
+          color={active ? "#FFFDF7" : "#FFFFFF"}
           transparent
           opacity={active ? 0.065 : 0.018}
           depthWrite={false}

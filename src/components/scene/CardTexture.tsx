@@ -4,21 +4,14 @@ import { useMemo } from "react";
 import * as THREE from "three";
 import { NODE_W, NODE_H } from "@/hooks/useTreeLayout";
 import { truncateText, roundRect, drawWrappedText } from "@/src/lib/utils";
+import { summarizeForCard } from "@/src/lib/formatResponse";
 
 export function CardTexture({
-  prompt,
-  response,
-  selected,
-  inPath,
-  layer,
+  prompt, response, selected, inPath, layer,
 }: {
-  prompt: string;
-  response: string;
-  selected: boolean;
-  inPath: boolean;
-  layer: number;
-  interactive: boolean;
-  priority: boolean;
+  prompt: string; response: string; selected: boolean;
+  inPath: boolean; layer: number;
+  interactive: boolean; priority: boolean;
 }) {
   const texture = useMemo(() => {
     const width = 1024;
@@ -29,77 +22,36 @@ export function CardTexture({
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
 
-    // background
-    ctx.fillStyle = selected ? "#FFFFFF" : inPath ? "#FFFFFF" : "#FBFCFE";
-    ctx.fillRect(0, 0, width, height);
+    const isNote = response.trim().length === 0;
+    const promptLabel = isNote ? "LEAF / 记录" : "SEED / 提问";
+    const responseLabel = isNote ? "SOIL / 备注" : "CANOPY / 回答";
+    const summary = isNote
+      ? "这是一片手动记录的叶片，可继续生长出新的分支。"
+      : summarizeForCard(response, 150);
 
-    if (inPath) {
-      ctx.strokeStyle = selected
-        ? "rgba(79,70,229,0.95)"
-        : "rgba(129,140,248,0.88)";
-      ctx.lineWidth = selected ? 14 : 9;
-      ctx.shadowColor = selected
-        ? "rgba(79,70,229,0.34)"
-        : "rgba(129,140,248,0.22)";
-      ctx.shadowBlur = selected ? 28 : 16;
-      roundRect(ctx, 10, 10, width - 20, height - 20, 34, false, true);
-      ctx.shadowBlur = 0;
-    }
+    ctx.clearRect(0, 0, width, height);
 
-    // main border
-    ctx.strokeStyle = selected ? "#4338CA" : inPath ? "#818CF8" : "#D7DCE5";
-    ctx.lineWidth = selected ? 8 : inPath ? 5 : 2.5;
-    roundRect(ctx, 6, 6, width - 12, height - 12, 36, true, true);
+    drawCardShell(ctx, width, height, selected, inPath);
+    drawPaperGrain(ctx, width, height);
+    drawSubtleVeins(ctx, width, height, selected, inPath);
+    drawBarkSpine(ctx, height, selected, inPath);
+    drawRingBadge(ctx, 52, 58, 27, layer, selected, inPath);
 
-    // chip
-    ctx.fillStyle = selected ? "#E0E7FF" : inPath ? "#EEF2FF" : "#F3F4F6";
-    roundRect(ctx, 28, 24, 170, 42, 21, true, false);
-    ctx.fillStyle = selected ? "#3730A3" : "#4F46E5";
-    ctx.font = "600 22px Inter, Arial, sans-serif";
-    ctx.fillText(`Layer ${layer}`, 52, 51);
+    drawLabelPill(ctx, 104, 42, promptLabel, selected ? "#3D2E1C" : "#7D9B6E");
+    ctx.fillStyle = "#2C2416";
+    ctx.font = "500 26px 'Lora','Georgia',serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    drawWrappedText(ctx, truncateText(prompt, 124), 104, 116, width - 176, 37, 4);
 
-    if (selected || inPath) {
-      ctx.beginPath();
-      ctx.arc(width - 40, 46, selected ? 10 : 8, 0, Math.PI * 2);
-      ctx.fillStyle = selected ? "#4F46E5" : "#A5B4FC";
-      ctx.shadowColor = selected
-        ? "rgba(79,70,229,0.45)"
-        : "rgba(165,180,252,0.28)";
-      ctx.shadowBlur = selected ? 20 : 10;
-      ctx.fill();
-      ctx.shadowBlur = 0;
-    }
+    drawBranchDivider(ctx, 104, 266, width - 76, selected, inPath);
 
-    ctx.fillStyle = "#6B7280";
-    ctx.font = "600 20px Inter, Arial, sans-serif";
-    ctx.fillText("Prompt", 32, 110);
+    drawLabelPill(ctx, 104, 294, responseLabel, isNote ? "#9B8B72" : "#C4943A");
+    ctx.fillStyle = "#4A3F2F";
+    ctx.font = "500 23px 'Lora','Georgia',serif";
+    drawWrappedText(ctx, summary, 104, 370, width - 176, 34, 4);
 
-    ctx.fillStyle = "#111827";
-    ctx.font = "500 24px Inter, Arial, sans-serif";
-    drawWrappedText(ctx, truncateText(prompt, 120), 32, 150, width - 64, 38, 4);
-
-    ctx.strokeStyle = "#E5E7EB";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(32, 260);
-    ctx.lineTo(width - 32, 260);
-    ctx.stroke();
-
-    ctx.fillStyle = "#94A3B8";
-    ctx.font = "600 20px Inter, Arial, sans-serif";
-    ctx.fillText("Response", 32, 305);
-
-    ctx.fillStyle = "#374151";
-    ctx.font = "500 22px Inter, Arial, sans-serif";
-    drawWrappedText(
-      ctx,
-      truncateText(response, 170),
-      32,
-      345,
-      width - 64,
-      34,
-      4,
-    );
+    drawPathFruit(ctx, width, selected, inPath);
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.anisotropy = 8;
@@ -115,4 +67,298 @@ export function CardTexture({
       <meshBasicMaterial map={texture} transparent depthTest={false} />
     </mesh>
   );
+}
+
+function drawCardShell(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  selected: boolean,
+  inPath: boolean,
+) {
+  const paper = ctx.createLinearGradient(0, 0, width, height);
+  paper.addColorStop(0, selected ? "#FFFDF7" : "#FDF9F1");
+  paper.addColorStop(0.52, "#F7F0E4");
+  paper.addColorStop(1, inPath ? "#FFF8E7" : "#F2E9D8");
+
+  ctx.save();
+  ctx.shadowColor = selected
+    ? "rgba(196,148,58,0.34)"
+    : inPath
+      ? "rgba(125,155,110,0.22)"
+      : "rgba(61,46,28,0.10)";
+  ctx.shadowBlur = selected ? 34 : inPath ? 24 : 14;
+  ctx.shadowOffsetY = 8;
+  ctx.fillStyle = paper;
+  roundRect(ctx, 18, 16, width - 36, height - 32, 42, true, false);
+  ctx.restore();
+
+  if (inPath) {
+    ctx.save();
+    ctx.strokeStyle = selected ? "rgba(196,148,58,0.98)" : "rgba(125,155,110,0.88)";
+    ctx.lineWidth = selected ? 8 : 5;
+    ctx.shadowColor = selected ? "rgba(196,148,58,0.30)" : "rgba(125,155,110,0.18)";
+    ctx.shadowBlur = selected ? 22 : 14;
+    roundRect(ctx, 21, 19, width - 42, height - 38, 40, false, true);
+    ctx.restore();
+  }
+
+  ctx.strokeStyle = selected ? "#3D2E1C" : inPath ? "#7D9B6E" : "#D8CCB8";
+  ctx.lineWidth = selected ? 4 : inPath ? 3 : 2;
+  roundRect(ctx, 26, 24, width - 52, height - 48, 34, false, true);
+}
+
+function drawPaperGrain(ctx: CanvasRenderingContext2D, width: number, height: number) {
+  ctx.save();
+  ctx.globalAlpha = 0.16;
+  for (let i = 0; i < 44; i++) {
+    const x = 44 + ((i * 83) % (width - 88));
+    const y = 38 + ((i * 47) % (height - 76));
+    const length = 18 + (i % 5) * 9;
+    ctx.strokeStyle = i % 3 === 0 ? "#CDBF9F" : "#E7DCC8";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.quadraticCurveTo(x + length * 0.45, y + Math.sin(i) * 4, x + length, y + Math.cos(i) * 3);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawSubtleVeins(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  selected: boolean,
+  inPath: boolean,
+) {
+  ctx.save();
+  ctx.strokeStyle = selected
+    ? "rgba(196,148,58,0.16)"
+    : inPath
+      ? "rgba(125,155,110,0.14)"
+      : "rgba(125,155,110,0.08)";
+  ctx.lineWidth = 1.4;
+
+  for (let i = 0; i < 5; i++) {
+    const startY = 82 + i * 76;
+    ctx.beginPath();
+    ctx.moveTo(width - 170, startY);
+    ctx.bezierCurveTo(width - 132, startY + 20, width - 102, startY + 42, width - 54, startY + 52);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = "rgba(61,46,28,0.05)";
+  ctx.beginPath();
+  ctx.moveTo(104, 68);
+  ctx.bezierCurveTo(188, 120, 218, 190, 186, height - 58);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawBarkSpine(
+  ctx: CanvasRenderingContext2D,
+  height: number,
+  selected: boolean,
+  inPath: boolean,
+) {
+  const x = 31;
+  const y = 46;
+  const w = 42;
+  const h = height - 92;
+
+  const bark = ctx.createLinearGradient(x, y, x + w, y + h);
+  bark.addColorStop(0, selected ? "rgba(90,61,31,0.46)" : "rgba(75,54,33,0.28)");
+  bark.addColorStop(0.52, inPath ? "rgba(123,90,50,0.42)" : "rgba(123,90,50,0.24)");
+  bark.addColorStop(1, inPath ? "rgba(61,46,28,0.44)" : "rgba(107,95,79,0.24)");
+
+  ctx.fillStyle = bark;
+  roundRect(ctx, x, y, w, h, 21, true, false);
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,248,226,0.18)";
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 4; i++) {
+    const sx = x + 10 + i * 7;
+    ctx.beginPath();
+    ctx.moveTo(sx, y + 18);
+    ctx.bezierCurveTo(sx - 6, y + 110, sx + 8, y + 210, sx - 1, y + h - 18);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = "rgba(44,36,22,0.10)";
+  for (let i = 0; i < 3; i++) {
+    const sy = y + 58 + i * 92;
+    ctx.beginPath();
+    ctx.moveTo(x + 7, sy);
+    ctx.quadraticCurveTo(x + 23, sy - 14, x + w - 7, sy + 3);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  ctx.fillStyle = selected
+    ? "rgba(196,148,58,0.70)"
+    : inPath
+      ? "rgba(125,155,110,0.58)"
+      : "rgba(216,204,184,0.45)";
+  ctx.beginPath();
+  ctx.arc(x + w / 2, y + h - 30, selected ? 4 : 3, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawRingBadge(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+  layer: number,
+  selected: boolean,
+  inPath: boolean,
+) {
+  ctx.save();
+  ctx.fillStyle = selected ? "#FFF4D5" : "#F4E7CF";
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  const rings = [0.35, 0.55, 0.74, 0.9];
+  for (const ratio of rings) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * ratio, 0, Math.PI * 2);
+    ctx.strokeStyle = selected
+      ? "rgba(196,148,58,0.55)"
+      : inPath
+        ? "rgba(125,155,110,0.42)"
+        : "rgba(107,95,79,0.22)";
+    ctx.lineWidth = ratio > 0.8 ? 1.8 : 1.1;
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = selected ? "#3D2E1C" : "#6B5F4F";
+  ctx.font = "700 18px 'Lora','Georgia',serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(`z${layer}`, cx, cy);
+  ctx.restore();
+}
+
+function drawLabelPill(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  label: string,
+  accent: string,
+) {
+  ctx.save();
+  ctx.fillStyle = "rgba(255,253,247,0.78)";
+  ctx.strokeStyle = "rgba(216,204,184,0.9)";
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, x, y, 186, 38, 19, true, true);
+
+  drawLeafMark(ctx, x + 23, y + 19, accent);
+
+  ctx.fillStyle = accent;
+  ctx.font = "700 16px 'Lora','Georgia',serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(label, x + 46, y + 20);
+  ctx.restore();
+}
+
+function drawLeafMark(ctx: CanvasRenderingContext2D, cx: number, cy: number, color: string) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(-0.55);
+  ctx.beginPath();
+  ctx.moveTo(0, -12);
+  ctx.bezierCurveTo(12, -6, 13, 7, 0, 14);
+  ctx.bezierCurveTo(-12, 7, -12, -6, 0, -12);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.globalAlpha = 0.9;
+  ctx.fill();
+  ctx.globalAlpha = 0.55;
+  ctx.strokeStyle = "#FFFDF7";
+  ctx.lineWidth = 1.1;
+  ctx.beginPath();
+  ctx.moveTo(0, -8);
+  ctx.lineTo(0, 10);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawBranchDivider(
+  ctx: CanvasRenderingContext2D,
+  x1: number,
+  y: number,
+  x2: number,
+  selected: boolean,
+  inPath: boolean,
+) {
+  ctx.save();
+  ctx.strokeStyle = selected ? "#C4943A" : inPath ? "#7D9B6E" : "#B9A98D";
+  ctx.lineWidth = selected ? 3.2 : 2.2;
+  ctx.beginPath();
+  ctx.moveTo(x1, y);
+  ctx.bezierCurveTo(x1 + 210, y - 28, x2 - 240, y + 26, x2, y);
+  ctx.stroke();
+
+  ctx.strokeStyle = "rgba(61,46,28,0.12)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x1 + 12, y + 8);
+  ctx.bezierCurveTo(x1 + 220, y - 12, x2 - 250, y + 40, x2 - 10, y + 8);
+  ctx.stroke();
+
+  drawBranchFork(ctx, x1 + 260, y - 2, -1, selected, inPath);
+  drawBranchFork(ctx, x2 - 240, y + 3, 1, selected, inPath);
+  ctx.restore();
+}
+
+function drawBranchFork(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  side: number,
+  selected: boolean,
+  inPath: boolean,
+) {
+  ctx.save();
+  ctx.strokeStyle = selected
+    ? "rgba(196,148,58,0.42)"
+    : inPath
+      ? "rgba(125,155,110,0.34)"
+      : "rgba(107,95,79,0.18)";
+  ctx.lineWidth = selected ? 1.7 : 1.2;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.quadraticCurveTo(cx + side * 36, cy - 14, cx + side * 68, cy - 26);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawPathFruit(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  selected: boolean,
+  inPath: boolean,
+) {
+  if (!selected && !inPath) return;
+
+  ctx.save();
+  const cx = width - 58;
+  const cy = 58;
+  const r = selected ? 12 : 9;
+  ctx.shadowColor = selected ? "rgba(196,148,58,0.45)" : "rgba(125,155,110,0.24)";
+  ctx.shadowBlur = selected ? 18 : 10;
+  ctx.fillStyle = selected ? "#C4943A" : "#7D9B6E";
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = "rgba(255,253,247,0.72)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r - 4, -0.2, Math.PI * 1.25);
+  ctx.stroke();
+  ctx.restore();
 }

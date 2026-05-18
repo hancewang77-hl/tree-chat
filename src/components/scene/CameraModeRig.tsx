@@ -23,6 +23,7 @@ export function CameraModeRig({
       camera.position.set(-12, 12, 18);
       camera.up.set(0, 1, 0);
       camera.lookAt(0, 0, selectedLayer * LAYER_SPACING);
+      // eslint-disable-next-line react-hooks/immutability -- Three.js requires direct camera property mutation
       camera.zoom = zoom3D;
       camera.updateProjectionMatrix();
     }

@@ -47,15 +47,17 @@ export async function POST(req: Request) {
     return Response.json({
       content: completion.choices?.[0]?.message?.content ?? "",
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("DeepSeek route error:", error);
+
+    const message =
+      error && typeof error === "object" && "message" in error
+        ? (error as { message: unknown }).message
+        : undefined;
 
     return Response.json(
       {
-        error:
-          error?.message ||
-          error?.error?.message ||
-          "调用 DeepSeek 失败",
+        error: message || "调用 DeepSeek 失败",
       },
       { status: 500 },
     );

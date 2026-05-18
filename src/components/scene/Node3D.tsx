@@ -56,7 +56,7 @@ export function Node3D({
             }}
           >
             <circleGeometry args={[0.2, 32]} />
-            <meshBasicMaterial color="#22C55E" />
+            <meshBasicMaterial color="#7D9B6E" />
           </mesh>
           <Text
             position={[0, 0, 0.02]}

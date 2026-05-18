@@ -18,13 +18,19 @@ export function LayerNameDialog({
   if (!isOpen) return null;
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/18 backdrop-blur-[2px]">
-      <div className="w-[360px] rounded-2xl border border-white/30 bg-white/88 p-5 shadow-[0_24px_60px_rgba(15,23,42,0.18)] backdrop-blur-2xl">
+    <div className="absolute inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(44, 36, 22, 0.15)" }}>
+      <div
+        className="w-[360px] rounded-2xl p-5 shadow-2xl"
+        style={{ background: "var(--bg-paper)", border: "1px solid var(--border-warm)" }}
+      >
         <div className="mb-4">
-          <h3 className="text-[16px] font-semibold text-slate-900">
+          <h3
+            className="text-[16px] font-semibold"
+            style={{ color: "var(--accent-bark)", fontFamily: "var(--font-serif)" }}
+          >
             命名当前平面
           </h3>
-          <p className="mt-1 text-[12px] text-slate-500">
+          <p className="mt-1 text-[12px]" style={{ color: "var(--text-muted)" }}>
             当前平面：z = {selectedLayer}
           </p>
         </div>
@@ -33,21 +39,28 @@ export function LayerNameDialog({
           value={planeNameInput}
           onChange={(e) => onInputChange(e.target.value)}
           placeholder={selectedLayer === 0 ? "根节点层" : "输入平面名称"}
-          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-[14px] text-slate-700 outline-none transition-all focus:border-indigo-400"
+          className="w-full rounded-xl px-4 py-3 text-[14px] outline-none transition-all"
+          style={{
+            background: "var(--bg-cream)",
+            border: "1px solid var(--border-warm)",
+            color: "var(--text-charcoal)",
+          }}
           autoFocus
         />
 
         <div className="mt-5 flex justify-end gap-3">
           <button
             onClick={onCancel}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-[14px] text-slate-600 transition-all hover:bg-slate-50"
+            className="rounded-xl px-4 py-2 text-[14px] transition-all hover:opacity-80"
+            style={{ border: "1px solid var(--border-warm)", color: "var(--text-muted)" }}
           >
             取消
           </button>
 
           <button
             onClick={onConfirm}
-            className="rounded-xl bg-indigo-600 px-4 py-2 text-[14px] text-white transition-all hover:bg-indigo-700"
+            className="rounded-xl px-4 py-2 text-[14px] font-medium transition-all hover:opacity-90"
+            style={{ background: "var(--accent-bark)", color: "#FBF7F0" }}
           >
             确定
           </button>
