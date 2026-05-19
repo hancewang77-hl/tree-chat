@@ -18,7 +18,7 @@ export function ZoomControls({
       <div
         className="flex flex-col items-center gap-1 rounded-2xl px-1.5 py-1.5 shadow-lg"
         style={{
-          background: "rgba(251, 247, 240, 0.9)",
+          background: "rgba(216, 204, 184, 0.92)",
           border: "1px solid var(--border-warm)",
         }}
       >

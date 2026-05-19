@@ -189,7 +189,7 @@ export function BottomComposer({
                   key={nutrient.id}
                   className="inline-flex max-w-[260px] items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]"
                   style={{
-                    background: isActive ? "rgba(125,155,110,0.13)" : "rgba(255,253,247,0.66)",
+                    background: isActive ? "rgba(125,155,110,0.16)" : "rgba(232,223,208,0.78)",
                     borderColor: isActive ? "rgba(125,155,110,0.42)" : "var(--border-warm)",
                     color: isReady ? "var(--accent-bark)" : "var(--text-muted)",
                   }}
@@ -275,7 +275,7 @@ export function BottomComposer({
             className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl px-3 text-[12px] font-medium transition-all hover:opacity-85 disabled:opacity-50"
             style={{
               border: "1px solid var(--border-warm)",
-              background: "rgba(255,253,247,0.72)",
+              background: "rgba(232,223,208,0.78)",
               color: "var(--text-muted)",
             }}
             title="Nutrients · 养分"

@@ -95,7 +95,7 @@ export function TreeToolbar() {
         <div
           className="flex flex-col gap-0.5 rounded-2xl px-1.5 py-1.5 shadow-lg backdrop-blur-sm"
           style={{
-            background: "rgba(251, 247, 240, 0.88)",
+            background: "rgba(216, 204, 184, 0.92)",
             border: "1px solid var(--border-warm)",
           }}
         >

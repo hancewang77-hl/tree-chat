@@ -41,7 +41,7 @@ export function CanopyMinimap() {
     <div
       className="absolute bottom-16 left-4 z-30 rounded-xl overflow-hidden shadow-lg"
       style={{
-        background: "rgba(251, 247, 240, 0.92)",
+        background: "rgba(216, 204, 184, 0.94)",
         border: "1px solid var(--border-warm)",
         width: W,
         height: H,

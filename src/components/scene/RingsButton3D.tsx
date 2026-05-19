@@ -24,14 +24,14 @@ export function RingsButton3D({
     const cy = size / 2;
     const radius = 78;
     const wood = ctx.createRadialGradient(cx - 18, cy - 22, 12, cx, cy, radius);
-    wood.addColorStop(0, selected ? "#F3E8C8" : "#F4EBD7");
-    wood.addColorStop(0.38, "#D8B978");
-    wood.addColorStop(0.72, "#9F7645");
-    wood.addColorStop(1, "#5B3D24");
+    wood.addColorStop(0, selected ? "#E8D8B8" : "#E7DCC4");
+    wood.addColorStop(0.38, "#C3A778");
+    wood.addColorStop(0.72, "#816447");
+    wood.addColorStop(1, "#4D3928");
 
     ctx.save();
-    ctx.shadowColor = selected ? "rgba(90,64,34,0.38)" : "rgba(61,46,28,0.18)";
-    ctx.shadowBlur = selected ? 12 : 8;
+    ctx.shadowColor = selected ? "rgba(61,46,28,0.26)" : "rgba(61,46,28,0.12)";
+    ctx.shadowBlur = selected ? 10 : 6;
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
     ctx.fillStyle = wood;
@@ -60,9 +60,9 @@ export function RingsButton3D({
       ctx.closePath();
       ctx.strokeStyle =
         ringIndex % 2 === 0
-          ? "rgba(61,43,25,0.34)"
-          : "rgba(250,237,204,0.30)";
-      ctx.lineWidth = ringIndex % 2 === 0 ? 2.4 : 1.2;
+          ? "rgba(61,43,25,0.24)"
+          : "rgba(244,231,198,0.20)";
+      ctx.lineWidth = ringIndex % 2 === 0 ? 2 : 1;
       ctx.stroke();
     });
 
@@ -73,14 +73,14 @@ export function RingsButton3D({
       ctx.beginPath();
       ctx.moveTo(cx + Math.cos(angle) * inner, cy + Math.sin(angle) * inner);
       ctx.lineTo(cx + Math.cos(angle + 0.08) * outer, cy + Math.sin(angle + 0.08) * outer);
-      ctx.strokeStyle = "rgba(255,248,221,0.12)";
+      ctx.strokeStyle = "rgba(255,248,221,0.08)";
       ctx.lineWidth = 1;
       ctx.stroke();
     }
     ctx.restore();
 
-    ctx.strokeStyle = selected ? "rgba(255,246,216,0.78)" : "rgba(255,253,247,0.52)";
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = selected ? "rgba(255,246,216,0.50)" : "rgba(255,253,247,0.32)";
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
     ctx.arc(cx, cy, radius - 3, 0, Math.PI * 2);
     ctx.stroke();
@@ -102,7 +102,12 @@ export function RingsButton3D({
       }}
     >
       <planeGeometry args={[0.30, 0.30]} />
-      <meshBasicMaterial map={texture} transparent depthTest={false} />
+      <meshBasicMaterial
+        map={texture}
+        transparent
+        opacity={selected ? 0.76 : 0.54}
+        depthTest={false}
+      />
     </mesh>
   );
 }
