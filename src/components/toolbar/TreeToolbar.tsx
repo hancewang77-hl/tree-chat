@@ -95,8 +95,9 @@ export function TreeToolbar() {
         <div
           className="flex flex-col gap-0.5 rounded-2xl px-1.5 py-1.5 shadow-lg backdrop-blur-sm"
           style={{
-            background: "rgba(216, 204, 184, 0.92)",
-            border: "1px solid var(--border-warm)",
+            background: "rgba(116, 122, 85, 0.14)",
+            border: "1px solid rgba(116, 122, 85, 0.30)",
+            boxShadow: "0 10px 24px rgba(61, 46, 28, 0.14)",
           }}
         >
           {buttons.map((btn) => (
@@ -106,18 +107,20 @@ export function TreeToolbar() {
               disabled={btn.disabled}
               title={btn.title}
               className={`group relative flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
-                btn.disabled ? "opacity-25 cursor-not-allowed" : "hover:bg-white/80"
+                btn.disabled ? "opacity-25 cursor-not-allowed" : "hover:opacity-85"
               }`}
               style={{
-                background: btn.active ? "var(--accent-sage)" : "transparent",
-                color: btn.active ? "#FBF7F0" : "var(--text-muted)",
+                background: btn.active ? "var(--accent-sage)" : "var(--accent-olive-soft)",
+                color: btn.active ? "#FBF7F0" : "var(--accent-olive-deep)",
+                border: `1px solid ${btn.active ? "rgba(86, 91, 61, 0.42)" : "rgba(116, 122, 85, 0.22)"}`,
+                boxShadow: btn.active ? "0 5px 12px rgba(86, 91, 61, 0.20)" : "none",
               }}
             >
               {btn.icon}
               <span
                 className="pointer-events-none absolute left-11 rounded-lg px-2.5 py-1.5 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50"
                 style={{
-                  background: "var(--accent-bark)",
+                  background: "var(--accent-olive-deep)",
                   color: "#FBF7F0",
                 }}
               >

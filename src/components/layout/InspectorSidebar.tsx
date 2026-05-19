@@ -277,9 +277,10 @@ function ActionButton({
       onClick={onClick}
       className="flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-medium transition-all hover:opacity-85"
       style={{
-        background: danger ? "rgba(180, 60, 40, 0.07)" : "var(--accent-olive-soft)",
-        color: danger ? "#B43C28" : "var(--accent-olive-deep)",
-        border: `1px solid ${danger ? "rgba(180, 60, 40, 0.18)" : "rgba(116, 122, 85, 0.24)"}`,
+        background: danger ? "rgba(180, 60, 40, 0.07)" : "var(--accent-sage)",
+        color: danger ? "#B43C28" : "#FBF7F0",
+        border: `1px solid ${danger ? "rgba(180, 60, 40, 0.18)" : "rgba(86, 91, 61, 0.42)"}`,
+        boxShadow: danger ? "none" : "0 5px 12px rgba(86, 91, 61, 0.14)",
       }}
     >
       {icon}

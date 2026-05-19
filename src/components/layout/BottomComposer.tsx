@@ -326,8 +326,9 @@ export function BottomComposer({
             style={{
               background: text.trim()
                 ? "var(--accent-sage)"
-                : "var(--border-warm)",
-              color: text.trim() ? "#FBF7F0" : "var(--text-muted)",
+                : "var(--accent-olive-soft)",
+              color: text.trim() ? "#FBF7F0" : "var(--accent-olive-deep)",
+              border: `1px solid ${text.trim() ? "rgba(86, 91, 61, 0.42)" : "rgba(116, 122, 85, 0.24)"}`,
               borderRadius: "60% 40% 50% 50% / 55% 45% 55% 45%",
               transform: text.trim() ? "scale(1.05)" : "scale(1)",
               boxShadow: text.trim()
