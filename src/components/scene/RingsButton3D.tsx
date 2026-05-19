@@ -22,12 +22,12 @@ export function RingsButton3D({
 
     const cx = size / 2;
     const cy = size / 2;
-    const radius = 78;
+    const radius = 76;
     const wood = ctx.createRadialGradient(cx - 18, cy - 22, 12, cx, cy, radius);
-    wood.addColorStop(0, selected ? "#E8D8B8" : "#E7DCC4");
-    wood.addColorStop(0.38, "#C3A778");
-    wood.addColorStop(0.72, "#816447");
-    wood.addColorStop(1, "#4D3928");
+    wood.addColorStop(0, selected ? "#E5DDBF" : "#DED5B8");
+    wood.addColorStop(0.38, "#B8AE80");
+    wood.addColorStop(0.72, "#76704B");
+    wood.addColorStop(1, "#49462F");
 
     ctx.save();
     ctx.shadowColor = selected ? "rgba(61,46,28,0.26)" : "rgba(61,46,28,0.12)";
@@ -60,8 +60,8 @@ export function RingsButton3D({
       ctx.closePath();
       ctx.strokeStyle =
         ringIndex % 2 === 0
-          ? "rgba(61,43,25,0.24)"
-          : "rgba(244,231,198,0.20)";
+          ? "rgba(63,67,43,0.24)"
+          : "rgba(244,235,215,0.18)";
       ctx.lineWidth = ringIndex % 2 === 0 ? 2 : 1;
       ctx.stroke();
     });
@@ -73,14 +73,14 @@ export function RingsButton3D({
       ctx.beginPath();
       ctx.moveTo(cx + Math.cos(angle) * inner, cy + Math.sin(angle) * inner);
       ctx.lineTo(cx + Math.cos(angle + 0.08) * outer, cy + Math.sin(angle + 0.08) * outer);
-      ctx.strokeStyle = "rgba(255,248,221,0.08)";
+      ctx.strokeStyle = "rgba(255,248,221,0.07)";
       ctx.lineWidth = 1;
       ctx.stroke();
     }
     ctx.restore();
 
-    ctx.strokeStyle = selected ? "rgba(255,246,216,0.50)" : "rgba(255,253,247,0.32)";
-    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = selected ? "rgba(255,246,216,0.44)" : "rgba(255,253,247,0.24)";
+    ctx.lineWidth = 2.2;
     ctx.beginPath();
     ctx.arc(cx, cy, radius - 3, 0, Math.PI * 2);
     ctx.stroke();
@@ -101,11 +101,11 @@ export function RingsButton3D({
         onClick();
       }}
     >
-      <planeGeometry args={[0.30, 0.30]} />
+      <planeGeometry args={[0.25, 0.25]} />
       <meshBasicMaterial
         map={texture}
         transparent
-        opacity={selected ? 0.76 : 0.54}
+        opacity={selected ? 0.70 : 0.50}
         depthTest={false}
       />
     </mesh>

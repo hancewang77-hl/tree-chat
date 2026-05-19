@@ -9,9 +9,9 @@ import { summarizeForCard } from "@/src/lib/formatResponse";
 const CARD_OLIVE = "#747A55";
 const CARD_OLIVE_DEEP = "#565B3D";
 const CARD_OLIVE_DARK = "#3F432B";
-const CARD_PAPER_LIGHT = "#EFE6D2";
-const CARD_PAPER_MID = "#DDD4B8";
-const CARD_PAPER_DARK = "#CFC6A7";
+const CARD_PAPER_LIGHT = "#E2D9BE";
+const CARD_PAPER_MID = "#D1CAA7";
+const CARD_PAPER_DARK = "#C0BA91";
 
 export function CardTexture({
   prompt, response, selected, inPath, layer,
@@ -84,9 +84,9 @@ function drawCardShell(
   inPath: boolean,
 ) {
   const paper = ctx.createLinearGradient(0, 0, width, height);
-  paper.addColorStop(0, selected ? "#F5EED8" : CARD_PAPER_LIGHT);
+  paper.addColorStop(0, selected ? "#E9E1C6" : CARD_PAPER_LIGHT);
   paper.addColorStop(0.52, CARD_PAPER_MID);
-  paper.addColorStop(1, inPath ? "#D8D1B1" : CARD_PAPER_DARK);
+  paper.addColorStop(1, inPath ? "#C9C39A" : CARD_PAPER_DARK);
 
   ctx.save();
   ctx.shadowColor = selected
@@ -110,7 +110,7 @@ function drawCardShell(
     ctx.restore();
   }
 
-  ctx.strokeStyle = selected ? CARD_OLIVE_DEEP : inPath ? CARD_OLIVE : "#BDB391";
+  ctx.strokeStyle = selected ? CARD_OLIVE_DEEP : inPath ? CARD_OLIVE : "#ABA479";
   ctx.lineWidth = selected ? 4 : inPath ? 3 : 2;
   roundRect(ctx, 26, 24, width - 52, height - 48, 34, false, true);
 }
@@ -122,7 +122,7 @@ function drawPaperGrain(ctx: CanvasRenderingContext2D, width: number, height: nu
     const x = 44 + ((i * 83) % (width - 88));
     const y = 38 + ((i * 47) % (height - 76));
     const length = 18 + (i % 5) * 9;
-    ctx.strokeStyle = i % 3 === 0 ? "#BEB48F" : "#E4DBC1";
+    ctx.strokeStyle = i % 3 === 0 ? "#AFA77B" : "#DAD0AD";
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(x, y);

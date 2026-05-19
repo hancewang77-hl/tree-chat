@@ -50,7 +50,7 @@ export function Node3D({
         priority={priority}
       />
 
-      <group position={[NODE_W / 2 - 0.28, 0.68, 0.05]}>
+      <group position={[NODE_W / 2 - 0.52, 0.62, 0.05]}>
         <RingsButton3D selected={selected} onClick={onOpenRings} />
       </group>
 

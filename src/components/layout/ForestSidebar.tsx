@@ -21,37 +21,40 @@ export function ForestSidebar() {
     <aside
       className="z-20 flex w-[220px] shrink-0 flex-col border-r animate-fade-up stagger-2"
       style={{
-        background: "var(--bg-paper)",
-        borderColor: "var(--border-warm)",
-        boxShadow: "2px 0 16px var(--shadow-warm)",
+        background: [
+          "radial-gradient(circle at 18% 8%, rgba(255, 253, 247, 0.14), transparent 38%)",
+          "linear-gradient(180deg, rgba(116, 122, 85, 0.98) 0%, rgba(86, 91, 61, 0.96) 100%)",
+        ].join(", "),
+        borderColor: "rgba(86, 91, 61, 0.55)",
+        boxShadow: "2px 0 16px rgba(61, 46, 28, 0.18)",
       }}
     >
       <div
         className="flex items-center justify-between px-5 py-4 border-b"
-        style={{ borderColor: "var(--border-warm)" }}
+        style={{ borderColor: "rgba(255, 253, 247, 0.16)" }}
       >
         <div className="flex items-center gap-2">
           <span
             className="flex h-8 w-8 items-center justify-center rounded-lg"
             style={{
-              background: "var(--accent-sage)",
+              background: "rgba(255, 253, 247, 0.16)",
               color: "#FBF7F0",
               border: "1px solid rgba(255, 253, 247, 0.24)",
-              boxShadow: "0 4px 10px rgba(86, 91, 61, 0.22)",
+              boxShadow: "0 4px 10px rgba(61, 46, 28, 0.16)",
             }}
           >
             <Trees size={16} />
           </span>
           <h2
             className="text-[13px] font-semibold tracking-[0.03em] uppercase"
-            style={{ color: "var(--accent-bark)", fontFamily: "var(--font-serif)" }}
+            style={{ color: "#FBF7F0", fontFamily: "var(--font-serif)" }}
           >
             Forest
           </h2>
         </div>
         <span
           className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-          style={{ background: "var(--border-warm)", color: "var(--text-muted)" }}
+          style={{ background: "rgba(255, 253, 247, 0.16)", color: "#F4EBD7" }}
         >
           {projectIds.length}
         </span>
@@ -75,17 +78,17 @@ export function ForestSidebar() {
               role="button"
               tabIndex={0}
               className={`w-full rounded-lg px-3 py-2.5 text-left transition-all group relative cursor-pointer ${
-                isActive ? "" : "hover:bg-white/60"
+                isActive ? "" : "hover:bg-white/10"
               }`}
               style={{
-                background: isActive ? "var(--accent-olive-soft)" : "transparent",
-                border: isActive ? "1px solid rgba(116, 122, 85, 0.28)" : "1px solid transparent",
+                background: isActive ? "rgba(255, 253, 247, 0.16)" : "transparent",
+                border: isActive ? "1px solid rgba(255, 253, 247, 0.22)" : "1px solid transparent",
               }}
             >
               <div className="flex items-center justify-between">
                 <span
                   className="text-[13px] font-medium truncate max-w-[140px]"
-                  style={{ color: isActive ? "var(--accent-bark)" : "var(--text-charcoal)" }}
+                  style={{ color: isActive ? "#FBF7F0" : "rgba(251, 247, 240, 0.86)" }}
                 >
                   {project.name}
                 </span>
@@ -98,15 +101,15 @@ export function ForestSidebar() {
                 >
                   <MoreHorizontal
                     size={12}
-                    style={{ color: "var(--text-muted)" }}
+                    style={{ color: "rgba(251, 247, 240, 0.78)" }}
                   />
                 </button>
               </div>
               <div className="mt-1 flex items-center gap-2">
-                <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+                <span className="text-[10px]" style={{ color: "rgba(244, 235, 215, 0.72)" }}>
                   {Object.keys(project.nodes).length} 节点
                 </span>
-                <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+                <span className="text-[10px]" style={{ color: "rgba(244, 235, 215, 0.72)" }}>
                   z = {Math.max(...Object.values(project.nodes).map((n) => n.layer))} 层
                 </span>
               </div>
@@ -116,8 +119,8 @@ export function ForestSidebar() {
                 <div
                   className="absolute right-3 mt-1 w-36 rounded-xl py-1 shadow-xl z-30"
                   style={{
-                    background: "var(--bg-paper)",
-                    border: "1px solid var(--border-warm)",
+                    background: "#EEE5D1",
+                    border: "1px solid rgba(86, 91, 61, 0.24)",
                   }}
                   onClick={(e) => e.stopPropagation()}
                 >
@@ -159,7 +162,7 @@ export function ForestSidebar() {
 
         {projectIds.length === 0 && (
           <div className="px-3 py-8 text-center">
-            <p className="text-[12px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
+            <p className="text-[12px] leading-relaxed" style={{ color: "rgba(244, 235, 215, 0.74)" }}>
               还没有项目。
               <br />
               种下一颗种子，
@@ -171,11 +174,15 @@ export function ForestSidebar() {
       </div>
 
       {/* Seed button */}
-      <div className="p-3 border-t" style={{ borderColor: "var(--border-warm)" }}>
+      <div className="p-3 border-t" style={{ borderColor: "rgba(255, 253, 247, 0.16)" }}>
         <button
           onClick={handleSeed}
           className="flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-[13px] font-medium transition-all hover:opacity-90"
-          style={{ background: "var(--accent-sage)", color: "#FBF7F0" }}
+          style={{
+            background: "rgba(255, 253, 247, 0.18)",
+            color: "#FBF7F0",
+            border: "1px solid rgba(255, 253, 247, 0.20)",
+          }}
         >
           <Plus size={15} />
           Seed · 播种
