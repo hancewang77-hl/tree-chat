@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { GitBranch, StickyNote, Trash2, Sun } from "lucide-react";
+import { GitBranch, MessageSquare, StickyNote, Trash2, Sun } from "lucide-react";
 import type { MindNode } from "@/src/types/tree";
 import { useTreeState, useTreeDispatch } from "@/src/state/TreeContext";
 import { renderMarkdownToHTML } from "@/src/lib/formatResponse";
@@ -30,16 +30,29 @@ export function InspectorSidebar({ currentPath }: { currentPath: MindNode[] }) {
         className="flex items-center justify-between px-5 py-3 border-b"
         style={{ borderColor: "var(--border-warm)" }}
       >
-        <div>
-          <h2
-            className="text-[12px] font-semibold tracking-[0.04em] uppercase"
-            style={{ color: "var(--accent-bark)", fontFamily: "var(--font-serif)" }}
+        <div className="flex items-center gap-2.5">
+          <span
+            className="flex h-8 w-8 items-center justify-center rounded-lg"
+            style={{
+              background: "var(--accent-sage)",
+              color: "#FBF7F0",
+              border: "1px solid rgba(255, 253, 247, 0.24)",
+              boxShadow: "0 4px 10px rgba(86, 91, 61, 0.22)",
+            }}
           >
-            Inspector
-          </h2>
-          <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>
-            路径深度 {currentPath.length}
-          </p>
+            <MessageSquare size={15} />
+          </span>
+          <div>
+            <h2
+              className="text-[12px] font-semibold tracking-[0.04em] uppercase"
+              style={{ color: "var(--accent-bark)", fontFamily: "var(--font-serif)" }}
+            >
+              Explore
+            </h2>
+            <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>
+              对话窗口 · 路径深度 {currentPath.length}
+            </p>
+          </div>
         </div>
         {selectedNode && (
           <span
@@ -58,14 +71,14 @@ export function InspectorSidebar({ currentPath }: { currentPath: MindNode[] }) {
             className="rounded-xl border p-3.5"
             style={{
               background: "var(--bg-cream)",
-              borderColor: selectedNode.kind === "leaf" ? "rgba(125,155,110,0.42)" : "var(--border-warm)",
+              borderColor: selectedNode.kind === "leaf" ? "rgba(116, 122, 85, 0.42)" : "var(--border-warm)",
             }}
           >
             <div className="mb-2 flex items-center justify-between gap-2">
               <span
                 className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
                 style={{
-                  background: selectedNode.kind === "leaf" ? "rgba(125,155,110,0.16)" : "var(--border-warm)",
+                  background: selectedNode.kind === "leaf" ? "var(--accent-olive-soft)" : "var(--border-warm)",
                   color: selectedNode.kind === "leaf" ? "var(--accent-sage)" : "var(--text-muted)",
                 }}
               >
@@ -88,8 +101,8 @@ export function InspectorSidebar({ currentPath }: { currentPath: MindNode[] }) {
               <div
                 className="rounded-lg border px-3 py-2.5 text-[13px] leading-relaxed"
                 style={{
-                  background: "rgba(125,155,110,0.08)",
-                  borderColor: "rgba(125,155,110,0.22)",
+                  background: "rgba(116, 122, 85, 0.08)",
+                  borderColor: "rgba(116, 122, 85, 0.22)",
                   color: "var(--text-charcoal)",
                 }}
               >
@@ -116,7 +129,7 @@ export function InspectorSidebar({ currentPath }: { currentPath: MindNode[] }) {
                     <span
                       key={id}
                       className="rounded-full px-2 py-0.5 text-[10px]"
-                      style={{ background: "rgba(125,155,110,0.12)", color: "var(--text-muted)" }}
+                      style={{ background: "var(--accent-olive-soft)", color: "var(--text-muted)" }}
                     >
                       {nutrient.name}
                     </span>
@@ -148,8 +161,8 @@ export function InspectorSidebar({ currentPath }: { currentPath: MindNode[] }) {
                 isSelected ? "" : "hover:bg-white/60"
               }`}
               style={{
-                background: isSelected ? "var(--border-warm)" : "transparent",
-                border: isSelected ? "1px solid var(--accent-amber)" : "1px solid transparent",
+                background: isSelected ? "var(--accent-olive-soft)" : "transparent",
+                border: isSelected ? "1px solid rgba(116, 122, 85, 0.38)" : "1px solid transparent",
               }}
             >
               <div className="flex items-center gap-2 mb-1.5">
@@ -264,9 +277,9 @@ function ActionButton({
       onClick={onClick}
       className="flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-medium transition-all hover:opacity-85"
       style={{
-        background: danger ? "rgba(180, 60, 40, 0.07)" : "var(--bg-cream)",
-        color: danger ? "#B43C28" : "var(--text-charcoal)",
-        border: `1px solid ${danger ? "rgba(180, 60, 40, 0.18)" : "var(--border-warm)"}`,
+        background: danger ? "rgba(180, 60, 40, 0.07)" : "var(--accent-olive-soft)",
+        color: danger ? "#B43C28" : "var(--accent-olive-deep)",
+        border: `1px solid ${danger ? "rgba(180, 60, 40, 0.18)" : "rgba(116, 122, 85, 0.24)"}`,
       }}
     >
       {icon}

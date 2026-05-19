@@ -81,7 +81,7 @@ export function CanopyMinimap() {
               r={isRoot ? 4 : isSelected ? 3.5 : 2.5}
               fill={
                 isSelected
-                  ? "var(--accent-amber)"
+                  ? "var(--accent-olive-deep)"
                   : isRoot
                   ? "var(--accent-bark)"
                   : "var(--accent-sage)"

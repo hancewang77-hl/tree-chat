@@ -6,6 +6,13 @@ import { NODE_W, NODE_H } from "@/hooks/useTreeLayout";
 import { truncateText, roundRect, drawWrappedText } from "@/src/lib/utils";
 import { summarizeForCard } from "@/src/lib/formatResponse";
 
+const CARD_OLIVE = "#747A55";
+const CARD_OLIVE_DEEP = "#565B3D";
+const CARD_OLIVE_DARK = "#3F432B";
+const CARD_PAPER_LIGHT = "#EFE6D2";
+const CARD_PAPER_MID = "#DDD4B8";
+const CARD_PAPER_DARK = "#CFC6A7";
+
 export function CardTexture({
   prompt, response, selected, inPath, layer,
 }: {
@@ -37,7 +44,7 @@ export function CardTexture({
     drawBarkSpine(ctx, height, selected, inPath);
     drawRingBadge(ctx, 52, 58, 27, layer, selected, inPath);
 
-    drawLabelPill(ctx, 104, 42, promptLabel, selected ? "#3D2E1C" : "#7D9B6E");
+    drawLabelPill(ctx, 104, 42, promptLabel, selected ? CARD_OLIVE_DEEP : CARD_OLIVE);
     ctx.fillStyle = "#2C2416";
     ctx.font = "500 26px 'Lora','Georgia',serif";
     ctx.textAlign = "left";
@@ -46,7 +53,7 @@ export function CardTexture({
 
     drawBranchDivider(ctx, 104, 266, width - 76, selected, inPath);
 
-    drawLabelPill(ctx, 104, 294, responseLabel, isNote ? "#9B8B72" : "#C4943A");
+    drawLabelPill(ctx, 104, 294, responseLabel, isNote ? CARD_OLIVE : CARD_OLIVE_DEEP);
     ctx.fillStyle = "#4A3F2F";
     ctx.font = "500 23px 'Lora','Georgia',serif";
     drawWrappedText(ctx, summary, 104, 370, width - 176, 34, 4);
@@ -77,15 +84,15 @@ function drawCardShell(
   inPath: boolean,
 ) {
   const paper = ctx.createLinearGradient(0, 0, width, height);
-  paper.addColorStop(0, selected ? "#FFFDF7" : "#FDF9F1");
-  paper.addColorStop(0.52, "#F7F0E4");
-  paper.addColorStop(1, inPath ? "#FFF8E7" : "#F2E9D8");
+  paper.addColorStop(0, selected ? "#F5EED8" : CARD_PAPER_LIGHT);
+  paper.addColorStop(0.52, CARD_PAPER_MID);
+  paper.addColorStop(1, inPath ? "#D8D1B1" : CARD_PAPER_DARK);
 
   ctx.save();
   ctx.shadowColor = selected
-    ? "rgba(196,148,58,0.34)"
+    ? "rgba(86,91,61,0.30)"
     : inPath
-      ? "rgba(125,155,110,0.22)"
+      ? "rgba(116,122,85,0.22)"
       : "rgba(61,46,28,0.10)";
   ctx.shadowBlur = selected ? 34 : inPath ? 24 : 14;
   ctx.shadowOffsetY = 8;
@@ -95,15 +102,15 @@ function drawCardShell(
 
   if (inPath) {
     ctx.save();
-    ctx.strokeStyle = selected ? "rgba(196,148,58,0.98)" : "rgba(125,155,110,0.88)";
+    ctx.strokeStyle = selected ? "rgba(86,91,61,0.98)" : "rgba(116,122,85,0.82)";
     ctx.lineWidth = selected ? 8 : 5;
-    ctx.shadowColor = selected ? "rgba(196,148,58,0.30)" : "rgba(125,155,110,0.18)";
+    ctx.shadowColor = selected ? "rgba(86,91,61,0.28)" : "rgba(116,122,85,0.16)";
     ctx.shadowBlur = selected ? 22 : 14;
     roundRect(ctx, 21, 19, width - 42, height - 38, 40, false, true);
     ctx.restore();
   }
 
-  ctx.strokeStyle = selected ? "#3D2E1C" : inPath ? "#7D9B6E" : "#D8CCB8";
+  ctx.strokeStyle = selected ? CARD_OLIVE_DEEP : inPath ? CARD_OLIVE : "#BDB391";
   ctx.lineWidth = selected ? 4 : inPath ? 3 : 2;
   roundRect(ctx, 26, 24, width - 52, height - 48, 34, false, true);
 }
@@ -115,7 +122,7 @@ function drawPaperGrain(ctx: CanvasRenderingContext2D, width: number, height: nu
     const x = 44 + ((i * 83) % (width - 88));
     const y = 38 + ((i * 47) % (height - 76));
     const length = 18 + (i % 5) * 9;
-    ctx.strokeStyle = i % 3 === 0 ? "#CDBF9F" : "#E7DCC8";
+    ctx.strokeStyle = i % 3 === 0 ? "#BEB48F" : "#E4DBC1";
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(x, y);
@@ -134,10 +141,10 @@ function drawSubtleVeins(
 ) {
   ctx.save();
   ctx.strokeStyle = selected
-    ? "rgba(196,148,58,0.16)"
+    ? "rgba(86,91,61,0.18)"
     : inPath
-      ? "rgba(125,155,110,0.14)"
-      : "rgba(125,155,110,0.08)";
+      ? "rgba(116,122,85,0.14)"
+      : "rgba(116,122,85,0.08)";
   ctx.lineWidth = 1.4;
 
   for (let i = 0; i < 5; i++) {
@@ -168,9 +175,9 @@ function drawBarkSpine(
   const h = height - 92;
 
   const bark = ctx.createLinearGradient(x, y, x + w, y + h);
-  bark.addColorStop(0, selected ? "rgba(90,61,31,0.46)" : "rgba(75,54,33,0.28)");
-  bark.addColorStop(0.52, inPath ? "rgba(123,90,50,0.42)" : "rgba(123,90,50,0.24)");
-  bark.addColorStop(1, inPath ? "rgba(61,46,28,0.44)" : "rgba(107,95,79,0.24)");
+  bark.addColorStop(0, selected ? "rgba(86,91,61,0.42)" : "rgba(86,91,61,0.24)");
+  bark.addColorStop(0.52, inPath ? "rgba(116,122,85,0.38)" : "rgba(116,122,85,0.22)");
+  bark.addColorStop(1, inPath ? "rgba(63,67,43,0.42)" : "rgba(107,95,79,0.22)");
 
   ctx.fillStyle = bark;
   roundRect(ctx, x, y, w, h, 21, true, false);
@@ -196,9 +203,9 @@ function drawBarkSpine(
   ctx.restore();
 
   ctx.fillStyle = selected
-    ? "rgba(196,148,58,0.70)"
+    ? "rgba(86,91,61,0.72)"
     : inPath
-      ? "rgba(125,155,110,0.58)"
+      ? "rgba(116,122,85,0.56)"
       : "rgba(216,204,184,0.45)";
   ctx.beginPath();
   ctx.arc(x + w / 2, y + h - 30, selected ? 4 : 3, 0, Math.PI * 2);
@@ -215,7 +222,7 @@ function drawRingBadge(
   inPath: boolean,
 ) {
   ctx.save();
-  ctx.fillStyle = selected ? "#FFF4D5" : "#F4E7CF";
+  ctx.fillStyle = selected ? "#EDE6CE" : "#E2D7BD";
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.fill();
@@ -225,15 +232,15 @@ function drawRingBadge(
     ctx.beginPath();
     ctx.arc(cx, cy, r * ratio, 0, Math.PI * 2);
     ctx.strokeStyle = selected
-      ? "rgba(196,148,58,0.55)"
+      ? "rgba(86,91,61,0.48)"
       : inPath
-        ? "rgba(125,155,110,0.42)"
+        ? "rgba(116,122,85,0.36)"
         : "rgba(107,95,79,0.22)";
     ctx.lineWidth = ratio > 0.8 ? 1.8 : 1.1;
     ctx.stroke();
   }
 
-  ctx.fillStyle = selected ? "#3D2E1C" : "#6B5F4F";
+  ctx.fillStyle = selected ? CARD_OLIVE_DARK : "#6B5F4F";
   ctx.font = "700 18px 'Lora','Georgia',serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -249,8 +256,8 @@ function drawLabelPill(
   accent: string,
 ) {
   ctx.save();
-  ctx.fillStyle = "rgba(255,253,247,0.78)";
-  ctx.strokeStyle = "rgba(216,204,184,0.9)";
+  ctx.fillStyle = "rgba(245,238,216,0.74)";
+  ctx.strokeStyle = "rgba(116,122,85,0.22)";
   ctx.lineWidth = 1.5;
   roundRect(ctx, x, y, 186, 38, 19, true, true);
 
@@ -295,7 +302,7 @@ function drawBranchDivider(
   inPath: boolean,
 ) {
   ctx.save();
-  ctx.strokeStyle = selected ? "#C4943A" : inPath ? "#7D9B6E" : "#B9A98D";
+  ctx.strokeStyle = selected ? CARD_OLIVE_DEEP : inPath ? CARD_OLIVE : "#B9A98D";
   ctx.lineWidth = selected ? 3.2 : 2.2;
   ctx.beginPath();
   ctx.moveTo(x1, y);
@@ -324,9 +331,9 @@ function drawBranchFork(
 ) {
   ctx.save();
   ctx.strokeStyle = selected
-    ? "rgba(196,148,58,0.42)"
+    ? "rgba(86,91,61,0.42)"
     : inPath
-      ? "rgba(125,155,110,0.34)"
+      ? "rgba(116,122,85,0.34)"
       : "rgba(107,95,79,0.18)";
   ctx.lineWidth = selected ? 1.7 : 1.2;
   ctx.beginPath();
@@ -348,9 +355,9 @@ function drawPathFruit(
   const cx = width - 58;
   const cy = 58;
   const r = selected ? 12 : 9;
-  ctx.shadowColor = selected ? "rgba(196,148,58,0.45)" : "rgba(125,155,110,0.24)";
+  ctx.shadowColor = selected ? "rgba(86,91,61,0.38)" : "rgba(116,122,85,0.22)";
   ctx.shadowBlur = selected ? 18 : 10;
-  ctx.fillStyle = selected ? "#C4943A" : "#7D9B6E";
+  ctx.fillStyle = selected ? CARD_OLIVE_DEEP : CARD_OLIVE;
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.fill();

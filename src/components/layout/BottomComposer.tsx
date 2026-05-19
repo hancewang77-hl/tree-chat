@@ -189,8 +189,8 @@ export function BottomComposer({
                   key={nutrient.id}
                   className="inline-flex max-w-[260px] items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]"
                   style={{
-                    background: isActive ? "rgba(125,155,110,0.16)" : "rgba(232,223,208,0.78)",
-                    borderColor: isActive ? "rgba(125,155,110,0.42)" : "var(--border-warm)",
+                    background: isActive ? "var(--accent-olive-soft)" : "rgba(232,223,208,0.78)",
+                    borderColor: isActive ? "rgba(116, 122, 85, 0.42)" : "var(--border-warm)",
                     color: isReady ? "var(--accent-bark)" : "var(--text-muted)",
                   }}
                   title={nutrient.excerpt}
@@ -229,13 +229,16 @@ export function BottomComposer({
         )}
         <div className="flex items-end gap-2.5 max-w-full">
           {/* Mode toggle — styled as branch segments */}
-          <div className="flex shrink-0 rounded-xl overflow-hidden" style={{ border: "1px solid var(--border-warm)" }}>
+          <div
+            className="flex shrink-0 rounded-xl overflow-hidden"
+            style={{ border: "1px solid rgba(116, 122, 85, 0.28)" }}
+          >
             <button
               onClick={() => setMode("ai")}
               className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-medium transition-all relative"
               style={{
-                background: mode === "ai" ? "var(--accent-bark)" : "transparent",
-                color: mode === "ai" ? "#FBF7F0" : "var(--text-muted)",
+                background: mode === "ai" ? "var(--accent-sage)" : "var(--accent-olive-soft)",
+                color: mode === "ai" ? "#FBF7F0" : "var(--accent-olive-deep)",
               }}
             >
               <GitBranch size={13} />
@@ -243,7 +246,7 @@ export function BottomComposer({
               {mode === "ai" && (
                 <span
                   className="absolute -top-1 right-2 w-1.5 h-1.5 rounded-full animate-pulse-warm"
-                  style={{ background: "var(--accent-sage)" }}
+                  style={{ background: "#FBF7F0" }}
                 />
               )}
             </button>
@@ -251,8 +254,8 @@ export function BottomComposer({
               onClick={() => setMode("note")}
               className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-medium transition-all"
               style={{
-                background: mode === "note" ? "var(--accent-sage)" : "transparent",
-                color: mode === "note" ? "#FBF7F0" : "var(--text-muted)",
+                background: mode === "note" ? "var(--accent-sage)" : "var(--accent-olive-soft)",
+                color: mode === "note" ? "#FBF7F0" : "var(--accent-olive-deep)",
               }}
             >
               <StickyNote size={13} />
@@ -274,9 +277,9 @@ export function BottomComposer({
             disabled={isUploading}
             className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl px-3 text-[12px] font-medium transition-all hover:opacity-85 disabled:opacity-50"
             style={{
-              border: "1px solid var(--border-warm)",
-              background: "rgba(232,223,208,0.78)",
-              color: "var(--text-muted)",
+              border: "1px solid rgba(116, 122, 85, 0.28)",
+              background: "var(--accent-olive-soft)",
+              color: "var(--accent-olive-deep)",
             }}
             title="Nutrients · 养分"
           >
@@ -291,7 +294,7 @@ export function BottomComposer({
               background: [
                 "radial-gradient(ellipse at 15% 85%, rgba(107, 95, 79, 0.06) 0%, transparent 55%)",
                 "radial-gradient(ellipse at 18% 88%, rgba(107, 95, 79, 0.04) 0%, transparent 40%)",
-                "radial-gradient(ellipse at 12% 82%, rgba(125, 155, 110, 0.04) 0%, transparent 60%)",
+                "radial-gradient(ellipse at 12% 82%, rgba(116, 122, 85, 0.07) 0%, transparent 60%)",
                 "var(--bg-cream)",
               ].join(", "),
               border: "1px solid var(--border-warm)",
@@ -322,15 +325,13 @@ export function BottomComposer({
             className="flex h-10 w-10 shrink-0 items-center justify-center transition-all relative"
             style={{
               background: text.trim()
-                ? mode === "ai"
-                  ? "var(--accent-bark)"
-                  : "var(--accent-sage)"
+                ? "var(--accent-sage)"
                 : "var(--border-warm)",
               color: text.trim() ? "#FBF7F0" : "var(--text-muted)",
               borderRadius: "60% 40% 50% 50% / 55% 45% 55% 45%",
               transform: text.trim() ? "scale(1.05)" : "scale(1)",
               boxShadow: text.trim()
-                ? "0 2px 8px rgba(61, 46, 28, 0.25)"
+                ? "0 2px 8px rgba(86, 91, 61, 0.28)"
                 : "none",
             }}
             title={mode === "ai" ? "播种 · Plant" : "保存 · Keep"}
@@ -356,7 +357,7 @@ export function BottomComposer({
                         width: 3,
                         height: 3,
                         borderRadius: "50%",
-                        background: mode === "ai" ? "var(--accent-bark)" : "var(--accent-sage)",
+                        background: "var(--accent-sage)",
                         left: "50%",
                         top: "50%",
                         animation: `seed-burst 0.45s ease-out forwards`,

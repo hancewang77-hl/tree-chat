@@ -7,6 +7,8 @@
   --text-muted: #5F5548;
   --accent-bark: #3D2E1C;
   --accent-sage: #747A55;
+  --accent-olive-deep: #565B3D;
+  --accent-olive-soft: rgba(116, 122, 85, 0.16);
   --accent-amber: #C4943A;
   --border-warm: #C7B89D;
   --shadow-warm: rgba(61, 46, 28, 0.13);
@@ -31,6 +33,8 @@
     --text-muted: #9B8E7A;
     --accent-bark: #C4A882;
     --accent-sage: #8BAF7A;
+    --accent-olive-deep: #6F8C5F;
+    --accent-olive-soft: rgba(139, 175, 122, 0.16);
     --accent-amber: #D4A84A;
     --border-warm: #3D3628;
     --shadow-warm: rgba(0, 0, 0, 0.2);

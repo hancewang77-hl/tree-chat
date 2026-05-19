@@ -31,7 +31,17 @@ export function ForestSidebar() {
         style={{ borderColor: "var(--border-warm)" }}
       >
         <div className="flex items-center gap-2">
-          <Trees size={16} style={{ color: "var(--accent-sage)" }} />
+          <span
+            className="flex h-8 w-8 items-center justify-center rounded-lg"
+            style={{
+              background: "var(--accent-sage)",
+              color: "#FBF7F0",
+              border: "1px solid rgba(255, 253, 247, 0.24)",
+              boxShadow: "0 4px 10px rgba(86, 91, 61, 0.22)",
+            }}
+          >
+            <Trees size={16} />
+          </span>
           <h2
             className="text-[13px] font-semibold tracking-[0.03em] uppercase"
             style={{ color: "var(--accent-bark)", fontFamily: "var(--font-serif)" }}
@@ -68,7 +78,8 @@ export function ForestSidebar() {
                 isActive ? "" : "hover:bg-white/60"
               }`}
               style={{
-                background: isActive ? "var(--border-warm)" : "transparent",
+                background: isActive ? "var(--accent-olive-soft)" : "transparent",
+                border: isActive ? "1px solid rgba(116, 122, 85, 0.28)" : "1px solid transparent",
               }}
             >
               <div className="flex items-center justify-between">

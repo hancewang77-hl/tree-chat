@@ -26,7 +26,12 @@ export function AppHeader() {
         <div className="flex items-center gap-3">
           <div
             className="flex h-9 w-9 items-center justify-center rounded-lg text-lg"
-            style={{ color: "var(--accent-sage)" }}
+            style={{
+              background: "var(--accent-sage)",
+              color: "#FBF7F0",
+              border: "1px solid rgba(255, 253, 247, 0.24)",
+              boxShadow: "0 4px 10px rgba(86, 91, 61, 0.22)",
+            }}
           >
             <Trees size={20} />
           </div>
@@ -50,8 +55,12 @@ export function AppHeader() {
         {/* Search */}
         <button
           onClick={() => window.dispatchEvent(new CustomEvent("search-toggle"))}
-          className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] transition-all hover:bg-white/60"
-          style={{ color: "var(--text-muted)", border: "1px solid var(--border-warm)" }}
+          className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] transition-all hover:opacity-85"
+          style={{
+            background: "var(--accent-olive-soft)",
+            color: "var(--accent-olive-deep)",
+            border: "1px solid rgba(116, 122, 85, 0.28)",
+          }}
         >
           <Search size={14} />
           <span className="hidden sm:inline">搜索节点</span>
@@ -68,8 +77,12 @@ export function AppHeader() {
         {/* 2D/3D toggle */}
         <button
           onClick={() => dispatch({ type: "TOGGLE_3D" })}
-          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-all hover:bg-white/60"
-          style={{ color: "var(--text-charcoal)" }}
+          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-all hover:opacity-85"
+          style={{
+            background: "var(--accent-olive-soft)",
+            color: "var(--accent-olive-deep)",
+            border: "1px solid rgba(116, 122, 85, 0.24)",
+          }}
           title={state.is3DMode ? "切换至 2D" : "切换至 3D"}
         >
           {state.is3DMode ? <Layers size={15} /> : <Box size={15} />}
@@ -81,10 +94,12 @@ export function AppHeader() {
         {/* Canopy */}
         <button
           onClick={() => dispatch({ type: "TOGGLE_CANOPY" })}
-          className={`rounded-lg p-2 transition-all hover:bg-white/60 ${
-            state.isCanopyOpen ? "bg-white/80" : ""
-          }`}
-          style={{ color: state.isCanopyOpen ? "var(--accent-sage)" : "var(--text-muted)" }}
+          className="rounded-lg p-2 transition-all hover:opacity-85"
+          style={{
+            background: state.isCanopyOpen ? "var(--accent-sage)" : "var(--accent-olive-soft)",
+            color: state.isCanopyOpen ? "#FBF7F0" : "var(--accent-olive-deep)",
+            border: "1px solid rgba(116, 122, 85, 0.24)",
+          }}
           title="树冠 — 全局视图"
         >
           <LayoutGrid size={15} />
@@ -93,10 +108,12 @@ export function AppHeader() {
         {/* Rings */}
         <button
           onClick={() => dispatch({ type: "OPEN_GLOBAL_RINGS" })}
-          className={`rounded-lg p-2 transition-all hover:bg-white/60 ${
-            state.isRingsOpen ? "bg-white/80" : ""
-          }`}
-          style={{ color: state.isRingsOpen ? "var(--accent-amber)" : "var(--text-muted)" }}
+          className="rounded-lg p-2 transition-all hover:opacity-85"
+          style={{
+            background: state.isRingsOpen ? "var(--accent-sage)" : "var(--accent-olive-soft)",
+            color: state.isRingsOpen ? "#FBF7F0" : "var(--accent-olive-deep)",
+            border: "1px solid rgba(116, 122, 85, 0.24)",
+          }}
           title="年轮 — 操作历史"
         >
           <History size={15} />
@@ -108,8 +125,12 @@ export function AppHeader() {
         {/* Help */}
         <button
           onClick={() => setHelpOpen(true)}
-          className="rounded-lg p-2 transition-all hover:bg-white/60"
-          style={{ color: "var(--text-muted)" }}
+          className="rounded-lg p-2 transition-all hover:opacity-85"
+          style={{
+            background: "var(--accent-olive-soft)",
+            color: "var(--accent-olive-deep)",
+            border: "1px solid rgba(116, 122, 85, 0.24)",
+          }}
           title="帮助 — 功能指南"
         >
           <HelpCircle size={15} />
@@ -128,8 +149,12 @@ function HarvestButton() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="rounded-lg p-2 transition-all hover:bg-white/60"
-        style={{ color: "var(--text-muted)" }}
+        className="rounded-lg p-2 transition-all hover:opacity-85"
+        style={{
+          background: "var(--accent-olive-soft)",
+          color: "var(--accent-olive-deep)",
+          border: "1px solid rgba(116, 122, 85, 0.24)",
+        }}
         title="收获 — 导出项目"
       >
         <Download size={15} />

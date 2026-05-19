@@ -31,7 +31,17 @@ export function RingsPanel() {
         style={{ borderColor: "var(--border-warm)" }}
       >
         <div className="flex items-center gap-2">
-          <History size={16} style={{ color: "var(--accent-amber)" }} />
+          <span
+            className="flex h-8 w-8 items-center justify-center rounded-lg"
+            style={{
+              background: "var(--accent-sage)",
+              color: "#FBF7F0",
+              border: "1px solid rgba(255, 253, 247, 0.24)",
+              boxShadow: "0 4px 10px rgba(86, 91, 61, 0.22)",
+            }}
+          >
+            <History size={15} />
+          </span>
           <h2
             className="text-[13px] font-semibold tracking-[0.03em] uppercase"
             style={{ color: "var(--accent-bark)", fontFamily: "var(--font-serif)" }}
@@ -72,7 +82,7 @@ export function RingsPanel() {
             }
             disabled={scopedPast.length === 0}
             className="flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-[13px] font-medium transition-all disabled:opacity-30"
-            style={{ background: "var(--accent-bark)", color: "#FBF7F0" }}
+            style={{ background: "var(--accent-sage)", color: "#FBF7F0" }}
           >
             <Undo2 size={14} />
             Undo
@@ -85,7 +95,7 @@ export function RingsPanel() {
             }
             disabled={scopedFuture.length === 0}
             className="flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-[13px] font-medium transition-all disabled:opacity-30"
-            style={{ background: "var(--accent-amber)", color: "#FBF7F0" }}
+            style={{ background: "var(--accent-olive-deep)", color: "#FBF7F0" }}
           >
             <Redo2 size={14} />
             Redo

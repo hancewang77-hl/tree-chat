@@ -173,12 +173,12 @@ export function renderMarkdownToHTML(text: string): string {
 
   // Display math $$...$$
   html = html.replace(/\$\$([\s\S]*?)\$\$/g, (_m, math) => {
-    return `<div class="my-2 rounded-lg px-3 py-2 text-[13px] text-center overflow-x-auto" style="background:rgba(125,155,110,0.08);color:var(--accent-bark);font-family:var(--font-serif)">${renderMath(math.trim(), true)}</div>`;
+    return `<div class="my-2 rounded-lg px-3 py-2 text-[13px] text-center overflow-x-auto" style="background:rgba(116,122,85,0.08);color:var(--accent-bark);font-family:var(--font-serif)">${renderMath(math.trim(), true)}</div>`;
   });
 
   // Inline math $...$
   html = html.replace(/\$(.+?)\$/g, (_m, math) => {
-    return `<span class="px-0.5 rounded" style="background:rgba(125,155,110,0.06);color:var(--accent-bark);font-family:var(--font-serif)">${renderMath(math.trim(), false)}</span>`;
+    return `<span class="px-0.5 rounded" style="background:rgba(116,122,85,0.06);color:var(--accent-bark);font-family:var(--font-serif)">${renderMath(math.trim(), false)}</span>`;
   });
 
   // Inline code `...`
