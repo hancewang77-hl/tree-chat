@@ -45,9 +45,9 @@ export function LeafAttachment3D({
       </mesh>
 
       <Text
-        position={[-LEAF_W / 2 + 0.18, 0.12, 0.03]}
+        position={[-LEAF_W / 2 + 0.18, 0.18, 0.03]}
         fontSize={0.082}
-        color={selected ? "#3D2E1C" : "#7D9B6E"}
+        color={selected ? "#3D2E1C" : "#6D8D5A"}
         anchorX="left"
         anchorY="middle"
         maxWidth={LEAF_W - 0.28}
@@ -57,15 +57,27 @@ export function LeafAttachment3D({
       </Text>
 
       <Text
-        position={[-LEAF_W / 2 + 0.18, -0.08, 0.03]}
-        fontSize={0.105}
+        position={[-LEAF_W / 2 + 0.18, -0.02, 0.03]}
+        fontSize={0.112}
         color="#3D2E1C"
         anchorX="left"
         anchorY="middle"
         maxWidth={LEAF_W - 0.28}
         raycast={noRaycast}
       >
-        {truncateText(node.prompt, 54)}
+        {truncateText(node.prompt, 42)}
+      </Text>
+
+      <Text
+        position={[-LEAF_W / 2 + 0.18, -0.22, 0.03]}
+        fontSize={0.072}
+        color="#6B5F4F"
+        anchorX="left"
+        anchorY="middle"
+        maxWidth={LEAF_W - 0.32}
+        raycast={noRaycast}
+      >
+        {`NOTE · ${formatLeafDate(node.timestamp)}`}
       </Text>
     </group>
   );
@@ -88,20 +100,20 @@ function createLeafCardTexture(prompt: string, selected: boolean) {
   ctx.shadowOffsetY = 7;
 
   const paper = ctx.createLinearGradient(0, 0, width, height);
-  paper.addColorStop(0, selected ? "#F7FFF0" : "#FBFCF4");
-  paper.addColorStop(0.58, "#EEF5E6");
-  paper.addColorStop(1, "#E2ECD7");
+  paper.addColorStop(0, selected ? "#F2FAEA" : "#F8FAEF");
+  paper.addColorStop(0.58, "#E8F0DD");
+  paper.addColorStop(1, "#D9E6CB");
 
   ctx.fillStyle = paper;
   roundRect(ctx, 18, 16, width - 36, height - 32, 30, true, false);
   ctx.restore();
 
-  ctx.strokeStyle = selected ? "#7D9B6E" : "#C5D1B7";
-  ctx.lineWidth = selected ? 6 : 3;
+  ctx.strokeStyle = selected ? "#6F8D57" : "#B8C6A9";
+  ctx.lineWidth = selected ? 5 : 2.5;
   roundRect(ctx, 23, 21, width - 46, height - 42, 26, false, true);
 
   ctx.save();
-  ctx.strokeStyle = selected ? "rgba(125,155,110,0.30)" : "rgba(125,155,110,0.18)";
+  ctx.strokeStyle = selected ? "rgba(91,120,68,0.24)" : "rgba(91,120,68,0.14)";
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(54, 146);
@@ -117,7 +129,7 @@ function createLeafCardTexture(prompt: string, selected: boolean) {
   }
   ctx.restore();
 
-  ctx.fillStyle = selected ? "rgba(125,155,110,0.18)" : "rgba(125,155,110,0.10)";
+  ctx.fillStyle = selected ? "rgba(91,120,68,0.14)" : "rgba(91,120,68,0.08)";
   ctx.beginPath();
   ctx.ellipse(width - 54, 50, 28, 17, -0.45, 0, Math.PI * 2);
   ctx.fill();
@@ -126,6 +138,12 @@ function createLeafCardTexture(prompt: string, selected: boolean) {
   texture.anisotropy = 8;
   texture.needsUpdate = true;
   return texture;
+}
+
+function formatLeafDate(timestamp: number) {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return "saved";
+  return `${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")}`;
 }
 
 function roundRect(

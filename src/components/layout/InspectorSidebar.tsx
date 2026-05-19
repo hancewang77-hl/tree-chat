@@ -52,7 +52,90 @@ export function InspectorSidebar({ currentPath }: { currentPath: MindNode[] }) {
       </div>
 
       {/* Node details */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+        {selectedNode && (
+          <section
+            className="rounded-xl border p-3.5"
+            style={{
+              background: "var(--bg-cream)",
+              borderColor: selectedNode.kind === "leaf" ? "rgba(125,155,110,0.42)" : "var(--border-warm)",
+            }}
+          >
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span
+                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                style={{
+                  background: selectedNode.kind === "leaf" ? "rgba(125,155,110,0.16)" : "var(--border-warm)",
+                  color: selectedNode.kind === "leaf" ? "var(--accent-sage)" : "var(--text-muted)",
+                }}
+              >
+                {selectedNode.kind === "leaf" ? <StickyNote size={10} /> : <GitBranch size={10} />}
+                {selectedNode.kind === "leaf" ? "Leaf · 笔记" : "Branch · 回答"}
+              </span>
+              <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+                z={selectedNode.layer}
+              </span>
+            </div>
+
+            <h3
+              className="mb-3 text-[14px] font-semibold leading-snug"
+              style={{ color: "var(--accent-bark)", fontFamily: "var(--font-serif)" }}
+            >
+              {selectedNode.prompt}
+            </h3>
+
+            {selectedNode.kind === "leaf" ? (
+              <div
+                className="rounded-lg border px-3 py-2.5 text-[13px] leading-relaxed"
+                style={{
+                  background: "rgba(125,155,110,0.08)",
+                  borderColor: "rgba(125,155,110,0.22)",
+                  color: "var(--text-charcoal)",
+                }}
+              >
+                {selectedNode.prompt}
+              </div>
+            ) : selectedNode.response ? (
+              <div
+                className="response-content text-[13px] leading-relaxed"
+                style={{ color: "var(--text-charcoal)" }}
+                dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML(selectedNode.response) }}
+              />
+            ) : (
+              <p className="text-[12px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
+                这个节点还没有 AI 回答。
+              </p>
+            )}
+
+            {selectedNode.nutrientRefs && selectedNode.nutrientRefs.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1">
+                {selectedNode.nutrientRefs.map((id) => {
+                  const nutrient = activeProject?.nutrients[id];
+                  if (!nutrient) return null;
+                  return (
+                    <span
+                      key={id}
+                      className="rounded-full px-2 py-0.5 text-[10px]"
+                      style={{ background: "rgba(125,155,110,0.12)", color: "var(--text-muted)" }}
+                    >
+                      {nutrient.name}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
+
+        <div className="pt-1">
+          <p
+            className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.04em]"
+            style={{ color: "var(--text-muted)" }}
+          >
+            Context Path
+          </p>
+        </div>
+
         {currentPath.map((node) => {
           const isSelected = node.id === state.selectedNodeId;
           const isLeafNote = node.kind === "leaf";
@@ -93,11 +176,9 @@ export function InspectorSidebar({ currentPath }: { currentPath: MindNode[] }) {
               </p>
 
               {node.response && (
-                <div
-                  className="text-[12px] leading-relaxed response-content"
-                  style={{ color: "var(--text-charcoal)" }}
-                  dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML(node.response) }}
-                />
+                <p className="line-clamp-2 text-[11px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
+                  {node.response.replace(/\s+/g, " ").slice(0, 96)}
+                </p>
               )}
             </button>
           );

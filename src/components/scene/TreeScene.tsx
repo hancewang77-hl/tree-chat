@@ -115,7 +115,7 @@ export function TreeScene({
     <Canvas
       style={{
         background:
-          "radial-gradient(circle at 50% 42%, rgba(251,247,240,0.6) 0%, rgba(240,235,225,0.8) 42%, rgba(225,218,205,0.95) 100%)",
+          "radial-gradient(circle at 50% 38%, rgba(239,232,216,0.92) 0%, rgba(219,209,190,0.96) 48%, rgba(188,177,156,1) 100%)",
       }}
     >
       {is3DMode ? (
