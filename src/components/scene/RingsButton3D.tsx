@@ -22,68 +22,61 @@ export function RingsButton3D({
 
     const cx = size / 2;
     const cy = size / 2;
-    const radius = 76;
-    const wood = ctx.createRadialGradient(cx - 18, cy - 22, 12, cx, cy, radius);
-    wood.addColorStop(0, selected ? "#E5DDBF" : "#DED5B8");
-    wood.addColorStop(0.38, "#B8AE80");
-    wood.addColorStop(0.72, "#76704B");
-    wood.addColorStop(1, "#49462F");
+    const ringCenterX = cx - 5;
+    const ringCenterY = cy + 2;
 
     ctx.save();
-    ctx.shadowColor = selected ? "rgba(61,46,28,0.26)" : "rgba(61,46,28,0.12)";
-    ctx.shadowBlur = selected ? 10 : 6;
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.fillStyle = wood;
-    ctx.fill();
-    ctx.restore();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.shadowColor = "rgba(61, 46, 28, 0.24)";
+    ctx.shadowBlur = selected ? 5 : 3;
+    ctx.shadowOffsetY = 1;
 
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius - 5, 0, Math.PI * 2);
-    ctx.clip();
-
-    const rings = [14, 24, 35, 47, 59, 70];
+    const rings = [13, 23, 34, 46, 59, 72];
     rings.forEach((ringRadius, ringIndex) => {
       ctx.beginPath();
-      for (let i = 0; i <= 128; i++) {
-        const angle = (i / 128) * Math.PI * 2;
+      for (let i = 0; i <= 160; i++) {
+        const angle = (i / 160) * Math.PI * 2;
         const wobble =
-          Math.sin(angle * (ringIndex + 2.1)) * 2.2 +
-          Math.cos(angle * (ringIndex + 3.7)) * 1.4;
+          Math.sin(angle * (ringIndex + 1.8)) * 2.6 +
+          Math.cos(angle * (ringIndex + 3.2)) * 1.6 +
+          Math.sin(angle * 5.1 + ringIndex) * 0.8;
         const r = ringRadius + wobble;
-        const x = cx + Math.cos(angle) * r;
-        const y = cy + Math.sin(angle) * r * 0.93;
+        const x = ringCenterX + Math.cos(angle) * r;
+        const y = ringCenterY + Math.sin(angle) * r * 0.9;
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       }
       ctx.closePath();
-      ctx.strokeStyle =
-        ringIndex % 2 === 0
-          ? "rgba(63,67,43,0.24)"
-          : "rgba(244,235,215,0.18)";
-      ctx.lineWidth = ringIndex % 2 === 0 ? 2 : 1;
+      const alpha = selected ? 0.84 - ringIndex * 0.06 : 0.68 - ringIndex * 0.05;
+      ctx.strokeStyle = `rgba(255, 253, 247, ${Math.max(alpha, 0.36)})`;
+      ctx.lineWidth = ringIndex === rings.length - 1 ? 3 : ringIndex % 2 === 0 ? 2.3 : 1.45;
       ctx.stroke();
     });
 
-    for (let i = 0; i < 18; i++) {
-      const angle = (i / 18) * Math.PI * 2;
-      const inner = 10 + (i % 4) * 8;
-      const outer = 66 - (i % 3) * 7;
+    for (let i = 0; i < 12; i++) {
+      const angle = (i / 12) * Math.PI * 2 + 0.12;
+      const inner = 10 + (i % 3) * 10;
+      const outer = 67 - (i % 4) * 8;
       ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(angle) * inner, cy + Math.sin(angle) * inner);
-      ctx.lineTo(cx + Math.cos(angle + 0.08) * outer, cy + Math.sin(angle + 0.08) * outer);
-      ctx.strokeStyle = "rgba(255,248,221,0.07)";
-      ctx.lineWidth = 1;
+      ctx.moveTo(
+        ringCenterX + Math.cos(angle) * inner,
+        ringCenterY + Math.sin(angle) * inner * 0.9,
+      );
+      ctx.lineTo(
+        ringCenterX + Math.cos(angle + 0.07) * outer,
+        ringCenterY + Math.sin(angle + 0.07) * outer * 0.9,
+      );
+      ctx.strokeStyle = selected ? "rgba(255, 253, 247, 0.20)" : "rgba(255, 253, 247, 0.14)";
+      ctx.lineWidth = 0.9;
       ctx.stroke();
     }
-    ctx.restore();
 
-    ctx.strokeStyle = selected ? "rgba(255,246,216,0.44)" : "rgba(255,253,247,0.24)";
-    ctx.lineWidth = 2.2;
     ctx.beginPath();
-    ctx.arc(cx, cy, radius - 3, 0, Math.PI * 2);
-    ctx.stroke();
+    ctx.arc(ringCenterX - 1, ringCenterY, 2.4, 0, Math.PI * 2);
+    ctx.fillStyle = selected ? "rgba(255, 253, 247, 0.78)" : "rgba(255, 253, 247, 0.58)";
+    ctx.fill();
+    ctx.restore();
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.anisotropy = 8;
@@ -105,7 +98,7 @@ export function RingsButton3D({
       <meshBasicMaterial
         map={texture}
         transparent
-        opacity={selected ? 0.70 : 0.50}
+        opacity={selected ? 0.92 : 0.78}
         depthTest={false}
       />
     </mesh>
