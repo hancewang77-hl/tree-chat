@@ -15,6 +15,7 @@ export function Node3D({
   onSelect,
   showConfirmButton,
   onConfirmLayerMove,
+  onOpenRings,
 }: {
   node: MindNode;
   selected: boolean;
@@ -25,6 +26,7 @@ export function Node3D({
   onSelect: () => void;
   showConfirmButton: boolean;
   onConfirmLayerMove: () => void;
+  onOpenRings: () => void;
 }) {
   return (
     <group
@@ -46,6 +48,34 @@ export function Node3D({
         interactive={interactive}
         priority={priority}
       />
+
+      <group position={[NODE_W / 2 - 0.28, 0.68, 0.05]}>
+        <mesh
+          renderOrder={24}
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpenRings();
+          }}
+        >
+          <circleGeometry args={[0.15, 32]} />
+          <meshBasicMaterial
+            color={selected ? "#C4943A" : "#F7F0E4"}
+            transparent
+            opacity={0.96}
+            depthTest={false}
+          />
+        </mesh>
+        <Text
+          position={[0, 0, 0.03]}
+          fontSize={0.12}
+          color={selected ? "#FFFDF7" : "#8A6A32"}
+          anchorX="center"
+          anchorY="middle"
+          raycast={noRaycast}
+        >
+          R
+        </Text>
+      </group>
 
       {showConfirmButton && (
         <group position={[NODE_W / 2 + 0.45, 0.1, 0.03]}>

@@ -55,7 +55,7 @@ export function InspectorSidebar({ currentPath }: { currentPath: MindNode[] }) {
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
         {currentPath.map((node) => {
           const isSelected = node.id === state.selectedNodeId;
-          const isLeafNote = node.response === "" && node.prompt !== "";
+          const isLeafNote = node.kind === "leaf";
 
           return (
             <button

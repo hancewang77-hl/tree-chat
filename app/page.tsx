@@ -124,14 +124,23 @@ function App() {
     setError(null);
     const s = stateRef.current;
     const n = nodesRef.current;
-    const targetParentId = s.selectedNodeId;
+    const selectedNode = n[s.selectedNodeId];
+    const targetParentId =
+      selectedNode?.kind === "leaf" && selectedNode.parentId
+        ? selectedNode.parentId
+        : s.selectedNodeId;
     const projectId = s.activeProjectId;
-    const context = getContextPath(n, targetParentId);
+    const context = getContextPath(n, s.selectedNodeId);
+    const project = s.projects[projectId];
+    const nutrients = Object.values(project?.nutrients ?? {});
+    const activeNutrientIds = project?.activeNutrientIds ?? [];
 
     try {
       const aiResponse = await sendMessage(
         prompt.trim(),
         context.map((node) => ({ prompt: node.prompt, response: node.response })),
+        nutrients,
+        activeNutrientIds,
       );
 
       if (stateRef.current.activeProjectId !== projectId) return;
@@ -141,6 +150,7 @@ function App() {
         prompt: prompt.trim(),
         response: aiResponse,
         parentId: targetParentId,
+        nutrientRefs: activeNutrientIds,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "AI 请求失败，请检查网络连接和 API 配置";
@@ -223,6 +233,7 @@ function App() {
               setPlaneNameInput(state.planeNames[layer] ?? "");
             }}
             onConfirmLayerMove={() => {}}
+            onOpenNodeRings={(nodeId) => dispatch({ type: "OPEN_NODE_RINGS", nodeId })}
           />
 
           <TreeToolbar />

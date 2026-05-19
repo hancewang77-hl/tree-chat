@@ -10,6 +10,7 @@ import {
 import * as THREE from "three";
 import type { NodesMap, ToolMode } from "@/src/types/tree";
 import {
+  LEAF_W,
   NODE_W,
   LAYER_SPACING,
   useTreeLayout,
@@ -51,6 +52,7 @@ function curvedBranchPoints(
 import { CameraModeRig } from "./CameraModeRig";
 import { Node3D } from "./Node3D";
 import { LayerPlane } from "./LayerPlane";
+import { LeafAttachment3D } from "./LeafAttachment3D";
 
 export function TreeScene({
   nodes,
@@ -69,6 +71,7 @@ export function TreeScene({
   onConfirmLayerMove,
   onSelectLayer,
   onRenameLayer,
+  onOpenNodeRings,
 }: {
   nodes: NodesMap;
   selectedNodeId: string;
@@ -86,10 +89,12 @@ export function TreeScene({
   onConfirmLayerMove: () => void;
   onSelectLayer: (layer: number) => void;
   onRenameLayer: (layer: number) => void;
+  onOpenNodeRings: (id: string) => void;
 }) {
   const {
     renderedNodes,
     renderedLinks,
+    renderedLeafAttachments,
     currentPathIds,
     effectiveLayer,
     globalPlaneBounds,
@@ -276,6 +281,38 @@ export function TreeScene({
                 }}
                 showConfirmButton={toolMode === "layerMove" && isMovingNode}
                 onConfirmLayerMove={onConfirmLayerMove}
+                onOpenRings={() => onOpenNodeRings(node.data.id)}
+              />
+            </group>
+          );
+        })}
+
+        {renderedLeafAttachments.map((attachment) => {
+          const parent = attachment.parentPoint;
+          const parentData = parent.data;
+          const parentLayer = effectiveLayer(parentData);
+          const leafLayer = is3DMode ? parentLayer : selectedLayer;
+          const parentX = parent.y + (parentData.offsetX ?? 0) / 100;
+          const parentY = -parent.x - (parentData.offsetY ?? 0) / 100;
+          const offsetY = (attachment.index - (attachment.total - 1) / 2) * 0.78;
+          const leafX = parentX + NODE_W / 2 + LEAF_W / 2 + 0.42;
+          const leafY = parentY + offsetY;
+          const leafZ = leafLayer * LAYER_SPACING + (is3DMode ? 0.04 : 0.2);
+          const stemPoints: [number, number, number][] = [
+            [parentX + NODE_W / 2 - 0.08, parentY, leafZ - 0.02],
+            [leafX - LEAF_W / 2, leafY, leafZ],
+          ];
+
+          return (
+            <group
+              key={attachment.node.id}
+              position={[leafX, leafY, leafZ]}
+            >
+              <LeafAttachment3D
+                node={attachment.node}
+                selected={attachment.node.id === selectedNodeId}
+                stemPoints={stemPoints.map(([x, y, z]) => [x - leafX, y - leafY, z - leafZ])}
+                onSelect={() => onSelectNode(attachment.node.id)}
               />
             </group>
           );

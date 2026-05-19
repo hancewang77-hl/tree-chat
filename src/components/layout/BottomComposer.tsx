@@ -1,10 +1,15 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Send, GitBranch, StickyNote } from "lucide-react";
-import { useTreeState } from "@/src/state/TreeContext";
+import { Send, GitBranch, StickyNote, Paperclip, X } from "lucide-react";
+import { useTreeDispatch, useTreeState } from "@/src/state/TreeContext";
+import { extractNutrientFromFile } from "@/src/lib/nutrients";
+import { deleteNutrientBlob, saveNutrientBlob } from "@/src/lib/nutrientStorage";
 
 type ComposerMode = "ai" | "note";
+
+const MAX_NUTRIENT_FILES = 3;
+const MAX_NUTRIENT_BYTES = 10 * 1024 * 1024;
 
 const SEED_PARTICLES = [
   { angle: 0, dist: 22 },
@@ -25,10 +30,20 @@ export function BottomComposer({
   onAddLeaf: (content: string) => void;
 }) {
   const state = useTreeState();
+  const dispatch = useTreeDispatch();
+  const activeProject = state.projects[state.activeProjectId];
   const [mode, setMode] = useState<ComposerMode>("ai");
   const [text, setText] = useState("");
   const [burst, setBurst] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const nutrients = Object.values(activeProject?.nutrients ?? {}).sort(
+    (a, b) => b.createdAt - a.createdAt,
+  );
+  const activeNutrients = new Set(activeProject?.activeNutrientIds ?? []);
 
   // Listen for external mode-switch and focus events (from InspectorSidebar)
   useEffect(() => {
@@ -56,6 +71,35 @@ export function BottomComposer({
       onAddLeaf(text);
     }
     setText("");
+  }
+
+  async function handleFiles(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setUploadError(null);
+    setIsUploading(true);
+
+    try {
+      const accepted = Array.from(files).slice(0, MAX_NUTRIENT_FILES);
+      const oversized = accepted.find((file) => file.size > MAX_NUTRIENT_BYTES);
+      if (oversized) {
+        setUploadError(`${oversized.name} 超过 10MB，未加入养分上下文`);
+      }
+
+      const items = [];
+      for (const file of accepted) {
+        if (file.size > MAX_NUTRIENT_BYTES) continue;
+        const item = await extractNutrientFromFile(file);
+        const blobKey = await saveNutrientBlob(item.id, file).catch(() => undefined);
+        items.push({ ...item, blobKey });
+      }
+
+      if (items.length > 0) {
+        dispatch({ type: "ADD_NUTRIENTS", nutrients: items });
+      }
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   }
 
   const placeholder =
@@ -135,6 +179,54 @@ export function BottomComposer({
 
       {/* Main composer body */}
       <div className="px-4 pb-3 pt-0.5">
+        {(nutrients.length > 0 || uploadError) && (
+          <div className="mb-2 flex flex-wrap items-center gap-1.5">
+            {nutrients.map((nutrient) => {
+              const isActive = activeNutrients.has(nutrient.id);
+              const isReady = nutrient.extractionStatus === "ready";
+              return (
+                <span
+                  key={nutrient.id}
+                  className="inline-flex max-w-[260px] items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]"
+                  style={{
+                    background: isActive ? "rgba(125,155,110,0.13)" : "rgba(255,253,247,0.66)",
+                    borderColor: isActive ? "rgba(125,155,110,0.42)" : "var(--border-warm)",
+                    color: isReady ? "var(--accent-bark)" : "var(--text-muted)",
+                  }}
+                  title={nutrient.excerpt}
+                >
+                  <button
+                    type="button"
+                    onClick={() => dispatch({ type: "TOGGLE_NUTRIENT_ACTIVE", nutrientId: nutrient.id })}
+                    disabled={!isReady}
+                    className="truncate disabled:cursor-not-allowed"
+                  >
+                    {isActive ? "●" : "○"} {nutrient.name}
+                  </button>
+                  <span style={{ color: "var(--text-muted)" }}>
+                    {isReady ? `${nutrient.extractedCharCount}字` : "仅附件"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await deleteNutrientBlob(nutrient.blobKey).catch(() => undefined);
+                      dispatch({ type: "REMOVE_NUTRIENT", nutrientId: nutrient.id });
+                    }}
+                    className="rounded-full p-0.5 hover:bg-white/80"
+                    title="移除养分"
+                  >
+                    <X size={11} />
+                  </button>
+                </span>
+              );
+            })}
+            {uploadError && (
+              <span className="text-[11px]" style={{ color: "#B43C28" }}>
+                {uploadError}
+              </span>
+            )}
+          </div>
+        )}
         <div className="flex items-end gap-2.5 max-w-full">
           {/* Mode toggle — styled as branch segments */}
           <div className="flex shrink-0 rounded-xl overflow-hidden" style={{ border: "1px solid var(--border-warm)" }}>
@@ -167,6 +259,30 @@ export function BottomComposer({
               <span className="hidden sm:inline">笔记</span>
             </button>
           </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(event) => handleFiles(event.currentTarget.files)}
+          />
+
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+            className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl px-3 text-[12px] font-medium transition-all hover:opacity-85 disabled:opacity-50"
+            style={{
+              border: "1px solid var(--border-warm)",
+              background: "rgba(255,253,247,0.72)",
+              color: "var(--text-muted)",
+            }}
+            title="Nutrients · 养分"
+          >
+            <Paperclip size={13} />
+            <span className="hidden lg:inline">{isUploading ? "提取中" : "养分"}</span>
+          </button>
 
           {/* Input — rich soil with tree-ring radial gradient */}
           <div

@@ -92,7 +92,7 @@ export function AppHeader() {
 
         {/* Rings */}
         <button
-          onClick={() => dispatch({ type: "TOGGLE_RINGS" })}
+          onClick={() => dispatch({ type: "OPEN_GLOBAL_RINGS" })}
           className={`rounded-lg p-2 transition-all hover:bg-white/60 ${
             state.isRingsOpen ? "bg-white/80" : ""
           }`}

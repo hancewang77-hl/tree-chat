@@ -1,9 +1,18 @@
 import { useState } from "react";
+import type { NutrientItem } from "@/src/types/tree";
+import { buildNutrientContext } from "@/src/lib/nutrients";
 
 async function generateDeepSeekResponse(
   prompt: string,
   contextPath: { prompt: string; response: string }[],
+  nutrients: NutrientItem[],
+  activeNutrientIds: string[],
 ) {
+  const nutrientContext = buildNutrientContext(nutrients, activeNutrientIds);
+  const userPrompt = nutrientContext
+    ? `${nutrientContext}\n\n用户当前问题：\n${prompt}`
+    : prompt;
+
   const messages = [
     {
       role: "system" as const,
@@ -24,7 +33,7 @@ async function generateDeepSeekResponse(
       { role: "user" as const, content: node.prompt },
       { role: "assistant" as const, content: node.response },
     ]),
-    { role: "user" as const, content: prompt },
+    { role: "user" as const, content: userPrompt },
   ];
 
   const res = await fetch("/api/chat", {
@@ -49,10 +58,12 @@ export function useAIChat() {
   async function sendMessage(
     prompt: string,
     contextPath: { prompt: string; response: string }[],
+    nutrients: NutrientItem[] = [],
+    activeNutrientIds: string[] = [],
   ): Promise<string> {
     setIsAiTyping(true);
     try {
-      return await generateDeepSeekResponse(prompt, contextPath);
+      return await generateDeepSeekResponse(prompt, contextPath, nutrients, activeNutrientIds);
     } finally {
       setIsAiTyping(false);
     }

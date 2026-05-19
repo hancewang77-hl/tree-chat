@@ -23,6 +23,8 @@ type SettledLink = HierarchyPointLink<HierarchyNodeData> & {
 
 export const NODE_W = 3.4;
 export const NODE_H = 1.75;
+export const LEAF_W = 1.9;
+export const LEAF_H = 0.66;
 export const LAYER_SPACING = 4.2;
 export const X_SPACING = 4.6;
 export const Y_SPACING = 2.4;
@@ -70,6 +72,36 @@ type TreeLayoutInput = {
   pendingNodeLayer: number | null;
 };
 
+export type LeafAttachment = {
+  node: MindNode;
+  parentId: string;
+  index: number;
+  total: number;
+};
+
+export type PositionedLeafAttachment = LeafAttachment & {
+  parentPoint: SettledNode;
+};
+
+export function getTrunkChildIds(nodes: NodesMap, nodeId: string): string[] {
+  const node = nodes[nodeId];
+  if (!node) return [];
+  return node.children.filter((childId) => nodes[childId]?.kind !== "leaf");
+}
+
+export function getLeafAttachments(nodes: NodesMap, parentId: string): LeafAttachment[] {
+  const leafNodes = (nodes[parentId]?.children ?? [])
+    .map((childId) => nodes[childId])
+    .filter((node): node is MindNode => node?.kind === "leaf");
+
+  return leafNodes.map((node, index) => ({
+    node,
+    parentId,
+    index,
+    total: leafNodes.length,
+  }));
+}
+
 export function useTreeLayout({
   nodes,
   selectedNodeId,
@@ -87,7 +119,7 @@ export function useTreeLayout({
     function buildHierarchy(id: string): HierarchyNodeData | null {
       const node = nodes[id];
       if (!node) return null;
-      const hierarchyChildren = node.children
+      const hierarchyChildren = getTrunkChildIds(nodes, id)
         .map((childId) => buildHierarchy(childId))
         .filter((c): c is HierarchyNodeData => c !== null);
       return { ...node, children: hierarchyChildren } as HierarchyNodeData;
@@ -126,6 +158,15 @@ export function useTreeLayout({
           visibleIds?.has(l.target.data.id),
     );
   }, [fullTreeLayout.links, is3DMode, visibleIds]);
+
+  const renderedLeafAttachments = useMemo(() => {
+    return renderedNodes.flatMap((parentPoint) =>
+      getLeafAttachments(nodes, parentPoint.data.id).map((attachment) => ({
+        ...attachment,
+        parentPoint: parentPoint as SettledNode,
+      })),
+    );
+  }, [nodes, renderedNodes]);
 
   const currentPathIds = useMemo(() => {
     const path = getContextPath(nodes, selectedNodeId);
@@ -204,6 +245,7 @@ export function useTreeLayout({
   return {
     renderedNodes,
     renderedLinks,
+    renderedLeafAttachments,
     currentPathIds,
     effectiveLayer,
     globalPlaneBounds,
