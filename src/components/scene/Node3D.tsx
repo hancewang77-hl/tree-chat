@@ -5,6 +5,7 @@ import type { MindNode } from "@/src/types/tree";
 import { NODE_W } from "@/hooks/useTreeLayout";
 import { noRaycast } from "@/src/lib/utils";
 import { CardTexture } from "./CardTexture";
+import { RingsButton3D } from "./RingsButton3D";
 
 export function Node3D({
   node,
@@ -50,31 +51,7 @@ export function Node3D({
       />
 
       <group position={[NODE_W / 2 - 0.28, 0.68, 0.05]}>
-        <mesh
-          renderOrder={24}
-          onClick={(event) => {
-            event.stopPropagation();
-            onOpenRings();
-          }}
-        >
-          <circleGeometry args={[0.15, 32]} />
-          <meshBasicMaterial
-            color={selected ? "#C4943A" : "#F7F0E4"}
-            transparent
-            opacity={0.96}
-            depthTest={false}
-          />
-        </mesh>
-        <Text
-          position={[0, 0, 0.03]}
-          fontSize={0.12}
-          color={selected ? "#FFFDF7" : "#8A6A32"}
-          anchorX="center"
-          anchorY="middle"
-          raycast={noRaycast}
-        >
-          R
-        </Text>
+        <RingsButton3D selected={selected} onClick={onOpenRings} />
       </group>
 
       {showConfirmButton && (

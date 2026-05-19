@@ -10,7 +10,9 @@ import {
 import * as THREE from "three";
 import type { NodesMap, ToolMode } from "@/src/types/tree";
 import {
+  LEAF_H,
   LEAF_W,
+  NODE_H,
   NODE_W,
   LAYER_SPACING,
   useTreeLayout,
@@ -294,13 +296,13 @@ export function TreeScene({
           const leafLayer = is3DMode ? parentLayer : selectedLayer;
           const parentX = parent.y + (parentData.offsetX ?? 0) / 100;
           const parentY = -parent.x - (parentData.offsetY ?? 0) / 100;
-          const offsetY = (attachment.index - (attachment.total - 1) / 2) * 0.78;
-          const leafX = parentX + NODE_W / 2 + LEAF_W / 2 + 0.42;
-          const leafY = parentY + offsetY;
+          const offsetX = (attachment.index - (attachment.total - 1) / 2) * (LEAF_W + 0.18);
+          const leafX = parentX + offsetX;
+          const leafY = parentY - NODE_H / 2 - LEAF_H / 2 - 0.42;
           const leafZ = leafLayer * LAYER_SPACING + (is3DMode ? 0.04 : 0.2);
           const stemPoints: [number, number, number][] = [
-            [parentX + NODE_W / 2 - 0.08, parentY, leafZ - 0.02],
-            [leafX - LEAF_W / 2, leafY, leafZ],
+            [parentX + offsetX * 0.18, parentY - NODE_H / 2 + 0.05, leafZ - 0.02],
+            [leafX, leafY + LEAF_H / 2 - 0.02, leafZ],
           ];
 
           return (
