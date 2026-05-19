@@ -28,8 +28,8 @@ export function RingsButton3D({
     ctx.save();
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.shadowColor = "rgba(61, 46, 28, 0.24)";
-    ctx.shadowBlur = selected ? 5 : 3;
+    ctx.shadowColor = "rgba(61, 46, 28, 0.18)";
+    ctx.shadowBlur = selected ? 4 : 2;
     ctx.shadowOffsetY = 1;
 
     const rings = [13, 23, 34, 46, 59, 72];
@@ -48,9 +48,23 @@ export function RingsButton3D({
         else ctx.lineTo(x, y);
       }
       ctx.closePath();
-      const alpha = selected ? 0.84 - ringIndex * 0.06 : 0.68 - ringIndex * 0.05;
-      ctx.strokeStyle = `rgba(255, 253, 247, ${Math.max(alpha, 0.36)})`;
-      ctx.lineWidth = ringIndex === rings.length - 1 ? 3 : ringIndex % 2 === 0 ? 2.3 : 1.45;
+      const isOuter = ringIndex === rings.length - 1;
+      const selectedPalette = [
+        "rgba(61, 46, 28, 0.70)",
+        "rgba(139, 106, 50, 0.76)",
+        "rgba(91, 78, 57, 0.72)",
+      ];
+      const defaultPalette = [
+        "rgba(61, 46, 28, 0.56)",
+        "rgba(139, 122, 98, 0.82)",
+        "rgba(91, 78, 57, 0.66)",
+      ];
+      ctx.strokeStyle = isOuter
+        ? selected
+          ? "rgba(61, 46, 28, 0.78)"
+          : "rgba(86, 70, 48, 0.76)"
+        : (selected ? selectedPalette : defaultPalette)[ringIndex % 3];
+      ctx.lineWidth = isOuter ? 3.4 : ringIndex % 2 === 0 ? 2.5 : 1.7;
       ctx.stroke();
     });
 
@@ -67,14 +81,14 @@ export function RingsButton3D({
         ringCenterX + Math.cos(angle + 0.07) * outer,
         ringCenterY + Math.sin(angle + 0.07) * outer * 0.9,
       );
-      ctx.strokeStyle = selected ? "rgba(255, 253, 247, 0.20)" : "rgba(255, 253, 247, 0.14)";
-      ctx.lineWidth = 0.9;
+      ctx.strokeStyle = selected ? "rgba(61, 46, 28, 0.22)" : "rgba(86, 70, 48, 0.18)";
+      ctx.lineWidth = 1;
       ctx.stroke();
     }
 
     ctx.beginPath();
     ctx.arc(ringCenterX - 1, ringCenterY, 2.4, 0, Math.PI * 2);
-    ctx.fillStyle = selected ? "rgba(255, 253, 247, 0.78)" : "rgba(255, 253, 247, 0.58)";
+    ctx.fillStyle = selected ? "rgba(61, 46, 28, 0.72)" : "rgba(86, 70, 48, 0.62)";
     ctx.fill();
     ctx.restore();
 
@@ -94,11 +108,11 @@ export function RingsButton3D({
         onClick();
       }}
     >
-      <planeGeometry args={[0.25, 0.25]} />
+      <planeGeometry args={[0.28, 0.28]} />
       <meshBasicMaterial
         map={texture}
         transparent
-        opacity={selected ? 0.92 : 0.78}
+        opacity={selected ? 0.96 : 0.88}
         depthTest={false}
       />
     </mesh>

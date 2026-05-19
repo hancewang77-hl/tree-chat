@@ -177,9 +177,10 @@ export function ForestSidebar() {
           onClick={handleSeed}
           className="flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-[13px] font-medium transition-all hover:opacity-90"
           style={{
-            background: "rgba(255, 253, 247, 0.18)",
+            background: "var(--accent-sage)",
             color: "#FBF7F0",
-            border: "1px solid rgba(255, 253, 247, 0.20)",
+            border: "1px solid rgba(86, 91, 61, 0.42)",
+            boxShadow: "0 6px 14px rgba(86, 91, 61, 0.18)",
           }}
         >
           <Plus size={15} />
