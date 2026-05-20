@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { GitBranch, StickyNote, Scissors, Trash2, Sun } from "lucide-react";
 import { useTreeState, useTreeDispatch } from "@/src/state/TreeContext";
 import { ConfirmDialog } from "@/src/components/overlays/ConfirmDialog";
@@ -15,10 +15,13 @@ type ToolButton = {
   onClick: () => void;
 };
 
+type ComposerMode = "ai" | "note";
+
 export function TreeToolbar() {
   const state = useTreeState();
   const dispatch = useTreeDispatch();
   const [showPruneConfirm, setShowPruneConfirm] = useState(false);
+  const [composerMode, setComposerMode] = useState<ComposerMode>("ai");
 
   const activeProject = state.projects[state.activeProjectId];
   const selectedNode = activeProject?.nodes[state.selectedNodeId];
@@ -34,12 +37,22 @@ export function TreeToolbar() {
     setShowPruneConfirm(false);
   }
 
+  useEffect(() => {
+    const handleMode = (event: Event) => {
+      const nextMode = (event as CustomEvent).detail as ComposerMode;
+      if (nextMode === "ai" || nextMode === "note") setComposerMode(nextMode);
+    };
+    window.addEventListener("composer-mode", handleMode);
+    return () => window.removeEventListener("composer-mode", handleMode);
+  }, []);
+
   const buttons: ToolButton[] = [
     {
       id: "branch",
       icon: <GitBranch size={17} />,
       label: "分支",
       title: "Branch — AI 生成子节点",
+      active: composerMode === "ai",
       onClick: () => {
         window.dispatchEvent(new CustomEvent("composer-mode", { detail: "ai" }));
         window.dispatchEvent(new CustomEvent("composer-focus"));
@@ -50,6 +63,7 @@ export function TreeToolbar() {
       icon: <StickyNote size={17} />,
       label: "叶片",
       title: "Leaf — 手动添加笔记",
+      active: composerMode === "note",
       onClick: () => {
         window.dispatchEvent(new CustomEvent("composer-mode", { detail: "note" }));
         window.dispatchEvent(new CustomEvent("composer-focus"));
@@ -95,8 +109,8 @@ export function TreeToolbar() {
         <div
           className="flex flex-col gap-0.5 rounded-2xl px-1.5 py-1.5 shadow-lg backdrop-blur-sm"
           style={{
-            background: "rgba(116, 122, 85, 0.14)",
-            border: "1px solid rgba(116, 122, 85, 0.30)",
+            background: "rgba(216, 204, 184, 0.90)",
+            border: "1px solid rgba(116, 122, 85, 0.22)",
             boxShadow: "0 10px 24px rgba(61, 46, 28, 0.14)",
           }}
         >
@@ -110,9 +124,9 @@ export function TreeToolbar() {
                 btn.disabled ? "opacity-25 cursor-not-allowed" : "hover:opacity-85"
               }`}
               style={{
-                background: btn.active ? "var(--accent-sage)" : "var(--accent-olive-soft)",
-                color: btn.active ? "#FBF7F0" : "var(--accent-olive-deep)",
-                border: `1px solid ${btn.active ? "rgba(86, 91, 61, 0.42)" : "rgba(116, 122, 85, 0.22)"}`,
+                background: btn.active ? "var(--accent-sage)" : "rgba(255, 253, 247, 0.46)",
+                color: btn.active ? "#FBF7F0" : "var(--text-muted)",
+                border: `1px solid ${btn.active ? "rgba(86, 91, 61, 0.42)" : "rgba(199, 184, 157, 0.54)"}`,
                 boxShadow: btn.active ? "0 5px 12px rgba(86, 91, 61, 0.20)" : "none",
               }}
             >

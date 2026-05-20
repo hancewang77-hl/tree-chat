@@ -1,20 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { GitBranch, MessageSquare, StickyNote, Trash2, Sun } from "lucide-react";
 import type { MindNode } from "@/src/types/tree";
 import { useTreeState, useTreeDispatch } from "@/src/state/TreeContext";
 import { renderMarkdownToHTML } from "@/src/lib/formatResponse";
 import { ConfirmDialog } from "@/src/components/overlays/ConfirmDialog";
 
+type ComposerMode = "ai" | "note";
+
 export function InspectorSidebar({ currentPath }: { currentPath: MindNode[] }) {
   const state = useTreeState();
   const dispatch = useTreeDispatch();
   const [showPruneConfirm, setShowPruneConfirm] = useState(false);
+  const [composerMode, setComposerMode] = useState<ComposerMode>("ai");
 
   const activeProject = state.projects[state.activeProjectId];
   const selectedNode = activeProject?.nodes[state.selectedNodeId];
   const isRoot = selectedNode?.id === activeProject?.rootNodeId;
+
+  useEffect(() => {
+    const handleMode = (event: Event) => {
+      const nextMode = (event as CustomEvent).detail as ComposerMode;
+      if (nextMode === "ai" || nextMode === "note") setComposerMode(nextMode);
+    };
+    window.addEventListener("composer-mode", handleMode);
+    return () => window.removeEventListener("composer-mode", handleMode);
+  }, []);
 
   return (
     <aside
@@ -213,6 +225,7 @@ export function InspectorSidebar({ currentPath }: { currentPath: MindNode[] }) {
             <ActionButton
               icon={<GitBranch size={13} />}
               label="分支"
+              active={composerMode === "ai"}
               onClick={() => {
                 window.dispatchEvent(new CustomEvent("composer-mode", { detail: "ai" }));
                 window.dispatchEvent(new CustomEvent("composer-focus"));
@@ -221,6 +234,7 @@ export function InspectorSidebar({ currentPath }: { currentPath: MindNode[] }) {
             <ActionButton
               icon={<StickyNote size={13} />}
               label="叶片"
+              active={composerMode === "note"}
               onClick={() => {
                 window.dispatchEvent(new CustomEvent("composer-mode", { detail: "note" }));
                 window.dispatchEvent(new CustomEvent("composer-focus"));
@@ -265,11 +279,13 @@ function ActionButton({
   icon,
   label,
   onClick,
+  active,
   danger,
 }: {
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
+  active?: boolean;
   danger?: boolean;
 }) {
   return (
@@ -277,10 +293,10 @@ function ActionButton({
       onClick={onClick}
       className="flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-medium transition-all hover:opacity-85"
       style={{
-        background: danger ? "rgba(180, 60, 40, 0.07)" : "var(--accent-sage)",
-        color: danger ? "#B43C28" : "#FBF7F0",
-        border: `1px solid ${danger ? "rgba(180, 60, 40, 0.18)" : "rgba(86, 91, 61, 0.42)"}`,
-        boxShadow: danger ? "none" : "0 5px 12px rgba(86, 91, 61, 0.14)",
+        background: danger ? "rgba(180, 60, 40, 0.07)" : active ? "var(--accent-sage)" : "var(--bg-cream)",
+        color: danger ? "#B43C28" : active ? "#FBF7F0" : "var(--text-charcoal)",
+        border: `1px solid ${danger ? "rgba(180, 60, 40, 0.18)" : active ? "rgba(86, 91, 61, 0.42)" : "var(--border-warm)"}`,
+        boxShadow: active && !danger ? "0 5px 12px rgba(86, 91, 61, 0.14)" : "none",
       }}
     >
       {icon}

@@ -60,6 +60,10 @@ export function BottomComposer({
     };
   }, []);
 
+  function emitComposerMode(nextMode: ComposerMode) {
+    window.dispatchEvent(new CustomEvent("composer-mode", { detail: nextMode }));
+  }
+
   function handleSubmit() {
     if (!text.trim()) return;
     // Seed burst animation
@@ -234,7 +238,7 @@ export function BottomComposer({
             style={{ border: "1px solid rgba(116, 122, 85, 0.28)" }}
           >
             <button
-              onClick={() => setMode("ai")}
+              onClick={() => emitComposerMode("ai")}
               className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-medium transition-all relative"
               style={{
                 background: mode === "ai" ? "var(--accent-sage)" : "var(--accent-olive-soft)",
@@ -251,7 +255,7 @@ export function BottomComposer({
               )}
             </button>
             <button
-              onClick={() => setMode("note")}
+              onClick={() => emitComposerMode("note")}
               className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-medium transition-all"
               style={{
                 background: mode === "note" ? "var(--accent-sage)" : "var(--accent-olive-soft)",
