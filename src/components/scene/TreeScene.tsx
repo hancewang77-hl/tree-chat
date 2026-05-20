@@ -9,6 +9,7 @@ import {
 } from "@react-three/drei";
 import * as THREE from "three";
 import type { NodesMap, ToolMode } from "@/src/types/tree";
+import { LEAF_VEIN_PATTERN } from "@/src/lib/visualPatterns";
 import {
   LEAF_H,
   LEAF_W,
@@ -55,9 +56,6 @@ import { CameraModeRig } from "./CameraModeRig";
 import { Node3D } from "./Node3D";
 import { LayerPlane } from "./LayerPlane";
 import { LeafAttachment3D } from "./LeafAttachment3D";
-
-const LEAF_BACKGROUND_PATTERN =
-  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='210' viewBox='0 0 260 210'%3E%3Cg fill='none' stroke='%23747A55' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round' opacity='0.10'%3E%3Cpath d='M42 118 C68 78 108 72 140 104 C110 124 74 132 42 118Z'/%3E%3Cpath d='M53 113 C79 107 108 103 136 104'/%3E%3Cpath d='M77 109 C71 101 66 94 63 86'/%3E%3Cpath d='M98 106 C95 97 94 88 96 80'/%3E%3Cpath d='M188 58 C210 38 232 46 244 72 C222 78 204 74 188 58Z' opacity='0.74'/%3E%3Cpath d='M194 59 C210 61 226 64 241 72' opacity='0.74'/%3E%3Cpath d='M178 164 C202 138 232 142 250 170 C225 181 199 178 178 164Z' opacity='0.66'/%3E%3Cpath d='M186 164 C205 163 225 165 246 170' opacity='0.66'/%3E%3C/g%3E%3C/svg%3E\")";
 
 export function TreeScene({
   nodes,
@@ -118,7 +116,7 @@ export function TreeScene({
     <Canvas
       style={{
         background: [
-          LEAF_BACKGROUND_PATTERN,
+          LEAF_VEIN_PATTERN,
           "radial-gradient(circle at 50% 38%, rgba(239,232,216,0.92) 0%, rgba(219,209,190,0.96) 48%, rgba(188,177,156,1) 100%)",
         ].join(", "),
         backgroundSize: "260px 210px, auto",

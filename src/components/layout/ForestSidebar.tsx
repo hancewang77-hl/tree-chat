@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Trees, Plus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useTreeState, useTreeDispatch } from "@/src/state/TreeContext";
+import { LEAF_VEIN_PATTERN } from "@/src/lib/visualPatterns";
 
 export function ForestSidebar() {
   const state = useTreeState();
@@ -21,7 +22,9 @@ export function ForestSidebar() {
     <aside
       className="z-20 flex w-[220px] shrink-0 flex-col border-r animate-fade-up stagger-2"
       style={{
-        background: "var(--bg-paper)",
+        background: [LEAF_VEIN_PATTERN, "var(--bg-paper)"].join(", "),
+        backgroundSize: "260px 210px, auto",
+        backgroundPosition: "-58px 18px, center",
         borderColor: "var(--border-warm)",
         boxShadow: "2px 0 16px var(--shadow-warm)",
       }}
