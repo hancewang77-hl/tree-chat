@@ -5,7 +5,7 @@ import { GitBranch, MessageSquare, StickyNote, Trash2, Sun } from "lucide-react"
 import type { MindNode } from "@/src/types/tree";
 import { useTreeState, useTreeDispatch } from "@/src/state/TreeContext";
 import { renderMarkdownToHTML } from "@/src/lib/formatResponse";
-import { LEAF_VEIN_PATTERN } from "@/src/lib/visualPatterns";
+import { CARD_BOTTOM_LEAF_VEIN_PATTERN } from "@/src/lib/visualPatterns";
 import { ConfirmDialog } from "@/src/components/overlays/ConfirmDialog";
 
 type ComposerMode = "ai" | "note";
@@ -83,9 +83,10 @@ export function InspectorSidebar({ currentPath }: { currentPath: MindNode[] }) {
           <section
             className="rounded-xl border p-3.5"
             style={{
-              background: [LEAF_VEIN_PATTERN, "var(--bg-cream)"].join(", "),
-              backgroundSize: "220px 178px, auto",
-              backgroundPosition: "96% 12px, center",
+              background: [CARD_BOTTOM_LEAF_VEIN_PATTERN, "var(--bg-cream)"].join(", "),
+              backgroundRepeat: "no-repeat, repeat",
+              backgroundSize: "330px 124px, auto",
+              backgroundPosition: "right -18px bottom -18px, center",
               borderColor: selectedNode.kind === "leaf" ? "rgba(116, 122, 85, 0.42)" : "var(--border-warm)",
             }}
           >
@@ -177,10 +178,11 @@ export function InspectorSidebar({ currentPath }: { currentPath: MindNode[] }) {
               }`}
               style={{
                 background: isSelected
-                  ? [LEAF_VEIN_PATTERN, "var(--accent-olive-soft)"].join(", ")
-                  : [LEAF_VEIN_PATTERN, "rgba(232, 223, 208, 0.34)"].join(", "),
-                backgroundSize: "210px 170px, auto",
-                backgroundPosition: "right -38px top -12px, center",
+                  ? [CARD_BOTTOM_LEAF_VEIN_PATTERN, "var(--accent-olive-soft)"].join(", ")
+                  : [CARD_BOTTOM_LEAF_VEIN_PATTERN, "rgba(232, 223, 208, 0.34)"].join(", "),
+                backgroundRepeat: "no-repeat, repeat",
+                backgroundSize: "250px 94px, auto",
+                backgroundPosition: "right -30px bottom -24px, center",
                 border: isSelected ? "1px solid rgba(116, 122, 85, 0.38)" : "1px solid transparent",
               }}
             >
