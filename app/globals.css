@@ -17,28 +17,26 @@
   --font-lora: Georgia, "Times New Roman", "Noto Serif SC", serif;
 }
 
+[data-theme="dark"] {
+  --bg-cream: #1E1B15;
+  --bg-paper: #252118;
+  --text-charcoal: #E8E0D0;
+  --text-muted: #9B8E7A;
+  --accent-bark: #C4A882;
+  --accent-sage: #8BAF7A;
+  --accent-olive-deep: #6F8C5F;
+  --accent-olive-soft: rgba(139, 175, 122, 0.16);
+  --accent-amber: #D4A84A;
+  --border-warm: #3D3628;
+  --shadow-warm: rgba(0, 0, 0, 0.2);
+}
+
 @theme inline {
   --color-background: var(--bg-cream);
   --color-foreground: var(--text-charcoal);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-serif: var(--font-lora);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg-cream: #1E1B15;
-    --bg-paper: #252118;
-    --text-charcoal: #E8E0D0;
-    --text-muted: #9B8E7A;
-    --accent-bark: #C4A882;
-    --accent-sage: #8BAF7A;
-    --accent-olive-deep: #6F8C5F;
-    --accent-olive-soft: rgba(139, 175, 122, 0.16);
-    --accent-amber: #D4A84A;
-    --border-warm: #3D3628;
-    --shadow-warm: rgba(0, 0, 0, 0.2);
-  }
 }
 
 body {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Search, Box, Layers, LayoutGrid, History, Download, Trees, HelpCircle } from "lucide-react";
+import { Search, Box, Layers, LayoutGrid, History, Download, Trees, HelpCircle, Sun, Moon } from "lucide-react";
 import { useTreeState, useTreeDispatch } from "@/src/state/TreeContext";
 import { HelpDialog } from "@/src/components/overlays/HelpDialog";
 import { HarvestDialog } from "@/src/components/overlays/HarvestDialog";
@@ -135,10 +135,49 @@ export function AppHeader() {
         >
           <HelpCircle size={15} />
         </button>
+
+        {/* Theme toggle */}
+        <ThemeToggle />
       </div>
 
       {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
     </header>
+  );
+}
+
+function ThemeToggle() {
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window !== "undefined") {
+      return document.documentElement.getAttribute("data-theme") === "dark";
+    }
+    return false;
+  });
+
+  const toggle = () => {
+    const next = !isDark;
+    setIsDark(next);
+    if (next) {
+      document.documentElement.setAttribute("data-theme", "dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+      localStorage.setItem("theme", "light");
+    }
+  };
+
+  return (
+    <button
+      onClick={toggle}
+      className="rounded-lg p-2 transition-all hover:opacity-85"
+      style={{
+        background: "var(--accent-olive-soft)",
+        color: "var(--accent-olive-deep)",
+        border: "1px solid rgba(116, 122, 85, 0.24)",
+      }}
+      title={isDark ? "浅色模式" : "深色模式"}
+    >
+      {isDark ? <Sun size={15} /> : <Moon size={15} />}
+    </button>
   );
 }
 
