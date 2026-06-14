@@ -1,6 +1,8 @@
 "use client";
 
+import { useRef } from "react";
 import { Canvas } from "@react-three/fiber";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import {
   Line,
   OrbitControls,
@@ -52,6 +54,7 @@ function curvedBranchPoints(
   }
   return points;
 }
+import { CameraFocusRig } from "./CameraFocusRig";
 import { CameraModeRig } from "./CameraModeRig";
 import { Node3D } from "./Node3D";
 import { LayerPlane } from "./LayerPlane";
@@ -94,6 +97,8 @@ export function TreeScene({
   onRenameLayer: (layer: number) => void;
   onOpenNodeRings: (id: string) => void;
 }) {
+  const controlsRef = useRef<OrbitControlsImpl | null>(null);
+
   const {
     renderedNodes,
     renderedLinks,
@@ -134,6 +139,16 @@ export function TreeScene({
         selectedLayer={selectedLayer}
         zoom2D={zoom2D}
         zoom3D={zoom3D}
+      />
+
+      <CameraFocusRig
+        nodes={nodes}
+        selectedNodeId={selectedNodeId}
+        renderedNodes={renderedNodes}
+        renderedLeafAttachments={renderedLeafAttachments}
+        is3DMode={is3DMode}
+        selectedLayer={selectedLayer}
+        controlsRef={controlsRef}
       />
 
       <ambientLight intensity={0.92} color="#EEF2F7" />
@@ -328,12 +343,14 @@ export function TreeScene({
 
       {is3DMode ? (
         <OrbitControls
+          ref={controlsRef}
           enablePan={false}
           enableZoom={false}
           enableRotate={false}
         />
       ) : (
         <OrbitControls
+          ref={controlsRef}
           enablePan={true}
           enableZoom={false}
           enableRotate={false}
