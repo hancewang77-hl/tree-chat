@@ -1,5 +1,10 @@
 <h1 align="center">🌳 智构树语 · Tree Chat</h1>
 <p align="center"><em>Think in trees, not threads.</em></p>
+<p align="center">
+  <a href="README_CN.md">中文文档</a> ·
+  <a href="#innovation">Innovation</a> ·
+  <a href="#getting-started">Getting Started</a>
+</p>
 
 ---
 
@@ -138,6 +143,16 @@ src/
     ├── formatResponse.ts         # Markdown→HTML, Markdown→Plaintext
     └── storage.ts                # localStorage helpers
 ```
+
+## Star History
+
+<a href="https://star-history.com/#hancewang77-hl/tree-chat&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=hancewang77-hl/tree-chat&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=hancewang77-hl/tree-chat&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=hancewang77-hl/tree-chat&type=Date" />
+  </picture>
+</a>
 
 ## License
 
