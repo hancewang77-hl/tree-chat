@@ -83,7 +83,7 @@ export function InspectorSidebar({ currentPath }: { currentPath: MindNode[] }) {
           <section
             className="rounded-xl border p-3.5"
             style={{
-              background: [CARD_BOTTOM_LEAF_VEIN_PATTERN, "var(--bg-cream)"].join(", "),
+              backgroundImage: [CARD_BOTTOM_LEAF_VEIN_PATTERN, "var(--bg-cream)"].join(", "),
               backgroundRepeat: "no-repeat, repeat",
               backgroundSize: "330px 124px, auto",
               backgroundPosition: "right -18px bottom -18px, center",
@@ -177,7 +177,7 @@ export function InspectorSidebar({ currentPath }: { currentPath: MindNode[] }) {
                 isSelected ? "" : "hover:bg-white/60"
               }`}
               style={{
-                background: isSelected
+                backgroundImage: isSelected
                   ? [CARD_BOTTOM_LEAF_VEIN_PATTERN, "var(--accent-olive-soft)"].join(", ")
                   : [CARD_BOTTOM_LEAF_VEIN_PATTERN, "rgba(232, 223, 208, 0.34)"].join(", "),
                 backgroundRepeat: "no-repeat, repeat",

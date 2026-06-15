@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useMemo } from "react";
 import { Canvas } from "@react-three/fiber";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import {
@@ -21,6 +21,7 @@ import {
   useTreeLayout,
 } from "@/hooks/useTreeLayout";
 import { noRaycast } from "@/src/lib/utils";
+import { CameraTracker } from "./CameraTracker";
 
 function curvedBranchPoints(
   source: [number, number, number],
@@ -54,7 +55,6 @@ function curvedBranchPoints(
   }
   return points;
 }
-import { CameraFocusRig } from "./CameraFocusRig";
 import { CameraModeRig } from "./CameraModeRig";
 import { Node3D } from "./Node3D";
 import { LayerPlane } from "./LayerPlane";
@@ -117,6 +117,47 @@ export function TreeScene({
     pendingNodeLayer,
   });
 
+  const userInteractingRef = useRef(false);
+
+  // Compute the selected node's world-space position for camera tracking.
+  // Checks trunk nodes (renderedNodes) first, then leaf attachments.
+  const targetPos = useMemo(() => {
+    // Trunk nodes (branches, root)
+    const trunk = renderedNodes.find((n) => n.data.id === selectedNodeId);
+    if (trunk) {
+      return {
+        x: trunk.y + (trunk.data.offsetX ?? 0) / 100,
+        y: -trunk.x - (trunk.data.offsetY ?? 0) / 100,
+        layer: trunk.data.layer,
+      };
+    }
+
+    // Leaf attachments
+    const leaf = renderedLeafAttachments.find(
+      (a) => a.node.id === selectedNodeId,
+    );
+    if (leaf) {
+      const parentData = leaf.parentPoint.data;
+      const parentX =
+        leaf.parentPoint.y + (parentData.offsetX ?? 0) / 100;
+      const parentY =
+        -leaf.parentPoint.x - (parentData.offsetY ?? 0) / 100;
+      const offsetX =
+        (leaf.index - (leaf.total - 1) / 2) * (LEAF_W + 0.18);
+      return {
+        x: parentX + offsetX,
+        y: parentY - NODE_H / 2 - LEAF_H / 2 - 0.42,
+        layer: is3DMode ? effectiveLayer(parentData) : selectedLayer,
+      };
+    }
+
+    return null;
+  }, [renderedNodes, renderedLeafAttachments, selectedNodeId, selectedLayer, is3DMode, effectiveLayer]);
+
+  const trackX = targetPos?.x ?? 0;
+  const trackY = targetPos?.y ?? 0;
+  const trackLayer = targetPos?.layer ?? selectedLayer;
+
   return (
     <Canvas
       style={{
@@ -136,19 +177,8 @@ export function TreeScene({
 
       <CameraModeRig
         is3DMode={is3DMode}
-        selectedLayer={selectedLayer}
         zoom2D={zoom2D}
         zoom3D={zoom3D}
-      />
-
-      <CameraFocusRig
-        nodes={nodes}
-        selectedNodeId={selectedNodeId}
-        renderedNodes={renderedNodes}
-        renderedLeafAttachments={renderedLeafAttachments}
-        is3DMode={is3DMode}
-        selectedLayer={selectedLayer}
-        controlsRef={controlsRef}
       />
 
       <ambientLight intensity={0.92} color="#EEF2F7" />
@@ -346,7 +376,15 @@ export function TreeScene({
           ref={controlsRef}
           enablePan={false}
           enableZoom={false}
-          enableRotate={false}
+          enableRotate={true}
+          enableDamping={true}
+          dampingFactor={0.08}
+          onStart={() => {
+            userInteractingRef.current = true;
+          }}
+          onEnd={() => {
+            userInteractingRef.current = false;
+          }}
         />
       ) : (
         <OrbitControls
@@ -354,6 +392,8 @@ export function TreeScene({
           enablePan={true}
           enableZoom={false}
           enableRotate={false}
+          enableDamping={true}
+          dampingFactor={0.12}
           screenSpacePanning={true}
           panSpeed={1.1}
           zoomSpeed={0.9}
@@ -362,8 +402,25 @@ export function TreeScene({
             MIDDLE: THREE.MOUSE.DOLLY,
             RIGHT: THREE.MOUSE.PAN,
           }}
+          onStart={() => {
+            userInteractingRef.current = true;
+          }}
+          onEnd={() => {
+            userInteractingRef.current = false;
+          }}
         />
       )}
+
+      <CameraTracker
+        is3DMode={is3DMode}
+        nodeX={trackX}
+        nodeY={trackY}
+        nodeLayer={trackLayer}
+        displayLayer={displayLayer}
+        enabled={toolMode !== "graft"}
+        controlsRef={controlsRef}
+        userInteractingRef={userInteractingRef}
+      />
     </Canvas>
   );
 }
