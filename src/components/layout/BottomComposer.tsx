@@ -25,9 +25,13 @@ const SEED_PARTICLES = [
 export function BottomComposer({
   onSend,
   onAddLeaf,
+  isAiTyping,
+  onStop,
 }: {
   onSend: (prompt: string) => void;
   onAddLeaf: (content: string) => void;
+  isAiTyping: boolean;
+  onStop: () => void;
 }) {
   const state = useTreeState();
   const dispatch = useTreeDispatch();
@@ -66,6 +70,7 @@ export function BottomComposer({
 
   function handleSubmit() {
     if (!text.trim()) return;
+    if (mode === "ai" && isAiTyping) return;
     // Seed burst animation
     setBurst(true);
     setTimeout(() => setBurst(false), 500);
@@ -107,7 +112,9 @@ export function BottomComposer({
   }
 
   const placeholder =
-    mode === "ai"
+    mode === "ai" && isAiTyping
+      ? "AI 正在生成回答，可点击停止..."
+      : mode === "ai"
       ? `在 z = ${state.selectedLayer} 层继续延伸你的思考... (Enter 发送)`
       : "记录一个想法或笔记... (Enter 保存)";
 
@@ -324,25 +331,35 @@ export function BottomComposer({
 
           {/* Send — seed-shaped button with burst effect */}
           <button
-            onClick={handleSubmit}
-            disabled={!text.trim()}
+            onClick={mode === "ai" && isAiTyping ? onStop : handleSubmit}
+            disabled={!(mode === "ai" && isAiTyping) && !text.trim()}
             className="flex h-10 w-10 shrink-0 items-center justify-center transition-all relative"
             style={{
-              background: text.trim()
+              background: mode === "ai" && isAiTyping
+                ? "var(--accent-bark)"
+                : text.trim()
                 ? "var(--accent-sage)"
                 : "var(--accent-olive-soft)",
-              color: text.trim() ? "#FBF7F0" : "var(--accent-olive-deep)",
-              border: `1px solid ${text.trim() ? "rgba(86, 91, 61, 0.42)" : "rgba(116, 122, 85, 0.24)"}`,
+              color: mode === "ai" && isAiTyping || text.trim() ? "#FBF7F0" : "var(--accent-olive-deep)",
+              border: `1px solid ${
+                mode === "ai" && isAiTyping || text.trim()
+                  ? "rgba(86, 91, 61, 0.42)"
+                  : "rgba(116, 122, 85, 0.24)"
+              }`,
               borderRadius: "60% 40% 50% 50% / 55% 45% 55% 45%",
-              transform: text.trim() ? "scale(1.05)" : "scale(1)",
-              boxShadow: text.trim()
+              transform: mode === "ai" && isAiTyping || text.trim() ? "scale(1.05)" : "scale(1)",
+              boxShadow: mode === "ai" && isAiTyping || text.trim()
                 ? "0 2px 8px rgba(86, 91, 61, 0.28)"
                 : "none",
             }}
-            title={mode === "ai" ? "播种 · Plant" : "保存 · Keep"}
+            title={mode === "ai" && isAiTyping ? "停止生成" : mode === "ai" ? "播种 · Plant" : "保存 · Keep"}
           >
-            <Send size={14} style={{ transform: "rotate(-8deg)" }} />
-            {text.trim() && (
+            {mode === "ai" && isAiTyping ? (
+              <X size={14} />
+            ) : (
+              <Send size={14} style={{ transform: "rotate(-8deg)" }} />
+            )}
+            {text.trim() && !(mode === "ai" && isAiTyping) && (
               <span
                 className="absolute -top-1.5 -right-1"
                 style={{ fontSize: 10, lineHeight: 1 }}

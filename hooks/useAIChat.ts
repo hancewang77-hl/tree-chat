@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { NutrientItem } from "@/src/types/tree";
 import { buildNutrientContext } from "@/src/lib/nutrients";
+import { readTextStream } from "@/src/lib/streamText";
 
 async function generateDeepSeekResponse(
   prompt: string,
   contextPath: { prompt: string; response: string }[],
   nutrients: NutrientItem[],
   activeNutrientIds: string[],
+  onText: (text: string) => void,
+  signal: AbortSignal,
 ) {
   const nutrientContext = buildNutrientContext(nutrients, activeNutrientIds);
   const userPrompt = nutrientContext
@@ -39,7 +42,8 @@ async function generateDeepSeekResponse(
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: "deepseek-chat", messages }),
+    body: JSON.stringify({ model: "deepseek-chat", messages, stream: true }),
+    signal,
   });
 
   if (!res.ok) {
@@ -48,26 +52,44 @@ async function generateDeepSeekResponse(
     throw new Error(`请求失败：${res.status} ${text}`);
   }
 
-  const data = await res.json();
-  return data.content as string;
+  return readTextStream(res, onText);
 }
 
 export function useAIChat() {
   const [isAiTyping, setIsAiTyping] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   async function sendMessage(
     prompt: string,
     contextPath: { prompt: string; response: string }[],
     nutrients: NutrientItem[] = [],
     activeNutrientIds: string[] = [],
+    onText: (text: string) => void = () => {},
   ): Promise<string> {
+    abortControllerRef.current?.abort();
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
     setIsAiTyping(true);
     try {
-      return await generateDeepSeekResponse(prompt, contextPath, nutrients, activeNutrientIds);
+      return await generateDeepSeekResponse(
+        prompt,
+        contextPath,
+        nutrients,
+        activeNutrientIds,
+        onText,
+        abortController.signal,
+      );
     } finally {
+      if (abortControllerRef.current === abortController) {
+        abortControllerRef.current = null;
+      }
       setIsAiTyping(false);
     }
   }
 
-  return { isAiTyping, sendMessage } as const;
+  function stopStreaming() {
+    abortControllerRef.current?.abort();
+  }
+
+  return { isAiTyping, sendMessage, stopStreaming } as const;
 }

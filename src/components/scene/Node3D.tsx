@@ -43,6 +43,8 @@ export function Node3D({
       <CardTexture
         prompt={node.prompt}
         response={node.response}
+        kind={node.kind}
+        status={node.status}
         selected={selected}
         inPath={inPath}
         layer={node.layer}

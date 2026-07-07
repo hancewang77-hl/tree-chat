@@ -3,6 +3,8 @@ export type MindNode = {
   kind: "root" | "branch" | "leaf";
   prompt: string;
   response: string;
+  status?: "complete" | "streaming" | "stopped" | "failed";
+  error?: string;
   children: string[];
   parentId: string | null;
   timestamp: number;
@@ -92,6 +94,32 @@ export type TreeAction =
   | { type: "HYDRATE"; state: TreeState }
   | { type: "SEED"; name: string }
   | { type: "BRANCH"; prompt: string; response: string; parentId: string; nutrientRefs?: string[] }
+  | {
+      type: "STREAM_BRANCH_START";
+      projectId: string;
+      nodeId: string;
+      prompt: string;
+      parentId: string;
+      nutrientRefs?: string[];
+    }
+  | {
+      type: "STREAM_BRANCH_UPDATE";
+      projectId: string;
+      nodeId: string;
+      response: string;
+    }
+  | {
+      type: "STREAM_BRANCH_FINISH";
+      projectId: string;
+      nodeId: string;
+      status: "complete" | "stopped";
+    }
+  | {
+      type: "STREAM_BRANCH_FAIL";
+      projectId: string;
+      nodeId: string;
+      error: string;
+    }
   | { type: "LEAF"; content: string; parentId: string }
   | { type: "GRAFT_START"; nodeId: string }
   | { type: "GRAFT_CONFIRM"; newParentId: string }

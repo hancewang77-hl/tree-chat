@@ -51,11 +51,14 @@ export function CameraTracker({
   // Keep latest prop values in refs so useFrame always reads current values
   // without triggering the useEffect that resets the lerp start point.
   const displayLayerRef = useRef(displayLayer);
-  displayLayerRef.current = displayLayer;
   const is3DModeRef = useRef(is3DMode);
-  is3DModeRef.current = is3DMode;
   const nodeLayerRef = useRef(nodeLayer);
-  nodeLayerRef.current = nodeLayer;
+
+  useEffect(() => {
+    displayLayerRef.current = displayLayer;
+    is3DModeRef.current = is3DMode;
+    nodeLayerRef.current = nodeLayer;
+  }, [displayLayer, is3DMode, nodeLayer]);
 
   // Compute the goal world Z based on current displayLayer.
   // Called from both useEffect (init) and useFrame (continuous tracking).

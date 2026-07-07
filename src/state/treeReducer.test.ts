@@ -143,4 +143,88 @@ describe("treeReducer product functions", () => {
     const branch = findNodeByPrompt(state, "What should we build?");
     expect(branch?.nutrientRefs).toEqual(["nutrient-1"]);
   });
+
+  test("streaming branch starts selected before any response arrives", () => {
+    const state = treeReducer(baseState(), {
+      type: "STREAM_BRANCH_START",
+      projectId: "project",
+      nodeId: "node-stream",
+      prompt: "Stream this answer",
+      parentId: "root",
+      nutrientRefs: [],
+    });
+
+    const streamNode = projectNodes(state)["node-stream"];
+    expect(streamNode?.prompt).toBe("Stream this answer");
+    expect(streamNode?.response).toBe("");
+    expect(streamNode?.status).toBe("streaming");
+    expect(streamNode?.parentId).toBe("root");
+    expect(projectNodes(state).root.children).toContain("node-stream");
+    expect(state.selectedNodeId).toBe("node-stream");
+    expect(state.history.past).toHaveLength(0);
+  });
+
+  test("streaming branch updates response without creating token-level history entries", () => {
+    let state = treeReducer(baseState(), {
+      type: "STREAM_BRANCH_START",
+      projectId: "project",
+      nodeId: "node-stream",
+      prompt: "Stream this answer",
+      parentId: "root",
+      nutrientRefs: [],
+    });
+
+    state = treeReducer(state, {
+      type: "STREAM_BRANCH_UPDATE",
+      projectId: "project",
+      nodeId: "node-stream",
+      response: "第一段",
+    });
+
+    state = treeReducer(state, {
+      type: "STREAM_BRANCH_UPDATE",
+      projectId: "project",
+      nodeId: "node-stream",
+      response: "第一段，第二段",
+    });
+
+    expect(projectNodes(state)["node-stream"].response).toBe("第一段，第二段");
+    expect(projectNodes(state)["node-stream"].status).toBe("streaming");
+    expect(state.history.past).toHaveLength(0);
+  });
+
+  test("finishing a streaming branch creates one undoable history entry with the final response", () => {
+    let state = treeReducer(baseState(), {
+      type: "STREAM_BRANCH_START",
+      projectId: "project",
+      nodeId: "node-stream",
+      prompt: "Stream this answer",
+      parentId: "root",
+      nutrientRefs: [],
+    });
+    state = treeReducer(state, {
+      type: "STREAM_BRANCH_UPDATE",
+      projectId: "project",
+      nodeId: "node-stream",
+      response: "最终回答",
+    });
+    state = treeReducer(state, {
+      type: "STREAM_BRANCH_FINISH",
+      projectId: "project",
+      nodeId: "node-stream",
+      status: "complete",
+    });
+
+    expect(projectNodes(state)["node-stream"].status).toBe("complete");
+    expect(state.history.past).toHaveLength(1);
+
+    state = treeReducer(state, { type: "UNDO_NODE", nodeId: "node-stream" });
+    expect(projectNodes(state)["node-stream"]).toBeUndefined();
+    expect(projectNodes(state).root.children).not.toContain("node-stream");
+
+    state = treeReducer(state, { type: "REDO_NODE", nodeId: "node-stream" });
+    expect(projectNodes(state)["node-stream"].response).toBe("最终回答");
+    expect(projectNodes(state)["node-stream"].status).toBe("complete");
+    expect(projectNodes(state).root.children).toContain("node-stream");
+  });
 });

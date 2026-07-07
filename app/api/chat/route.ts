@@ -42,9 +42,10 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
-    const { messages, model = "deepseek-chat" } = body as {
+    const { messages, model = "deepseek-chat", stream = true } = body as {
       messages?: unknown;
       model?: string;
+      stream?: boolean;
     };
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
@@ -59,15 +60,50 @@ export async function POST(req: Request) {
       baseURL: "https://api.deepseek.com",
     });
 
+    if (!stream) {
+      const completion = await client.chat.completions.create({
+        model,
+        messages,
+        stream: false,
+        max_tokens: 2048,
+      });
+
+      return Response.json({
+        content: completion.choices?.[0]?.message?.content ?? "",
+      });
+    }
+
     const completion = await client.chat.completions.create({
       model,
       messages,
-      stream: false,
+      stream: true,
       max_tokens: 2048,
     });
 
-    return Response.json({
-      content: completion.choices?.[0]?.message?.content ?? "",
+    const encoder = new TextEncoder();
+    const responseStream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        try {
+          for await (const chunk of completion) {
+            const delta = chunk.choices?.[0]?.delta?.content ?? "";
+            if (delta) controller.enqueue(encoder.encode(delta));
+          }
+          controller.close();
+        } catch (error) {
+          controller.error(error);
+        }
+      },
+      cancel() {
+        completion.controller.abort();
+      },
+    });
+
+    return new Response(responseStream, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        "X-Accel-Buffering": "no",
+      },
     });
   } catch (error: unknown) {
     console.error("DeepSeek route error:", error);

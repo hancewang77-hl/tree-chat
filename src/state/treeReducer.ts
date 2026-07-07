@@ -24,6 +24,7 @@ function makeRootNode(): MindNode {
     offsetY: 0,
     layer: 0,
     nutrientRefs: [],
+    status: "complete",
   };
 }
 
@@ -51,10 +52,12 @@ function normalizeNode(node: MindNode, rootNodeId: string): MindNode {
       : node.response.trim().length === 0
         ? "leaf"
         : "branch");
+  const status = node.status === "streaming" ? "stopped" : (node.status ?? "complete");
   return {
     ...node,
     kind,
     nutrientRefs: node.nutrientRefs ?? [],
+    status,
   };
 }
 
@@ -84,12 +87,14 @@ function normalizeProjects(projects: Record<string, Project>): Record<string, Pr
 
 function createHistoryEntry({
   state,
+  projectId,
   label,
   primaryNodeId,
   affectedNodeIds,
   patch,
 }: {
   state: TreeState;
+  projectId?: string;
   label: string;
   primaryNodeId: string;
   affectedNodeIds: string[];
@@ -97,7 +102,7 @@ function createHistoryEntry({
 }): HistoryEntry {
   return {
     id: `history-${crypto.randomUUID()}`,
-    projectId: state.activeProjectId,
+    projectId: projectId ?? state.activeProjectId,
     label,
     timestamp: Date.now(),
     primaryNodeId,
@@ -215,9 +220,36 @@ function updateActiveProject(state: TreeState, updater: (project: Project) => Pr
   };
 }
 
+function updateProjectById(
+  state: TreeState,
+  projectId: string,
+  updater: (project: Project) => Project,
+): TreeState {
+  const project = state.projects[projectId];
+  if (!project) return state;
+  return {
+    ...state,
+    projects: {
+      ...state.projects,
+      [projectId]: updater(project),
+    },
+  };
+}
+
 function persist(next: TreeState): TreeState {
   saveWorkspace(next);
   return next;
+}
+
+function latestCreationHistoryForNode(state: TreeState, projectId: string, nodeId: string) {
+  return state.history.past.find(
+    (entry) =>
+      entry.projectId === projectId &&
+      entry.primaryNodeId === nodeId &&
+      entry.patch.nodeChanges?.some(
+        (change) => change.nodeId === nodeId && change.before === null,
+      ),
+  );
 }
 
 function applyPatch(state: TreeState, entry: HistoryEntry, direction: "undo" | "redo"): TreeState {
@@ -379,6 +411,7 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
         offsetY: 0,
         layer: state.selectedLayer,
         nutrientRefs,
+        status: "complete",
       };
       const updatedParent = { ...parent, children: [...parent.children, newNodeId] };
 
@@ -407,6 +440,166 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
       return persist(pushHistory(next, entry));
     }
 
+    case "STREAM_BRANCH_START": {
+      const project = state.projects[action.projectId];
+      if (!project || project.nodes[action.nodeId]) return state;
+
+      const parentId = resolveBranchParent(project.nodes, action.parentId);
+      const parent = project.nodes[parentId];
+      if (!parent) return state;
+
+      const nutrientRefs = action.nutrientRefs ?? project.activeNutrientIds;
+      const newNode: MindNode = {
+        id: action.nodeId,
+        kind: "branch",
+        prompt: action.prompt,
+        response: "",
+        children: [],
+        parentId,
+        timestamp: Date.now(),
+        offsetX: 0,
+        offsetY: 0,
+        layer: state.selectedLayer,
+        nutrientRefs,
+        status: "streaming",
+      };
+      const updatedParent = {
+        ...parent,
+        children: parent.children.includes(action.nodeId)
+          ? parent.children
+          : [...parent.children, action.nodeId],
+      };
+
+      const next = updateProjectById(state, action.projectId, (activeProject) => {
+        const nodes = {
+          ...activeProject.nodes,
+          [parentId]: updatedParent,
+          [action.nodeId]: newNode,
+        };
+        return { ...activeProject, nodes, updatedAt: Date.now() };
+      });
+
+      if (next.activeProjectId !== action.projectId) return persist(next);
+      return persist({
+        ...next,
+        selectedNodeId: action.nodeId,
+      });
+    }
+
+    case "STREAM_BRANCH_UPDATE": {
+      return updateProjectById(state, action.projectId, (project) => {
+        const node = project.nodes[action.nodeId];
+        if (!node) return project;
+        return {
+          ...project,
+          nodes: {
+            ...project.nodes,
+            [action.nodeId]: {
+              ...node,
+              response: action.response,
+              status: "streaming",
+              error: undefined,
+            },
+          },
+          updatedAt: Date.now(),
+        };
+      });
+    }
+
+    case "STREAM_BRANCH_FINISH": {
+      const project = state.projects[action.projectId];
+      const node = project?.nodes[action.nodeId];
+      const parent = node?.parentId ? project?.nodes[node.parentId] : null;
+      if (!project || !node || !parent) return state;
+
+      const nodeAfter: MindNode = {
+        ...node,
+        status: action.status,
+        error: undefined,
+      };
+
+      let next = updateProjectById(state, action.projectId, (activeProject) => ({
+        ...activeProject,
+        nodes: {
+          ...activeProject.nodes,
+          [action.nodeId]: nodeAfter,
+        },
+        updatedAt: Date.now(),
+      }));
+
+      if (latestCreationHistoryForNode(next, action.projectId, action.nodeId)) {
+        return persist(next);
+      }
+
+      const parentBefore: MindNode = {
+        ...parent,
+        children: parent.children.filter((id) => id !== action.nodeId),
+      };
+      const entry = createHistoryEntry({
+        state,
+        projectId: action.projectId,
+        label: `${action.status === "stopped" ? "Stopped" : "Branch"} · ${node.prompt.slice(0, 32)}`,
+        primaryNodeId: action.nodeId,
+        affectedNodeIds: [parent.id, action.nodeId],
+        patch: {
+          nodeChanges: [
+            { nodeId: parent.id, before: parentBefore, after: parent },
+            { nodeId: action.nodeId, before: null, after: nodeAfter },
+          ],
+        },
+      });
+
+      next = pushHistory(next, entry);
+      return persist(next);
+    }
+
+    case "STREAM_BRANCH_FAIL": {
+      const project = state.projects[action.projectId];
+      const node = project?.nodes[action.nodeId];
+      const parent = node?.parentId ? project?.nodes[node.parentId] : null;
+      if (!project || !node || !parent) return state;
+
+      const nodeAfter: MindNode = {
+        ...node,
+        status: "failed",
+        error: action.error,
+      };
+
+      let next = updateProjectById(state, action.projectId, (activeProject) => ({
+        ...activeProject,
+        nodes: {
+          ...activeProject.nodes,
+          [action.nodeId]: nodeAfter,
+        },
+        updatedAt: Date.now(),
+      }));
+
+      if (latestCreationHistoryForNode(next, action.projectId, action.nodeId)) {
+        return persist(next);
+      }
+
+      const parentBefore: MindNode = {
+        ...parent,
+        children: parent.children.filter((id) => id !== action.nodeId),
+      };
+      const entry = createHistoryEntry({
+        state,
+        projectId: action.projectId,
+        label: `Failed branch · ${node.prompt.slice(0, 32)}`,
+        primaryNodeId: action.nodeId,
+        affectedNodeIds: [parent.id, action.nodeId],
+        patch: {
+          nodeChanges: [
+            { nodeId: parent.id, before: parentBefore, after: parent },
+            { nodeId: action.nodeId, before: null, after: nodeAfter },
+          ],
+        },
+      });
+
+      next = pushHistory(next, entry);
+      return persist(next);
+    }
+
     case "LEAF": {
       const project = getActiveProject(state);
       if (!project) return state;
@@ -427,6 +620,7 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
         offsetY: 0,
         layer: state.selectedLayer,
         nutrientRefs: [],
+        status: "complete",
       };
       const updatedParent = { ...parent, children: [...parent.children, newNodeId] };
 
