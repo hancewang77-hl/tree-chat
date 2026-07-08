@@ -57,6 +57,7 @@ async function generateDeepSeekResponse(
 
 export function useAIChat() {
   const [isAiTyping, setIsAiTyping] = useState(false);
+  const isTypingRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   async function sendMessage(
@@ -69,6 +70,7 @@ export function useAIChat() {
     abortControllerRef.current?.abort();
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
+    isTypingRef.current = true;
     setIsAiTyping(true);
     try {
       return await generateDeepSeekResponse(
@@ -80,6 +82,7 @@ export function useAIChat() {
         abortController.signal,
       );
     } finally {
+      isTypingRef.current = false;
       if (abortControllerRef.current === abortController) {
         abortControllerRef.current = null;
       }
@@ -91,5 +94,5 @@ export function useAIChat() {
     abortControllerRef.current?.abort();
   }
 
-  return { isAiTyping, sendMessage, stopStreaming } as const;
+  return { isAiTyping, isTypingRef, sendMessage, stopStreaming } as const;
 }

@@ -21,7 +21,7 @@ import { LayerNameDialog } from "@/src/components/LayerNameDialog";
 function App() {
   const state = useTreeState();
   const dispatch = useTreeDispatch();
-  const { isAiTyping, sendMessage, stopStreaming } = useAIChat();
+  const { isAiTyping, isTypingRef, sendMessage, stopStreaming } = useAIChat();
 
   const activeProject = state.projects[state.activeProjectId];
   const nodes = useMemo(() => activeProject?.nodes ?? {}, [activeProject]);
@@ -119,7 +119,7 @@ function App() {
   }, [dispatch]);
 
   const handleSendMessage = useCallback(async (prompt: string) => {
-    if (!prompt.trim() || isAiTyping || !activeProject) return;
+    if (!prompt.trim() || isTypingRef.current || !activeProject) return;
 
     setError(null);
     const s = stateRef.current;

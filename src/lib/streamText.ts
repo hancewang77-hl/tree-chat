@@ -26,6 +26,6 @@ export async function readTextStream(
 
     return text;
   } finally {
-    reader.releaseLock();
+    try { reader.releaseLock(); } catch { /* lock already released */ }
   }
 }
