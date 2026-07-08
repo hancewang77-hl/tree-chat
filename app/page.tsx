@@ -21,7 +21,7 @@ import { LayerNameDialog } from "@/src/components/LayerNameDialog";
 function App() {
   const state = useTreeState();
   const dispatch = useTreeDispatch();
-  const { isAiTyping, sendMessage } = useAIChat();
+  const { isAiTyping, isTypingRef, sendMessage, stopStreaming } = useAIChat();
 
   const activeProject = state.projects[state.activeProjectId];
   const nodes = useMemo(() => activeProject?.nodes ?? {}, [activeProject]);
@@ -119,7 +119,7 @@ function App() {
   }, [dispatch]);
 
   const handleSendMessage = useCallback(async (prompt: string) => {
-    if (!prompt.trim() || isAiTyping || !activeProject) return;
+    if (!prompt.trim() || isTypingRef.current || !activeProject) return;
 
     setError(null);
     const s = stateRef.current;
@@ -134,26 +134,69 @@ function App() {
     const project = s.projects[projectId];
     const nutrients = Object.values(project?.nutrients ?? {});
     const activeNutrientIds = project?.activeNutrientIds ?? [];
+    let streamingNodeId: string | null = null;
 
     try {
-      const aiResponse = await sendMessage(
+      const nodeId = `node-${crypto.randomUUID()}`;
+      streamingNodeId = nodeId;
+      const nutrientRefs = [...activeNutrientIds];
+
+      dispatch({
+        type: "STREAM_BRANCH_START",
+        projectId,
+        nodeId,
+        prompt: prompt.trim(),
+        parentId: targetParentId,
+        nutrientRefs,
+      });
+
+      await sendMessage(
         prompt.trim(),
         context.map((node) => ({ prompt: node.prompt, response: node.response })),
         nutrients,
-        activeNutrientIds,
+        nutrientRefs,
+        (partialResponse) => {
+          dispatch({
+            type: "STREAM_BRANCH_UPDATE",
+            projectId,
+            nodeId,
+            response: partialResponse,
+          });
+        },
       );
 
-      if (stateRef.current.activeProjectId !== projectId) return;
-
       dispatch({
-        type: "BRANCH",
-        prompt: prompt.trim(),
-        response: aiResponse,
-        parentId: targetParentId,
-        nutrientRefs: activeNutrientIds,
+        type: "STREAM_BRANCH_FINISH",
+        projectId,
+        nodeId,
+        status: "complete",
       });
     } catch (err) {
+      const aborted =
+        typeof err === "object" &&
+        err !== null &&
+        "name" in err &&
+        (err as { name?: unknown }).name === "AbortError";
+
+      if (aborted && streamingNodeId) {
+        dispatch({
+          type: "STREAM_BRANCH_FINISH",
+          projectId,
+          nodeId: streamingNodeId,
+          status: "stopped",
+        });
+        return;
+      }
+
       const message = err instanceof Error ? err.message : "AI 请求失败，请检查网络连接和 API 配置";
+      if (streamingNodeId) {
+        dispatch({
+          type: "STREAM_BRANCH_FAIL",
+          projectId,
+          nodeId: streamingNodeId,
+          error: message,
+        });
+      }
       setError(message);
     }
   }, [isAiTyping, activeProject, sendMessage, dispatch]);
@@ -252,6 +295,8 @@ function App() {
           key="composer"
           onSend={handleSendMessage}
           onAddLeaf={handleAddLeaf}
+          isAiTyping={isAiTyping}
+          onStop={stopStreaming}
         />
       </div>
 

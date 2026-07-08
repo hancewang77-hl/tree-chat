@@ -22,7 +22,6 @@ export function CameraModeRig({
       camera.position.set(-12, 12, 18);
       camera.up.set(0, 1, 0);
       camera.lookAt(0, 0, 0);
-      // eslint-disable-next-line react-hooks/immutability
       camera.updateProjectionMatrix();
     }
 
@@ -30,7 +29,6 @@ export function CameraModeRig({
       camera.position.set(0, 0, 40);
       camera.up.set(0, 1, 0);
       camera.lookAt(0, 0, 0);
-      // eslint-disable-next-line react-hooks/immutability
       camera.updateProjectionMatrix();
     }
   }, [camera, is3DMode]);
@@ -44,7 +42,6 @@ export function CameraModeRig({
     }
 
     if (!is3DMode && camera instanceof THREE.OrthographicCamera) {
-      // eslint-disable-next-line react-hooks/immutability
       camera.zoom = zoom2D;
       camera.updateProjectionMatrix();
     }

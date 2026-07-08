@@ -110,7 +110,18 @@ export function InspectorSidebar({ currentPath }: { currentPath: MindNode[] }) {
               {selectedNode.prompt}
             </h3>
 
-            {selectedNode.kind === "leaf" ? (
+            {selectedNode.status === "failed" ? (
+              <div
+                className="rounded-lg border px-3 py-2.5 text-[13px] leading-relaxed"
+                style={{
+                  background: "rgba(180, 60, 40, 0.08)",
+                  borderColor: "rgba(180, 60, 40, 0.24)",
+                  color: "#8F2F22",
+                }}
+              >
+                {selectedNode.error || "生成失败，请检查网络连接和 API 配置后重试。"}
+              </div>
+            ) : selectedNode.kind === "leaf" ? (
               <div
                 className="rounded-lg border px-3 py-2.5 text-[13px] leading-relaxed"
                 style={{
@@ -122,14 +133,30 @@ export function InspectorSidebar({ currentPath }: { currentPath: MindNode[] }) {
                 {selectedNode.prompt}
               </div>
             ) : selectedNode.response ? (
-              <div
-                className="response-content text-[13px] leading-relaxed"
-                style={{ color: "var(--text-charcoal)" }}
-                dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML(selectedNode.response) }}
-              />
+              <>
+                <div
+                  className="response-content text-[13px] leading-relaxed"
+                  style={{ color: "var(--text-charcoal)" }}
+                  dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML(selectedNode.response) }}
+                />
+                {selectedNode.status === "streaming" && (
+                  <p className="mt-2 text-[11px]" style={{ color: "var(--text-muted)" }}>
+                    正在生成回答...
+                  </p>
+                )}
+                {selectedNode.status === "stopped" && (
+                  <p className="mt-2 text-[11px]" style={{ color: "var(--text-muted)" }}>
+                    已停止生成，以上为已收到内容。
+                  </p>
+                )}
+              </>
             ) : (
               <p className="text-[12px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                这个节点还没有 AI 回答。
+                {selectedNode.status === "streaming"
+                  ? "正在等待第一段回答..."
+                  : selectedNode.status === "stopped"
+                    ? "生成已停止，当前没有收到回答内容。"
+                    : "这个节点还没有 AI 回答。"}
               </p>
             )}
 
@@ -206,6 +233,11 @@ export function InspectorSidebar({ currentPath }: { currentPath: MindNode[] }) {
               {node.response && (
                 <p className="line-clamp-2 text-[11px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
                   {node.response.replace(/\s+/g, " ").slice(0, 96)}
+                </p>
+              )}
+              {node.status === "streaming" && !node.response && (
+                <p className="text-[11px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
+                  正在生成...
                 </p>
               )}
             </button>

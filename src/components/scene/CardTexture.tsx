@@ -14,9 +14,9 @@ const CARD_PAPER_MID = "#D1CAA7";
 const CARD_PAPER_DARK = "#C0BA91";
 
 export function CardTexture({
-  prompt, response, selected, inPath, layer,
+  prompt, response, kind, status, selected, inPath, layer,
 }: {
-  prompt: string; response: string; selected: boolean;
+  prompt: string; response: string; kind: "root" | "branch" | "leaf"; status?: string; selected: boolean;
   inPath: boolean; layer: number;
   interactive: boolean; priority: boolean;
 }) {
@@ -29,12 +29,27 @@ export function CardTexture({
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
 
-    const isNote = response.trim().length === 0;
+    const nodeStatus = status ?? "complete";
+    const isNote = kind === "leaf";
     const promptLabel = isNote ? "LEAF / 记录" : "SEED / 提问";
-    const responseLabel = isNote ? "SOIL / 备注" : "CANOPY / 回答";
+    const responseLabel = isNote
+      ? "SOIL / 备注"
+      : nodeStatus === "streaming"
+        ? "GROWTH / 生成中"
+        : nodeStatus === "failed"
+          ? "CANOPY / 失败"
+          : nodeStatus === "stopped"
+            ? "CANOPY / 已停止"
+            : "CANOPY / 回答";
     const summary = isNote
       ? "这是一片手动记录的叶片，可继续生长出新的分支。"
-      : summarizeForCard(response, 150);
+      : nodeStatus === "failed"
+        ? "生成失败。请检查网络或 API 配置后重新提问。"
+        : response.trim()
+          ? `${summarizeForCard(response, 150)}${nodeStatus === "streaming" ? " ▌" : ""}`
+          : nodeStatus === "streaming"
+            ? "正在等待第一段回答... ▌"
+            : "这个分支还没有回答。";
 
     ctx.clearRect(0, 0, width, height);
 
@@ -64,7 +79,7 @@ export function CardTexture({
     tex.anisotropy = 8;
     tex.needsUpdate = true;
     return tex;
-  }, [prompt, response, selected, inPath, layer]);
+  }, [prompt, response, kind, status, selected, inPath, layer]);
 
   if (!texture) return null;
 
