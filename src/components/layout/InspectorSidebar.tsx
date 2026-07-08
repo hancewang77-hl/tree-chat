@@ -83,10 +83,7 @@ export function InspectorSidebar({ currentPath }: { currentPath: MindNode[] }) {
           <section
             className="rounded-xl border p-3.5"
             style={{
-              backgroundImage: [CARD_BOTTOM_LEAF_VEIN_PATTERN, "var(--bg-cream)"].join(", "),
-              backgroundRepeat: "no-repeat, repeat",
-              backgroundSize: "330px 124px, auto",
-              backgroundPosition: "right -18px bottom -18px, center",
+              background: `${CARD_BOTTOM_LEAF_VEIN_PATTERN} no-repeat right -18px bottom -18px / 330px 124px, var(--bg-cream)`,
               borderColor: selectedNode.kind === "leaf" ? "rgba(116, 122, 85, 0.42)" : "var(--border-warm)",
             }}
           >
@@ -177,12 +174,9 @@ export function InspectorSidebar({ currentPath }: { currentPath: MindNode[] }) {
                 isSelected ? "" : "hover:bg-white/60"
               }`}
               style={{
-                backgroundImage: isSelected
-                  ? [CARD_BOTTOM_LEAF_VEIN_PATTERN, "var(--accent-olive-soft)"].join(", ")
-                  : [CARD_BOTTOM_LEAF_VEIN_PATTERN, "rgba(232, 223, 208, 0.34)"].join(", "),
-                backgroundRepeat: "no-repeat, repeat",
-                backgroundSize: "250px 94px, auto",
-                backgroundPosition: "right -30px bottom -24px, center",
+                background: isSelected
+                  ? `${CARD_BOTTOM_LEAF_VEIN_PATTERN} no-repeat right -30px bottom -24px / 250px 94px, var(--accent-olive-soft)`
+                  : `${CARD_BOTTOM_LEAF_VEIN_PATTERN} no-repeat right -30px bottom -24px / 250px 94px, rgba(232, 223, 208, 0.34)`,
                 border: isSelected ? "1px solid rgba(116, 122, 85, 0.38)" : "1px solid transparent",
               }}
             >
