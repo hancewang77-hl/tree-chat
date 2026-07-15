@@ -24,7 +24,7 @@ It's a **spatial thinking tool** disguised as a chat interface.
 | **Navigation** | Scroll up/down through history | 3D spatial canvas with layers, minimap, and path highlighting |
 | **Exploration** | One answer per prompt | Branch multiple AI responses from the same prompt, compare side-by-side |
 | **Annotation** | Mixed with conversation | Leaf notes — detached manual annotations that don't pollute the AI chain |
-| **History** | Undo a message | Rings system — full undo/redo with snapshot history (max 50) |
+| **History** | Undo a message | Rings system — global or node-specific patch history (max 50) |
 | **Aesthetic** | Blue/purple AI-chatbot generic | Organic editorial — paper textures, serif typography, botanical metaphors |
 
 ### Tree-Metaphor Action System
@@ -40,8 +40,15 @@ Every action is named after a botanical operation, making the mental model intui
 | ✂️ **Prune** | Delete a node and its entire subtree |
 | 🔆 **Sunlight** | Focus on a node — selects it and jumps to its layer |
 | 🗺️ **Canopy** | SVG minimap overlay showing the full tree structure |
-| 💍 **Rings** | Undo/redo panel — browse through snapshot history |
+| 💍 **Rings** | Undo/redo panel — browse through operation history |
 | 📦 **Harvest** | Export as Markdown or JSON |
+
+### Tree-aware context
+
+- Full `response` text remains the source for display, history, and export; subsequent model context reads only lightweight semantic cards whose state is `valid`.
+- The Context Compiler builds one bounded input in this order: root task → valid parent-path semantics → explicitly included Leaf notes → current task → relevant nutrient chunks → current question.
+- Leaf notes are isolated from AI context by default and are included only after the user explicitly enables them.
+- Graft preserves every original prompt and response while marking AI semantics in the moved subtree as `stale`, preventing knowledge from the old path from leaking into later requests.
 
 ### Visual Design — Organic Editorial
 
@@ -84,14 +91,16 @@ Nodes live on stacked glass planes (layers). You view one layer at a time in 2D 
 ```bash
 git clone https://github.com/hancewang77-hl/tree-chat.git
 cd tree-chat
-npm install
+npm ci
 ```
 
-Create `.env.local`:
+Create `.env.local` in the project root:
 
 ```env
 DEEPSEEK_API_KEY=sk-your-key-here
 ```
+
+The key is read only by server-side Route Handlers. Do not add a `NEXT_PUBLIC_` prefix or commit `.env.local`; restart the development server after changing the key.
 
 ### Development
 
@@ -120,16 +129,18 @@ npx wrangler deploy
 
 ```
 app/
-├── page.tsx           # Thin shell: TreeProvider + App
+├── page.tsx           # TreeProvider shell + app orchestration
 ├── layout.tsx         # Root layout (fonts)
 ├── globals.css        # CSS vars, grain texture, animations
-└── api/chat/route.ts  # POST /api/chat → DeepSeek
+└── api/
+    ├── chat/route.ts       # Streaming answer → DeepSeek
+    └── structure/route.ts  # Post-answer semantic-card extraction
 
 src/
 ├── types/tree.ts                  # MindNode, Project, TreeState, Actions
 ├── state/
 │   ├── TreeContext.tsx            # useReducer + Context provider
-│   └── treeReducer.ts            # 18 action types, localStorage sync, undo/redo
+│   └── treeReducer.ts            # Tree actions, patch history, localStorage sync
 ├── components/
 │   ├── scene/                    # 3D Canvas, nodes, layers, edges, camera
 │   ├── layout/                   # Header, sidebars, composer
@@ -139,6 +150,9 @@ src/
 │   ├── useTreeLayout.ts          # D3 tree layout + constants
 │   └── useAIChat.ts              # DeepSeek API interaction
 └── lib/
+    ├── contextCompiler.ts        # Tree-aware Context Compiler
+    ├── semanticCard.ts           # Semantic-card validation and formatting
+    ├── nutrients.ts              # Extraction, chunking, lightweight relevance ranking
     ├── utils.ts                  # Canvas2D helpers, clamp, etc.
     ├── formatResponse.ts         # Markdown→HTML, Markdown→Plaintext
     └── storage.ts                # localStorage helpers

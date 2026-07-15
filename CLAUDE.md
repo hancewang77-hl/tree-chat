@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## This is Next.js 16 — read the docs first
 
 Next.js 16 (16.2.3) has breaking changes in APIs, conventions, and file structure vs. earlier versions. Before writing any Next.js code, check the relevant guide in `node_modules/next/dist/docs/`. The docs are organized as:
+
 - `01-app/` — App Router guides (getting started, guides, API reference)
 - `02-pages/` — Pages Router
 - `03-architecture/` — Architecture docs
@@ -13,10 +14,12 @@ Next.js 16 (16.2.3) has breaking changes in APIs, conventions, and file structur
 ## Commands
 
 ```bash
+npm ci           # Install the exact lockfile dependency set
 npm run dev      # Start dev server on port 3000
 npm run build    # Production build
 npm run start    # Start production server
 npm run lint     # Run ESLint
+npm test         # Run the Vitest regression suite
 ```
 
 ## Architecture
@@ -44,32 +47,38 @@ The app avoids blue/purple AI-chatbot aesthetics. Instead it uses warm, tactile,
 - **Texture**: CSS grain overlay on body (`::before` pseudo-element with SVG noise)
 
 CSS custom properties are defined in `app/globals.css`:
+
 - `--bg-cream`, `--bg-paper`, `--text-charcoal`, `--text-muted`
 - `--accent-bark`, `--accent-sage`, `--accent-amber`
 - `--border-warm`, `--shadow-warm`
 
 Components use these via inline `style={{ color: "var(--accent-bark)" }}` etc.
 
-### File structure (post-redesign, 2026-05-12)
+### File structure
 
 ```
 app/
-├── page.tsx                    # Thin shell: TreeProvider + App (~250 lines)
+├── page.tsx                    # TreeProvider shell + app orchestration
 ├── layout.tsx                  # Root layout (Lora, Geist, Geist Mono fonts)
 ├── globals.css                 # CSS vars, grain texture, animations
-├── api/chat/route.ts           # POST /api/chat — proxies to DeepSeek API
+├── api/
+│   ├── chat/route.ts           # Streaming DeepSeek answers
+│   └── structure/route.ts      # Post-answer semantic-card extraction
 └── favicon.ico
 
 src/
 ├── types/
 │   └── tree.ts                 # MindNode, NodesMap, Project, TreeState, TreeAction, ToolMode
 ├── lib/
-│   ├── utils.ts                # clamp, truncateText, roundRect, drawWrappedText
+│   ├── contextCompiler.ts      # Tree-aware bounded model context
+│   ├── semanticCard.ts         # Semantic-card parsing and validation
+│   ├── nutrients.ts            # File extraction, chunking, relevance selection
 │   ├── storage.ts              # localStorage load/save helpers
-│   └── formatResponse.ts       # stripMarkdown (→Canvas2D), renderMarkdownToHTML (→Inspector)
+│   ├── utils.ts                # clamp, truncateText, roundRect, drawWrappedText
+│   └── formatResponse.ts       # Markdown conversion for cards and Inspector
 ├── state/
 │   ├── TreeContext.tsx          # Context provider + useTree/useTreeState/useTreeDispatch hooks
-│   └── treeReducer.ts          # 18 action types, pushSnapshot, localStorage sync, undo/redo
+│   └── treeReducer.ts          # Tree actions, patch history, persistence, undo/redo
 ├── components/
 │   ├── scene/                  # 3D rendering (kept from original, palette updated)
 │   │   ├── TreeScene.tsx       # Canvas + lights + camera + layers + nodes + edges
@@ -97,11 +106,14 @@ src/
 
 hooks/
 ├── useTreeLayout.ts            # D3 tree layout + shared types + constants
-├── useAIChat.ts                # DeepSeek API interaction + typing state
+├── useAIChat.ts                # Streaming chat + semantic-card requests
 └── useResizableSidebar.ts      # Sidebar drag-to-resize behavior (kept, not used in current layout)
 ```
 
+Tests are colocated as `*.test.ts` files beside the reducer, storage, compiler, semantic-card, nutrient, and layout modules.
+
 ### Deleted files (post-redesign)
+
 - `src/components/sidebar/PathSidebar.tsx` → replaced by InspectorSidebar + BottomComposer
 - `src/components/toolbar/SceneToolbar.tsx` → replaced by TreeToolbar
 
@@ -109,29 +121,56 @@ hooks/
 
 ```ts
 type MindNode = {
-  id: string; prompt: string; response: string;
-  children: string[]; parentId: string | null;
-  timestamp: number; offsetX?: number; offsetY?: number; layer: number;
+  id: string;
+  kind: "root" | "branch" | "leaf";
+  prompt: string;
+  response: string;
+  status?: "complete" | "streaming" | "stopped" | "failed";
+  error?: string;
+  children: string[];
+  parentId: string | null;
+  timestamp: number;
+  offsetX?: number;
+  offsetY?: number;
+  layer: number;
+  nutrientRefs?: string[];
+  contextState: "valid" | "missing" | "stale";
+  semanticCard?: SemanticCard;
+  contextManifest?: ContextManifest;
+  includeInContext?: boolean;
 };
 
 type Project = {
-  id: string; name: string; rootNodeId: string;
-  nodes: NodesMap; createdAt: number; updatedAt: number;
+  id: string;
+  name: string;
+  rootNodeId: string;
+  nodes: NodesMap;
+  nutrients: Record<string, NutrientItem>;
+  activeNutrientIds: string[];
+  createdAt: number;
+  updatedAt: number;
 };
 
 type ToolMode = "view" | "node" | "layerMove" | "graft";
 
 type TreeState = {
-  projects: Record<string, Project>;  // all saved projects
-  activeProjectId: string;            // current project
-  selectedNodeId: string; selectedLayer: number;
-  is3DMode: boolean; toolMode: ToolMode;
-  movingNodeId: string | null; pendingNodeLayer: number | null;
-  graftSourceId: string | null;       // for two-click graft
-  zoom2D: number; zoom3D: number;
+  projects: Record<string, Project>; // all saved projects
+  activeProjectId: string; // current project
+  selectedNodeId: string;
+  selectedLayer: number;
+  is3DMode: boolean;
+  toolMode: ToolMode;
+  movingNodeId: string | null;
+  pendingNodeLayer: number | null;
+  graftSourceId: string | null; // for two-click graft
+  zoom2D: number;
+  zoom3D: number;
   planeNames: Record<number, string>;
-  isCanopyOpen: boolean; isRingsOpen: boolean;
-  history: { past: Snapshot[]; future: Snapshot[] };  // max 50
+  isCanopyOpen: boolean;
+  isRingsOpen: boolean;
+  ringsMode: "global" | "node";
+  ringsFocusNodeId: string | null;
+  history: { past: HistoryEntry[]; future: HistoryEntry[] }; // max 50
 };
 ```
 
@@ -142,23 +181,34 @@ All state is managed by `treeReducer` via `TreeContext`. No useState for tree da
 - **Dispatch** from any component via `useTreeDispatch()`
 - **Read** state via `useTreeState()` or full context via `useTree()`
 - **Handlers in page.tsx** wrapped in `useCallback` with `useRef` for latest state (avoids stale closures in async AI calls)
-- **localStorage** synced after every mutating action (SEED, BRANCH, LEAF, GRAFT_CONFIRM, PRUNE, UNDO, REDO)
-- **Snapshots** pushed to `history.past[]` before mutations (max 50). UNDO/REDO restore full project state
+- **localStorage** is synced after mutating actions; persisted workspaces use schema version 2 and normalize legacy nodes on load
+- **Patch history** stores affected node/project before-and-after values (max 50). Global and node-specific undo/redo merge child edges without replacing unrelated later work
+- **Semantic cards** are derived data: updating them does not add Rings noise, but their latest values are synchronized into relevant history snapshots
 
-### Tree-metaphor action system (10 core actions)
+### Tree-aware model context
 
-| Action | Dispatch | Behavior |
-|--------|----------|----------|
-| Seed | `SEED` | Create project with root node, save to localStorage |
-| Branch | `BRANCH` | Add AI-generated child node (calls /api/chat) |
-| Leaf | `LEAF` | Add manual note node (no API call) |
-| Graft | `GRAFT_START` → `GRAFT_CONFIRM` | Two-click re-parent: select source → click target |
-| Prune | `PRUNE` | Delete node + subtree (root protected, cycle-safe) |
-| Sunlight | `SUNLIGHT` | Select node, jump to its layer, highlight path |
-| Canopy | `TOGGLE_CANOPY` | Toggle SVG minimap overlay |
-| Rings | `TOGGLE_RINGS` / `UNDO` / `REDO` | History panel + snapshot restore |
-| Harvest | (in AppHeader) | Export as Markdown or JSON |
-| Forest | `SWITCH_PROJECT` | Change active project |
+- Full AI responses remain the source for display, export, and history; subsequent requests use compact `valid` semantic cards instead of replaying full answers.
+- `contextCompiler.ts` compiles root task → valid parent-path semantics → explicitly enabled Leaf notes → current task → relevant nutrient chunks → current question.
+- `missing`, `stale`, failed, incomplete, duplicate, and over-budget context is excluded and recorded in a per-node `ContextManifest`.
+- Leaf notes are isolated by default. A user must explicitly enable `includeInContext`.
+- Graft preserves prompts and responses while marking Branch semantics in the moved subtree `stale`; invalid moves and Leaf targets are rejected.
+- Sprout/tree generation is not implemented in this phase.
+
+### Tree-metaphor action system (11 core action groups)
+
+| Action   | Dispatch                         | Behavior                                            |
+| -------- | -------------------------------- | --------------------------------------------------- |
+| Seed     | `SEED`                           | Create project with root node, save to localStorage |
+| Branch   | streaming actions                | Stream `/api/chat`, then extract a semantic card    |
+| Leaf     | `LEAF` / `TOGGLE_LEAF_CONTEXT`   | Add a manual note and optionally include it         |
+| Graft    | `GRAFT_START` → `GRAFT_CONFIRM`  | Re-parent safely and invalidate moved semantics     |
+| Prune    | `PRUNE`                          | Delete node + subtree (root protected, cycle-safe)  |
+| Sunlight | `SUNLIGHT`                       | Select node, jump to its layer, highlight path      |
+| Canopy   | `TOGGLE_CANOPY`                  | Toggle SVG minimap overlay                          |
+| Rings    | `TOGGLE_RINGS` / `UNDO` / `REDO` | Global and node-specific patch undo/redo            |
+| Harvest  | (in AppHeader)                   | Export as Markdown or JSON                          |
+| Forest   | `SWITCH_PROJECT`                 | Change active project                               |
+| Nutrient | nutrient actions                 | Add, remove, and enable local reference files       |
 
 ### Response formatting pipeline
 
@@ -181,9 +231,11 @@ AI responses pass through two formatting layers:
 4. Edge connections drawn as `<Line>` components; path-to-root highlighted in amber gold (`#C4943A`)
 5. Layer glass panes rendered in warm cream/beige tones
 
-### API (`/api/chat`)
+### DeepSeek APIs
 
-POST endpoint wrapping DeepSeek's chat completions. Expects `{ messages, model? }`, returns `{ content }`. Reads `DEEPSEEK_API_KEY` from server env. Non-streaming, max 2048 tokens.
+- `POST /api/chat` accepts compiled messages and streams the answer used by the UI; a non-streaming mode remains available.
+- `POST /api/structure` accepts one prompt/response pair and returns a validated JSON semantic card.
+- Both routes read `DEEPSEEK_API_KEY` only from the server environment and apply independent request limits.
 
 ### Important constants (in `hooks/useTreeLayout.ts`)
 
@@ -193,7 +245,7 @@ POST endpoint wrapping DeepSeek's chat completions. Expects `{ messages, model? 
 
 ### Known quirks
 
-- The `.env.local` file contains `DEEPSEEK_API_KEY` — ensure it stays in `.gitignore`.
-- No tests exist in this project.
+- Local DeepSeek credentials belong in ignored `.env.local`; never expose them through a `NEXT_PUBLIC_` variable or commit them.
+- Semantic-card extraction is a second DeepSeek request after each completed answer. Failure is non-fatal and can be retried from the Inspector.
 - `CameraModeRig.tsx` has an `eslint-disable` for `react-hooks/immutability` — Three.js requires direct camera property mutation.
 - `useResizableSidebar.ts` exists but is not wired into the current layout (sidebars use fixed widths).

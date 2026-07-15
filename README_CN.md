@@ -24,7 +24,7 @@
 | **导航** | 上下滚动历史记录 | 3D 空间画布，带图层、全景小地图和路径高亮 |
 | **探索** | 一个问题一个回答 | 同一 prompt 分支出多个 AI 回答，并排对比 |
 | **批注** | 混在对话中 | 叶片笔记——独立的批注节点，不污染 AI 对话链 |
-| **历史** | 撤销一条消息 | 年轮系统——完整 undo/redo，快照历史（最多 50 步） |
+| **历史** | 撤销一条消息 | 年轮系统——全局或节点级补丁历史（最多 50 步） |
 | **美学** | 蓝紫渐变 AI 聊天风 | 有机编辑风——纸纹理、衬线字体、植物隐喻 |
 
 ### 树喻操作体系
@@ -40,8 +40,15 @@
 | ✂️ **修剪 (Prune)** | 删除一个节点及其全部子树 |
 | 🔆 **日照 (Sunlight)** | 聚焦某个节点——选中并跳转到其所在图层 |
 | 🗺️ **树冠 (Canopy)** | SVG 全景小地图，展示完整树结构 |
-| 💍 **年轮 (Rings)** | 撤销/重做面板——浏览快照历史 |
+| 💍 **年轮 (Rings)** | 撤销/重做面板——浏览操作历史 |
 | 📦 **收获 (Harvest)** | 导出为 Markdown 或 JSON |
+
+### 树感知上下文
+
+- 完整 `response` 继续用于展示、历史和导出；后续模型上下文只读取状态为 `valid` 的轻量语义卡片。
+- Context Compiler 按“根任务 → 有效父路径语义 → 显式纳入的 Leaf → 当前任务 → 相关资料片段 → 当前问题”统一编译。
+- Leaf 默认不进入 AI 上下文，只有用户显式开启后才会纳入。
+- Graft 保留原问题与回答，同时将移动子树的 AI 语义标记为 `stale`，防止旧路径信息继续被使用。
 
 ### 视觉设计——有机编辑风 (Organic Editorial)
 
@@ -84,14 +91,16 @@ Tree Chat 刻意避开了 AI 聊天工具千篇一律的"霓虹蓝紫渐变色 +
 ```bash
 git clone https://github.com/hancewang77-hl/tree-chat.git
 cd tree-chat
-npm install
+npm ci
 ```
 
-创建 `.env.local`：
+在项目根目录创建 `.env.local`：
 
 ```env
 DEEPSEEK_API_KEY=sk-your-key-here
 ```
+
+Key 只在服务端 Route Handler 中读取；不要使用 `NEXT_PUBLIC_` 前缀，也不要将 `.env.local` 提交到 Git。新增或修改 Key 后需重启开发服务。
 
 ### 开发
 
@@ -120,16 +129,18 @@ npx wrangler deploy
 
 ```
 app/
-├── page.tsx           # 薄壳层：TreeProvider + App
+├── page.tsx           # TreeProvider 外壳与应用流程编排
 ├── layout.tsx         # 根布局（字体）
 ├── globals.css        # CSS 变量、噪点肌理、动画
-└── api/chat/route.ts  # POST /api/chat → DeepSeek
+└── api/
+    ├── chat/route.ts       # 流式回答 → DeepSeek
+    └── structure/route.ts  # 回答完成后整理语义卡片
 
 src/
 ├── types/tree.ts                  # MindNode, Project, TreeState, Actions
 ├── state/
 │   ├── TreeContext.tsx            # useReducer + Context 提供者
-│   └── treeReducer.ts            # 18 种 action，localStorage 同步，undo/redo
+│   └── treeReducer.ts            # Tree actions、补丁历史、localStorage 同步
 ├── components/
 │   ├── scene/                    # 3D 画布、节点、图层、连线、相机
 │   ├── layout/                   # 顶栏、侧栏、底部输入
@@ -139,6 +150,9 @@ src/
 │   ├── useTreeLayout.ts          # D3 树布局 + 常量
 │   └── useAIChat.ts              # DeepSeek API 交互
 └── lib/
+    ├── contextCompiler.ts        # Tree-aware Context Compiler
+    ├── semanticCard.ts           # 语义卡片校验与格式化
+    ├── nutrients.ts              # 资料提取、分块与轻量相关性选择
     ├── utils.ts                  # Canvas2D 工具、clamp 等
     ├── formatResponse.ts         # Markdown→HTML、Markdown→纯文本
     └── storage.ts                # localStorage 辅助函数
