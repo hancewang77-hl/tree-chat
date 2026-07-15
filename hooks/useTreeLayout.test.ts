@@ -12,6 +12,7 @@ const nodes: NodesMap = {
     timestamp: 1,
     layer: 0,
     kind: "root",
+    contextState: "valid",
   },
   "branch-1": {
     id: "branch-1",
@@ -22,6 +23,7 @@ const nodes: NodesMap = {
     timestamp: 2,
     layer: 0,
     kind: "branch",
+    contextState: "missing",
   },
   "leaf-1": {
     id: "leaf-1",
@@ -32,6 +34,7 @@ const nodes: NodesMap = {
     timestamp: 3,
     layer: 0,
     kind: "leaf",
+    contextState: "missing",
   },
 };
 

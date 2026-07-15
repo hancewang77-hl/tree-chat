@@ -8,30 +8,36 @@ import type {
   NodesMap,
 } from "@/src/types/tree";
 import { loadWorkspace, saveWorkspace } from "@/src/lib/storage";
+import {
+  createRootSemanticCard,
+  isUsableSemanticCard,
+} from "@/src/lib/semanticCard";
 
 const MAX_HISTORY = 50;
 
-function makeRootNode(): MindNode {
+function makeRootNode(prompt: string): MindNode {
+  const timestamp = Date.now();
   return {
     id: "root",
     kind: "root",
-    prompt: "思考的起点",
+    prompt,
     response: "这是你思维之树的根。从这里开始，提出一个问题，AI 会帮助你展开枝叶。每一个节点都可以继续生长出新的分支。试着在下方输入你的第一个问题，让这棵树开始生长吧。",
     children: [],
     parentId: null,
-    timestamp: Date.now(),
+    timestamp,
     offsetX: 0,
     offsetY: 0,
     layer: 0,
     nutrientRefs: [],
     status: "complete",
+    contextState: "valid",
+    semanticCard: createRootSemanticCard(prompt, timestamp),
   };
 }
 
 function createProject(name: string): Project {
   const id = crypto.randomUUID();
-  const rootNode = makeRootNode();
-  rootNode.prompt = name;
+  const rootNode = makeRootNode(name);
   return {
     id,
     name,
@@ -45,19 +51,46 @@ function createProject(name: string): Project {
 }
 
 function normalizeNode(node: MindNode, rootNodeId: string): MindNode {
+  const prompt = typeof node.prompt === "string" ? node.prompt : "";
+  const response = typeof node.response === "string" ? node.response : "";
+  const timestamp = typeof node.timestamp === "number" ? node.timestamp : Date.now();
   const kind =
     node.kind ??
     (node.id === rootNodeId || node.parentId === null
       ? "root"
-      : node.response.trim().length === 0
+      : response.trim().length === 0
         ? "leaf"
         : "branch");
   const status = node.status === "streaming" ? "stopped" : (node.status ?? "complete");
+  const semanticCard = isUsableSemanticCard(node.semanticCard)
+    ? node.semanticCard
+    : kind === "root"
+      ? createRootSemanticCard(prompt, timestamp)
+      : undefined;
+  const contextState =
+    kind === "root"
+      ? "valid"
+      : node.contextState === "stale"
+        ? "stale"
+        : node.contextState === "missing"
+          ? "missing"
+          : semanticCard
+            ? "valid"
+            : "missing";
   return {
     ...node,
+    prompt,
+    response,
+    timestamp,
     kind,
+    children: Array.isArray(node.children)
+      ? node.children.filter((childId): childId is string => typeof childId === "string")
+      : [],
     nutrientRefs: node.nutrientRefs ?? [],
     status,
+    contextState,
+    semanticCard,
+    includeInContext: kind === "leaf" ? Boolean(node.includeInContext) : undefined,
   };
 }
 
@@ -188,14 +221,14 @@ export function loadInitialState(): TreeState {
 }
 
 function collectSubtreeIds(nodes: NodesMap, nodeId: string): Set<string> {
-  const ids = new Set<string>([nodeId]);
-  const node = nodes[nodeId];
-  if (node) {
-    for (const childId of node.children) {
-      for (const id of collectSubtreeIds(nodes, childId)) {
-        ids.add(id);
-      }
-    }
+  const ids = new Set<string>();
+  const pending = [nodeId];
+  while (pending.length > 0) {
+    const currentId = pending.pop();
+    if (!currentId || ids.has(currentId)) continue;
+    ids.add(currentId);
+    const current = nodes[currentId];
+    if (current) pending.push(...current.children);
   }
   return ids;
 }
@@ -250,6 +283,66 @@ function latestCreationHistoryForNode(state: TreeState, projectId: string, nodeI
         (change) => change.nodeId === nodeId && change.before === null,
       ),
   );
+}
+
+function updateNodeSemanticSnapshots(
+  entries: HistoryEntry[],
+  projectId: string,
+  nodeId: string,
+  node: MindNode,
+): HistoryEntry[] {
+  return entries.map((entry) => {
+    if (entry.projectId !== projectId || !entry.patch.nodeChanges) return entry;
+    let changed = false;
+    const nodeChanges = entry.patch.nodeChanges.map((change) => {
+      if (change.nodeId !== nodeId) return change;
+      const syncSnapshot = (snapshot: MindNode | null): MindNode | null => {
+        if (!snapshot || snapshot.parentId !== node.parentId) return snapshot;
+        return {
+          ...snapshot,
+          semanticCard: node.semanticCard,
+          contextState: snapshot.contextState === "stale" ? "stale" : "valid",
+        };
+      };
+      const before = syncSnapshot(change.before);
+      const after = syncSnapshot(change.after);
+      if (before === change.before && after === change.after) return change;
+      changed = true;
+      return { ...change, before, after };
+    });
+    if (!changed) return entry;
+    return {
+      ...entry,
+      patch: { ...entry.patch, nodeChanges },
+    };
+  });
+}
+
+function updateLeafContextSnapshots(
+  entries: HistoryEntry[],
+  projectId: string,
+  nodeId: string,
+  includeInContext: boolean,
+): HistoryEntry[] {
+  return entries.map((entry) => {
+    if (entry.projectId !== projectId || !entry.patch.nodeChanges) return entry;
+    let changed = false;
+    const nodeChanges = entry.patch.nodeChanges.map((change) => {
+      if (change.nodeId !== nodeId) return change;
+      const syncSnapshot = (snapshot: MindNode | null): MindNode | null => {
+        if (!snapshot || snapshot.kind !== "leaf") return snapshot;
+        changed = true;
+        return { ...snapshot, includeInContext };
+      };
+      return {
+        ...change,
+        before: syncSnapshot(change.before),
+        after: syncSnapshot(change.after),
+      };
+    });
+    if (!changed) return entry;
+    return { ...entry, patch: { ...entry.patch, nodeChanges } };
+  });
 }
 
 function applyPatch(state: TreeState, entry: HistoryEntry, direction: "undo" | "redo"): TreeState {
@@ -313,14 +406,44 @@ function resolveNodePatchValue(
   const source = direction === "undo" ? after : before;
   if (!target || !source || !current) return target;
 
-  const targetAdds = target.children.filter((id) => !source.children.includes(id));
-  const targetRemoves = source.children.filter((id) => !target.children.includes(id));
-  const mergedChildren = current.children.filter((id) => !targetRemoves.includes(id));
-  for (const id of targetAdds) {
-    if (!mergedChildren.includes(id)) mergedChildren.push(id);
-  }
+  const mergedChildren = mergeTargetChildren(current.children, source.children, target.children);
 
   return { ...target, children: mergedChildren };
+}
+
+function mergeTargetChildren(
+  currentChildren: string[],
+  sourceChildren: string[],
+  targetChildren: string[],
+): string[] {
+  const targetAdds = targetChildren.filter((id) => !sourceChildren.includes(id));
+  const targetRemoves = sourceChildren.filter((id) => !targetChildren.includes(id));
+  const merged = currentChildren.filter(
+    (id) => !targetRemoves.includes(id) && !targetAdds.includes(id),
+  );
+
+  for (const id of targetAdds) {
+    const targetIndex = targetChildren.indexOf(id);
+    const nextSibling = targetChildren
+      .slice(targetIndex + 1)
+      .find((candidateId) => merged.includes(candidateId));
+    if (nextSibling) {
+      merged.splice(merged.indexOf(nextSibling), 0, id);
+      continue;
+    }
+
+    const previousSibling = targetChildren
+      .slice(0, targetIndex)
+      .reverse()
+      .find((candidateId) => merged.includes(candidateId));
+    if (previousSibling) {
+      merged.splice(merged.lastIndexOf(previousSibling) + 1, 0, id);
+    } else {
+      merged.push(id);
+    }
+  }
+
+  return merged;
 }
 
 function undoAtIndex(state: TreeState, index: number): TreeState {
@@ -412,6 +535,8 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
         layer: state.selectedLayer,
         nutrientRefs,
         status: "complete",
+        contextState: "missing",
+        contextManifest: action.contextManifest,
       };
       const updatedParent = { ...parent, children: [...parent.children, newNodeId] };
 
@@ -462,6 +587,8 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
         layer: state.selectedLayer,
         nutrientRefs,
         status: "streaming",
+        contextState: "missing",
+        contextManifest: action.contextManifest,
       };
       const updatedParent = {
         ...parent,
@@ -600,6 +727,54 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
       return persist(next);
     }
 
+    case "SET_NODE_SEMANTICS": {
+      const project = state.projects[action.projectId];
+      const node = project?.nodes[action.nodeId];
+      if (
+        !project ||
+        !node ||
+        node.kind !== "branch" ||
+        node.status !== "complete" ||
+        node.contextState === "stale" ||
+        node.parentId !== action.expectedParentId ||
+        !isUsableSemanticCard(action.semanticCard)
+      ) {
+        return state;
+      }
+
+      const nodeAfter: MindNode = {
+        ...node,
+        semanticCard: action.semanticCard,
+        contextState: "valid",
+      };
+      const next = updateProjectById(state, action.projectId, (activeProject) => ({
+        ...activeProject,
+        nodes: {
+          ...activeProject.nodes,
+          [action.nodeId]: nodeAfter,
+        },
+        updatedAt: Date.now(),
+      }));
+
+      return persist({
+        ...next,
+        history: {
+          past: updateNodeSemanticSnapshots(
+            next.history.past,
+            action.projectId,
+            action.nodeId,
+            nodeAfter,
+          ),
+          future: updateNodeSemanticSnapshots(
+            next.history.future,
+            action.projectId,
+            action.nodeId,
+            nodeAfter,
+          ),
+        },
+      });
+    }
+
     case "LEAF": {
       const project = getActiveProject(state);
       if (!project) return state;
@@ -621,6 +796,8 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
         layer: state.selectedLayer,
         nutrientRefs: [],
         status: "complete",
+        contextState: "missing",
+        includeInContext: false,
       };
       const updatedParent = { ...parent, children: [...parent.children, newNodeId] };
 
@@ -649,6 +826,41 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
       return persist(pushHistory(next, entry));
     }
 
+    case "TOGGLE_LEAF_CONTEXT": {
+      const project = getActiveProject(state);
+      const node = project?.nodes[action.nodeId];
+      if (!project || !node || node.kind !== "leaf") return state;
+      const includeInContext = !node.includeInContext;
+      const next = updateActiveProject(state, (activeProject) => ({
+        ...activeProject,
+        nodes: {
+          ...activeProject.nodes,
+          [action.nodeId]: {
+            ...node,
+            includeInContext,
+          },
+        },
+        updatedAt: Date.now(),
+      }));
+      return persist({
+        ...next,
+        history: {
+          past: updateLeafContextSnapshots(
+            next.history.past,
+            state.activeProjectId,
+            action.nodeId,
+            includeInContext,
+          ),
+          future: updateLeafContextSnapshots(
+            next.history.future,
+            state.activeProjectId,
+            action.nodeId,
+            includeInContext,
+          ),
+        },
+      });
+    }
+
     case "GRAFT_START": {
       return { ...state, toolMode: "graft", graftSourceId: action.nodeId };
     }
@@ -659,72 +871,102 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
         return { ...state, toolMode: "view", graftSourceId: null };
       }
 
-      // Check: new parent must not be a descendant of source
+      const project = getActiveProject(state);
       const nodes = getActiveNodes(state);
+      const sourceBefore = nodes[sourceId];
+      const newParentBefore = nodes[action.newParentId];
+      if (
+        !project ||
+        !sourceBefore ||
+        !newParentBefore ||
+        sourceId === project.rootNodeId ||
+        sourceBefore.kind === "root" ||
+        newParentBefore.kind === "leaf" ||
+        sourceBefore.parentId === action.newParentId
+      ) {
+        return { ...state, toolMode: "view", graftSourceId: null };
+      }
+
       const subtreeIds = collectSubtreeIds(nodes, sourceId);
       if (subtreeIds.has(action.newParentId)) {
         return { ...state, toolMode: "view", graftSourceId: null };
       }
 
-      const sourceBefore = nodes[sourceId];
       const oldParentBefore = sourceBefore?.parentId ? nodes[sourceBefore.parentId] : null;
-      const newParentBefore = nodes[action.newParentId];
-      if (!sourceBefore || !newParentBefore) {
+      const touchesStreamingNode =
+        newParentBefore.status === "streaming" ||
+        oldParentBefore?.status === "streaming" ||
+        Array.from(subtreeIds).some((nodeId) => nodes[nodeId]?.status === "streaming");
+      if (touchesStreamingNode) {
         return { ...state, toolMode: "view", graftSourceId: null };
       }
 
-      let sourceAfter: MindNode | null = null;
-      let oldParentAfter: MindNode | null = null;
-      let newParentAfter: MindNode | null = null;
+      const updatedNodes = { ...nodes };
+      const nodeChanges: NonNullable<HistoryPatch["nodeChanges"]> = [];
 
-      let next = updateActiveProject(state, (project) => {
-        const nodes = { ...project.nodes };
-        const source = nodes[sourceId];
-        const oldParent = source?.parentId ? nodes[source.parentId] : null;
-        const newParent = nodes[action.newParentId];
-
-        if (!source || !newParent) return project;
-
-        // Remove from old parent
-        if (oldParent) {
-          oldParentAfter = {
-            ...oldParent,
-            children: oldParent.children.filter((id) => id !== sourceId),
-          };
-          nodes[oldParent.id] = oldParentAfter;
-        }
-
-        // Add to new parent
-        newParentAfter = {
-          ...newParent,
-          children: [...newParent.children, sourceId],
+      if (oldParentBefore) {
+        const oldParentAfter: MindNode = {
+          ...oldParentBefore,
+          children: oldParentBefore.children.filter((id) => id !== sourceId),
         };
-        nodes[newParent.id] = newParentAfter;
+        updatedNodes[oldParentBefore.id] = oldParentAfter;
+        nodeChanges.push({
+          nodeId: oldParentBefore.id,
+          before: oldParentBefore,
+          after: oldParentAfter,
+        });
+      }
 
-        // Update source's parent
-        sourceAfter = {
-          ...source,
-          parentId: action.newParentId,
-          layer: newParent.layer,
-        };
-        nodes[sourceId] = sourceAfter;
-
-        return { ...project, nodes, updatedAt: Date.now() };
+      const newParentAfter: MindNode = {
+        ...newParentBefore,
+        children: newParentBefore.children.includes(sourceId)
+          ? newParentBefore.children
+          : [...newParentBefore.children, sourceId],
+      };
+      updatedNodes[newParentBefore.id] = newParentAfter;
+      nodeChanges.push({
+        nodeId: newParentBefore.id,
+        before: newParentBefore,
+        after: newParentAfter,
       });
 
-      next = { ...next, toolMode: "view", graftSourceId: null };
-      const nodeChanges = [
-        oldParentBefore && oldParentAfter
-          ? { nodeId: oldParentBefore.id, before: oldParentBefore, after: oldParentAfter }
-          : null,
-        { nodeId: newParentBefore.id, before: newParentBefore, after: newParentAfter ?? newParentBefore },
-        { nodeId: sourceBefore.id, before: sourceBefore, after: sourceAfter ?? sourceBefore },
-      ].filter((change): change is NonNullable<typeof change> => change !== null);
+      for (const nodeId of subtreeIds) {
+        const before = nodes[nodeId];
+        if (!before) continue;
+        let after = before;
+        if (before.kind === "branch" && before.contextState !== "stale") {
+          after = { ...after, contextState: "stale" };
+        }
+        if (nodeId === sourceId) {
+          after = {
+            ...after,
+            parentId: action.newParentId,
+            layer: newParentBefore.layer,
+          };
+        }
+        if (after === before) continue;
+        updatedNodes[nodeId] = after;
+        nodeChanges.push({ nodeId, before, after });
+      }
+
+      const next: TreeState = {
+        ...state,
+        projects: {
+          ...state.projects,
+          [state.activeProjectId]: {
+            ...project,
+            nodes: updatedNodes,
+            updatedAt: Date.now(),
+          },
+        },
+        toolMode: "view",
+        graftSourceId: null,
+      };
       const entry = createHistoryEntry({
         state,
         label: `Graft · ${sourceBefore.prompt.slice(0, 32)}`,
         primaryNodeId: sourceId,
-        affectedNodeIds: [sourceId, oldParentBefore?.id ?? "", action.newParentId].filter(Boolean),
+        affectedNodeIds: nodeChanges.map((change) => change.nodeId),
         patch: { nodeChanges },
       });
       return persist(pushHistory(next, entry));

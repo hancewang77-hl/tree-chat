@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getContextPath } from "@/hooks/useTreeLayout";
 import { useAIChat } from "@/hooks/useAIChat";
+import { compileContext } from "@/src/lib/contextCompiler";
 import { clamp } from "@/src/lib/utils";
 import { TreeProvider, useTreeState, useTreeDispatch } from "@/src/state/TreeContext";
 import { TreeScene } from "@/src/components/scene/TreeScene";
@@ -18,16 +19,20 @@ import { CanopyMinimap } from "@/src/components/overlays/CanopyMinimap";
 import { RingsPanel } from "@/src/components/overlays/RingsPanel";
 import { LayerNameDialog } from "@/src/components/LayerNameDialog";
 
+const CHAT_MODEL = "deepseek-chat";
+
 function App() {
   const state = useTreeState();
   const dispatch = useTreeDispatch();
-  const { isAiTyping, isTypingRef, sendMessage, stopStreaming } = useAIChat();
+  const { isAiTyping, isTypingRef, sendMessage, structureNode, stopStreaming } = useAIChat();
 
   const activeProject = state.projects[state.activeProjectId];
   const nodes = useMemo(() => activeProject?.nodes ?? {}, [activeProject]);
   const isEmpty = !activeProject;
 
   const [error, setError] = useState<string | null>(null);
+  const [structuringNodeIds, setStructuringNodeIds] = useState<Set<string>>(() => new Set());
+  const structuringNodeIdsRef = useRef<Set<string>>(new Set());
   const [renameLayer, setRenameLayer] = useState<number | null>(null);
   const [planeNameInput, setPlaneNameInput] = useState("");
 
@@ -85,6 +90,16 @@ function App() {
     () => getContextPath(nodes, state.selectedNodeId),
     [nodes, state.selectedNodeId],
   );
+  const selectedContextAnchorId = useMemo(() => {
+    const selectedNode = nodes[state.selectedNodeId];
+    if (!selectedNode) return activeProject?.rootNodeId;
+    return selectedNode.kind === "leaf"
+      ? selectedNode.parentId ?? activeProject?.rootNodeId
+      : selectedNode.id;
+  }, [activeProject?.rootNodeId, nodes, state.selectedNodeId]);
+  const isSelectedContextStructuring = selectedContextAnchorId
+    ? structuringNodeIds.has(selectedContextAnchorId)
+    : false;
 
   const handleZoomIn = useCallback(() => {
     if (stateRef.current.is3DMode) {
@@ -118,28 +133,97 @@ function App() {
     dispatch({ type: "SET_LAYER", layer: nextLayer });
   }, [dispatch]);
 
+  const finalizeSemanticCard = useCallback(async ({
+    projectId,
+    nodeId,
+    parentId,
+    prompt,
+    response,
+  }: {
+    projectId: string;
+    nodeId: string;
+    parentId: string;
+    prompt: string;
+    response: string;
+  }) => {
+    if (!response.trim() || structuringNodeIdsRef.current.has(nodeId)) return;
+    structuringNodeIdsRef.current.add(nodeId);
+    setStructuringNodeIds((current) => new Set(current).add(nodeId));
+    try {
+      const semanticCard = await structureNode(prompt, response);
+      dispatch({
+        type: "SET_NODE_SEMANTICS",
+        projectId,
+        nodeId,
+        expectedParentId: parentId,
+        semanticCard,
+      });
+    } catch (semanticError) {
+      console.warn("语义卡片整理失败，已保留完整回答：", semanticError);
+    } finally {
+      structuringNodeIdsRef.current.delete(nodeId);
+      setStructuringNodeIds((current) => {
+        const next = new Set(current);
+        next.delete(nodeId);
+        return next;
+      });
+    }
+  }, [dispatch, structureNode]);
+
+  const handleRetrySemantics = useCallback((nodeId: string) => {
+    const s = stateRef.current;
+    const project = s.projects[s.activeProjectId];
+    const node = project?.nodes[nodeId];
+    if (
+      !project ||
+      !node ||
+      node.kind !== "branch" ||
+      node.contextState !== "missing" ||
+      node.status !== "complete" ||
+      !node.parentId ||
+      !node.response.trim()
+    ) {
+      return;
+    }
+    void finalizeSemanticCard({
+      projectId: project.id,
+      nodeId,
+      parentId: node.parentId,
+      prompt: node.prompt,
+      response: node.response,
+    });
+  }, [finalizeSemanticCard]);
+
   const handleSendMessage = useCallback(async (prompt: string) => {
     if (!prompt.trim() || isTypingRef.current || !activeProject) return;
 
     setError(null);
     const s = stateRef.current;
-    const n = nodesRef.current;
-    const selectedNode = n[s.selectedNodeId];
-    const targetParentId =
-      selectedNode?.kind === "leaf" && selectedNode.parentId
-        ? selectedNode.parentId
-        : s.selectedNodeId;
     const projectId = s.activeProjectId;
-    const context = getContextPath(n, s.selectedNodeId);
     const project = s.projects[projectId];
-    const nutrients = Object.values(project?.nutrients ?? {});
-    const activeNutrientIds = project?.activeNutrientIds ?? [];
+    if (!project) return;
+    const selectedNode = project.nodes[s.selectedNodeId];
+    const selectedAnchorId = selectedNode?.kind === "leaf"
+      ? selectedNode.parentId ?? project.rootNodeId
+      : selectedNode?.id ?? project.rootNodeId;
+    if (structuringNodeIdsRef.current.has(selectedAnchorId)) {
+      setError("当前节点的模型上下文正在整理，请稍候再追问。");
+      return;
+    }
     let streamingNodeId: string | null = null;
 
     try {
+      const compiled = compileContext({
+        project,
+        selectedNodeId: s.selectedNodeId,
+        prompt: prompt.trim(),
+        model: CHAT_MODEL,
+        compiledAt: Date.now(),
+      });
+      const targetParentId = compiled.anchorNodeId;
       const nodeId = `node-${crypto.randomUUID()}`;
       streamingNodeId = nodeId;
-      const nutrientRefs = [...activeNutrientIds];
+      const nutrientRefs = [...project.activeNutrientIds];
 
       dispatch({
         type: "STREAM_BRANCH_START",
@@ -148,13 +232,11 @@ function App() {
         prompt: prompt.trim(),
         parentId: targetParentId,
         nutrientRefs,
+        contextManifest: compiled.manifest,
       });
 
-      await sendMessage(
-        prompt.trim(),
-        context.map((node) => ({ prompt: node.prompt, response: node.response })),
-        nutrients,
-        nutrientRefs,
+      const response = await sendMessage(
+        compiled.messages,
         (partialResponse) => {
           dispatch({
             type: "STREAM_BRANCH_UPDATE",
@@ -170,6 +252,14 @@ function App() {
         projectId,
         nodeId,
         status: "complete",
+      });
+
+      await finalizeSemanticCard({
+        projectId,
+        nodeId,
+        parentId: targetParentId,
+        prompt: prompt.trim(),
+        response,
       });
     } catch (err) {
       const aborted =
@@ -199,7 +289,7 @@ function App() {
       }
       setError(message);
     }
-  }, [isAiTyping, activeProject, sendMessage, dispatch]);
+  }, [activeProject, dispatch, finalizeSemanticCard, isTypingRef, sendMessage]);
 
   const handleAddLeaf = useCallback((content: string) => {
     if (!content.trim() || !activeProject) return;
@@ -296,11 +386,16 @@ function App() {
           onSend={handleSendMessage}
           onAddLeaf={handleAddLeaf}
           isAiTyping={isAiTyping}
+          isContextPreparing={isSelectedContextStructuring}
           onStop={stopStreaming}
         />
       </div>
 
-      <InspectorSidebar currentPath={currentPath} />
+      <InspectorSidebar
+        currentPath={currentPath}
+        onRetrySemantics={handleRetrySemantics}
+        structuringNodeIds={structuringNodeIds}
+      />
 
       <SearchPalette />
       <RingsPanel />

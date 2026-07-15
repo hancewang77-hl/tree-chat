@@ -1,3 +1,36 @@
+export type ContextState = "valid" | "missing" | "stale";
+
+export type SemanticCard = {
+  version: 1;
+  generatedAt: number;
+  model: string;
+  facts: string[];
+  constraints: string[];
+  assumptions: string[];
+  decisions: string[];
+  rejected: string[];
+  openQuestions: string[];
+};
+
+export type ContextManifest = {
+  compilerVersion: 1;
+  compiledAt: number;
+  model: string;
+  selectedNodeId: string;
+  parentNodeId: string;
+  includedNodeIds: string[];
+  excludedNodeIds: Array<{
+    nodeId: string;
+    reason: "leaf" | "missing" | "stale" | "failed" | "incomplete" | "duplicate" | "budget";
+  }>;
+  nutrientChunks: Array<{
+    nutrientId: string;
+    nutrientName: string;
+    chunkId: string;
+  }>;
+  warnings: string[];
+};
+
 export type MindNode = {
   id: string;
   kind: "root" | "branch" | "leaf";
@@ -12,6 +45,10 @@ export type MindNode = {
   offsetY?: number;
   layer: number;
   nutrientRefs?: string[];
+  contextState: ContextState;
+  semanticCard?: SemanticCard;
+  contextManifest?: ContextManifest;
+  includeInContext?: boolean;
 };
 
 export type NodesMap = Record<string, MindNode>;
@@ -93,7 +130,14 @@ export type TreeState = {
 export type TreeAction =
   | { type: "HYDRATE"; state: TreeState }
   | { type: "SEED"; name: string }
-  | { type: "BRANCH"; prompt: string; response: string; parentId: string; nutrientRefs?: string[] }
+  | {
+      type: "BRANCH";
+      prompt: string;
+      response: string;
+      parentId: string;
+      nutrientRefs?: string[];
+      contextManifest?: ContextManifest;
+    }
   | {
       type: "STREAM_BRANCH_START";
       projectId: string;
@@ -101,6 +145,7 @@ export type TreeAction =
       prompt: string;
       parentId: string;
       nutrientRefs?: string[];
+      contextManifest: ContextManifest;
     }
   | {
       type: "STREAM_BRANCH_UPDATE";
@@ -120,7 +165,15 @@ export type TreeAction =
       nodeId: string;
       error: string;
     }
+  | {
+      type: "SET_NODE_SEMANTICS";
+      projectId: string;
+      nodeId: string;
+      expectedParentId: string;
+      semanticCard: SemanticCard;
+    }
   | { type: "LEAF"; content: string; parentId: string }
+  | { type: "TOGGLE_LEAF_CONTEXT"; nodeId: string }
   | { type: "GRAFT_START"; nodeId: string }
   | { type: "GRAFT_CONFIRM"; newParentId: string }
   | { type: "GRAFT_CANCEL" }

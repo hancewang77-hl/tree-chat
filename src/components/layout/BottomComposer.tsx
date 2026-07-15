@@ -26,11 +26,13 @@ export function BottomComposer({
   onSend,
   onAddLeaf,
   isAiTyping,
+  isContextPreparing,
   onStop,
 }: {
   onSend: (prompt: string) => void;
   onAddLeaf: (content: string) => void;
   isAiTyping: boolean;
+  isContextPreparing: boolean;
   onStop: () => void;
 }) {
   const state = useTreeState();
@@ -70,7 +72,7 @@ export function BottomComposer({
 
   function handleSubmit() {
     if (!text.trim()) return;
-    if (mode === "ai" && isAiTyping) return;
+    if (mode === "ai" && (isAiTyping || isContextPreparing)) return;
     // Seed burst animation
     setBurst(true);
     setTimeout(() => setBurst(false), 500);
@@ -114,6 +116,8 @@ export function BottomComposer({
   const placeholder =
     mode === "ai" && isAiTyping
       ? "AI 正在生成回答，可点击停止..."
+      : mode === "ai" && isContextPreparing
+        ? "正在整理当前节点的模型上下文，请稍候..."
       : mode === "ai"
       ? `在 z = ${state.selectedLayer} 层继续延伸你的思考... (Enter 发送)`
       : "记录一个想法或笔记... (Enter 保存)";
@@ -332,7 +336,7 @@ export function BottomComposer({
           {/* Send — seed-shaped button with burst effect */}
           <button
             onClick={mode === "ai" && isAiTyping ? onStop : handleSubmit}
-            disabled={!(mode === "ai" && isAiTyping) && !text.trim()}
+            disabled={mode === "ai" && isContextPreparing || (!(mode === "ai" && isAiTyping) && !text.trim())}
             className="flex h-10 w-10 shrink-0 items-center justify-center transition-all relative"
             style={{
               background: mode === "ai" && isAiTyping
@@ -352,7 +356,13 @@ export function BottomComposer({
                 ? "0 2px 8px rgba(86, 91, 61, 0.28)"
                 : "none",
             }}
-            title={mode === "ai" && isAiTyping ? "停止生成" : mode === "ai" ? "播种 · Plant" : "保存 · Keep"}
+            title={mode === "ai" && isAiTyping
+              ? "停止生成"
+              : mode === "ai" && isContextPreparing
+                ? "模型上下文整理中"
+                : mode === "ai"
+                  ? "播种 · Plant"
+                  : "保存 · Keep"}
           >
             {mode === "ai" && isAiTyping ? (
               <X size={14} />

@@ -1,7 +1,9 @@
 import { describe, expect, test } from "vitest";
 import {
   buildNutrientContext,
+  chunkNutrientText,
   extractNutrientFromFile,
+  selectRelevantNutrientChunks,
   summarizeNutrientText,
 } from "./nutrients";
 import type { NutrientItem } from "@/src/types/tree";
@@ -65,5 +67,40 @@ describe("nutrients", () => {
   test("summarizeNutrientText compacts whitespace and limits excerpts", () => {
     expect(summarizeNutrientText("a\n\n  b\tc  ", 5)).toBe("a b c");
     expect(summarizeNutrientText("123456789", 5)).toBe("1234…");
+  });
+
+  test("资料分块编号稳定，相关性选择不再只取文件开头", () => {
+    const item = nutrient({
+      id: "long",
+      name: "long.md",
+      extractedText: `${"A".repeat(1590)}\n\n目标片段：租房通勤时间是 25 分钟。`,
+    });
+
+    const chunks = chunkNutrientText(item);
+    const selected = selectRelevantNutrientChunks(
+      [item],
+      ["long"],
+      "请分析租房通勤时间",
+      500,
+      2,
+    );
+
+    expect(chunks.map((chunk) => chunk.chunkId)).toEqual(["chunk-001", "chunk-002"]);
+    expect(selected).toHaveLength(1);
+    expect(selected[0].chunkId).toBe("chunk-002");
+    expect(selected[0].text).toContain("25 分钟");
+  });
+
+  test("未启用或不可读资料不会进入相关片段", () => {
+    const disabled = nutrient({ id: "disabled", extractedText: "关键词" });
+    const unsupported = nutrient({
+      id: "unsupported",
+      extractionStatus: "unsupported",
+      extractedText: "关键词",
+    });
+
+    expect(
+      selectRelevantNutrientChunks([disabled, unsupported], ["unsupported"], "关键词"),
+    ).toEqual([]);
   });
 });

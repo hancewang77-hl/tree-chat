@@ -1,44 +1,14 @@
 import { useRef, useState } from "react";
-import type { NutrientItem } from "@/src/types/tree";
-import { buildNutrientContext } from "@/src/lib/nutrients";
+import type { SemanticCard } from "@/src/types/tree";
+import type { ChatMessage } from "@/src/lib/contextCompiler";
+import { isUsableSemanticCard } from "@/src/lib/semanticCard";
 import { readTextStream } from "@/src/lib/streamText";
 
 async function generateDeepSeekResponse(
-  prompt: string,
-  contextPath: { prompt: string; response: string }[],
-  nutrients: NutrientItem[],
-  activeNutrientIds: string[],
+  messages: ChatMessage[],
   onText: (text: string) => void,
   signal: AbortSignal,
 ) {
-  const nutrientContext = buildNutrientContext(nutrients, activeNutrientIds);
-  const userPrompt = nutrientContext
-    ? `${nutrientContext}\n\n用户当前问题：\n${prompt}`
-    : prompt;
-
-  const messages = [
-    {
-      role: "system" as const,
-      content:
-        "你是「智构树语」的 AI 助手，在树状思维探索空间中帮助用户展开深度思考。\n" +
-        "\n" +
-        "回答要求：\n" +
-        "1. 清晰结构化：使用 Markdown 格式，包括**粗体**、列表、`代码`等\n" +
-        "2. 数学公式：使用 LaTeX 语法，行内公式用 $...$，独立公式用 $$...$$\n" +
-        "3. 代码块：多行代码使用 ```语言 标记\n" +
-        "4. 适中长度：控制在 3-6 段，每段 2-4 句。太短没深度，太长不便于分支\n" +
-        "5. 可追问：结尾用**粗体**给出 2-3 个可继续探索的方向或问题\n" +
-        "6. 语言一致：用中文回答，专业术语保持英文原文\n" +
-        "\n" +
-        "风格：像一个博学的思考伙伴，有观点但不武断，严谨但不枯燥。",
-    },
-    ...contextPath.flatMap((node) => [
-      { role: "user" as const, content: node.prompt },
-      { role: "assistant" as const, content: node.response },
-    ]),
-    { role: "user" as const, content: userPrompt },
-  ];
-
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -55,16 +25,44 @@ async function generateDeepSeekResponse(
   return readTextStream(res, onText);
 }
 
+async function requestSemanticCard(prompt: string, response: string): Promise<SemanticCard> {
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => abortController.abort(), 30_000);
+  try {
+    const res = await fetch("/api/structure", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, response }),
+      signal: abortController.signal,
+    });
+    const body = (await res.json().catch(() => null)) as
+      | { semanticCard?: SemanticCard; error?: string }
+      | null;
+
+    if (!res.ok) {
+      throw new Error(body?.error || `语义整理失败：${res.status}`);
+    }
+    if (!isUsableSemanticCard(body?.semanticCard)) {
+      throw new Error("语义整理返回了无效卡片");
+    }
+    return body.semanticCard;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("语义整理超时，可在节点信息中重试");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export function useAIChat() {
   const [isAiTyping, setIsAiTyping] = useState(false);
   const isTypingRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   async function sendMessage(
-    prompt: string,
-    contextPath: { prompt: string; response: string }[],
-    nutrients: NutrientItem[] = [],
-    activeNutrientIds: string[] = [],
+    messages: ChatMessage[],
     onText: (text: string) => void = () => {},
   ): Promise<string> {
     abortControllerRef.current?.abort();
@@ -74,10 +72,7 @@ export function useAIChat() {
     setIsAiTyping(true);
     try {
       return await generateDeepSeekResponse(
-        prompt,
-        contextPath,
-        nutrients,
-        activeNutrientIds,
+        messages,
         onText,
         abortController.signal,
       );
@@ -94,5 +89,11 @@ export function useAIChat() {
     abortControllerRef.current?.abort();
   }
 
-  return { isAiTyping, isTypingRef, sendMessage, stopStreaming } as const;
+  return {
+    isAiTyping,
+    isTypingRef,
+    sendMessage,
+    structureNode: requestSemanticCard,
+    stopStreaming,
+  } as const;
 }

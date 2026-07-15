@@ -1,8 +1,10 @@
 import type { Project, TreeState } from "@/src/types/tree";
 
 const STORAGE_KEY = "tree-chat-projects";
+export const CURRENT_WORKSPACE_SCHEMA_VERSION = 2;
 
 export type StoredWorkspace = {
+  schemaVersion?: number;
   projects: Record<string, Project>;
   activeProjectId?: string;
   selectedNodeId?: string;
@@ -41,6 +43,7 @@ export function saveWorkspace(state: TreeState) {
   if (typeof window === "undefined") return;
   try {
     const workspace: StoredWorkspace = {
+      schemaVersion: CURRENT_WORKSPACE_SCHEMA_VERSION,
       projects: state.projects,
       activeProjectId: state.activeProjectId,
       selectedNodeId: state.selectedNodeId,
