@@ -11,6 +11,7 @@ import {
   isUsableSemanticCard,
   semanticCardToText,
 } from "@/src/lib/semanticCard";
+import { AUXO_MAX_SOURCE_UNIT_CHARS } from "@/src/lib/auxo";
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
@@ -92,6 +93,22 @@ export function compileContext(input: CompileContextInput): CompiledContext {
       addExcluded(node.id, "incomplete", excluded, excludedNodeIds);
       continue;
     }
+    if (node.nodeRole === "task" || node.nodeRole === "task-group") {
+      const taskParts = [
+        node.id === anchor.id ? "" : `任务原文：${node.prompt.trim()}`,
+        node.taskDescription?.trim()
+          ? `规划说明：${node.taskDescription.trim()}`
+          : "",
+      ].filter(Boolean);
+      const section = `[Auxo ${node.nodeRole === "task-group" ? "任务组" : "原子任务"} ${node.id}]\n${taskParts.join("\n")}`;
+      if (section.length > semanticRemaining) {
+        addExcluded(node.id, "budget", excluded, excludedNodeIds);
+        continue;
+      }
+      semanticSections.push({ node, text: section });
+      semanticRemaining -= section.length;
+      continue;
+    }
     if (node.contextState === "stale") {
       addExcluded(node.id, "stale", excluded, excludedNodeIds);
       continue;
@@ -152,16 +169,38 @@ export function compileContext(input: CompileContextInput): CompiledContext {
     "根任务过长，已在上下文中截断。",
     warnings,
   );
+  const isAuxoAnchor = anchor.nodeRole === "task" || anchor.nodeRole === "task-group";
   const anchorPrompt = clipWithWarning(
     anchor.prompt,
-    MAX_ANCHOR_PROMPT,
-    "当前父节点问题过长，已在上下文中截断。",
+    isAuxoAnchor ? AUXO_MAX_SOURCE_UNIT_CHARS : MAX_ANCHOR_PROMPT,
+    isAuxoAnchor
+      ? "当前 Auxo 任务超过输入上限，已在上下文中截断。"
+      : "当前父节点问题过长，已在上下文中截断。",
     warnings,
   );
-  const nutrientQuery = [prompt, anchor.prompt, root.prompt].join("\n");
+  const auxoPathQueries = pathNodes
+    .filter((node) => node.nodeRole === "task" || node.nodeRole === "task-group")
+    .map((node) => node.prompt);
+  const nutrientQuery = [prompt, ...auxoPathQueries, root.prompt].join("\n");
+  const auxoPathNode = [...pathNodes]
+    .reverse()
+    .find((node) => node.nodeRole === "task" || node.nodeRole === "task-group");
+  const nutrientIds = auxoPathNode
+    ? (auxoPathNode.nutrientRefs ?? [])
+    : project.activeNutrientIds;
+  if (auxoPathNode) {
+    const missingNutrientCount = nutrientIds.filter(
+      (nutrientId) => !project.nutrients[nutrientId],
+    ).length;
+    if (missingNutrientCount > 0) {
+      warnings.push(
+        `Auxo 生成时使用的 ${missingNutrientCount} 份资料已被移除，当前上下文无法恢复其内容。`,
+      );
+    }
+  }
   const nutrientChunks = selectRelevantNutrientChunks(
     Object.values(project.nutrients),
-    project.activeNutrientIds,
+    nutrientIds,
     nutrientQuery,
     input.nutrientBudget ?? DEFAULT_NUTRIENT_BUDGET,
   );

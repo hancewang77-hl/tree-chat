@@ -45,6 +45,8 @@ export function Node3D({
         response={node.response}
         kind={node.kind}
         status={node.status}
+        nodeRole={node.nodeRole}
+        taskDescription={node.taskDescription}
         selected={selected}
         inPath={inPath}
         layer={node.layer}

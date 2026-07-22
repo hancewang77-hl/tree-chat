@@ -34,13 +34,14 @@
 | 操作 | 含义 |
 |------|------|
 | 🌱 **播种 (Seed)** | 创建一个新项目，种下根问题 |
+| ✨ **Auxo** | 将空白根任务与全部启用 Nutrient 一次生成经校验、可整体撤销的任务树；只规划，不批量回答 |
 | 🌿 **分支 (Branch)** | 向 AI 追问——在当前节点下生长出新子节点 |
 | 🍃 **叶片 (Leaf)** | 挂载手动笔记（不调用 AI，保持对话链纯净） |
 | 🌳 **嫁接 (Graft)** | 两步重定父节点：将整棵子树移动到另一个父节点下 |
 | ✂️ **修剪 (Prune)** | 删除一个节点及其全部子树 |
 | 🔆 **日照 (Sunlight)** | 聚焦某个节点——选中并跳转到其所在图层 |
 | 🗺️ **树冠 (Canopy)** | SVG 全景小地图，展示完整树结构 |
-| 💍 **年轮 (Rings)** | 撤销/重做面板——浏览操作历史 |
+| 💍 **年轮 (Rings)** | 工作区级时间顺序撤销/重做，并提供安全的节点年轮 |
 | 📦 **收获 (Harvest)** | 导出为 Markdown 或 JSON |
 
 ### 树感知上下文
@@ -49,6 +50,10 @@
 - Context Compiler 按“根任务 → 有效父路径语义 → 显式纳入的 Leaf → 当前任务 → 相关资料片段 → 当前问题”统一编译。
 - Leaf 默认不进入 AI 上下文，只有用户显式开启后才会纳入。
 - Graft 保留原问题与回答，同时将移动子树的 AI 语义标记为 `stale`，防止旧路径信息继续被使用。
+- Auxo 的 task/task-group 原文沿当前父路径继承，兄弟任务的答案仍保持隔离。
+- Auxo 会在模型规划前，把标准化 Markdown 中带明确编号的题目提取为稳定来源单元；模型只负责分组和引用 ID。每个检测到的题目必须按原顺序、树的前序恰好出现一次，否则整批拒绝写入。
+- 上述确定性保证适用于已检测到的试卷式编号题目；无编号的自然语言仍由规划模型提出拆解方案，需要用户审阅。
+- 顶层编号题内的括号子题会与共同题干保留为一个单元，避免题干被复制或割裂；独立括号列表或新章节中的括号题则逐项提取。
 
 ### 视觉设计——有机编辑风 (Organic Editorial)
 
@@ -134,7 +139,8 @@ app/
 ├── globals.css        # CSS 变量、噪点肌理、动画
 └── api/
     ├── chat/route.ts       # 流式回答 → DeepSeek
-    └── structure/route.ts  # 回答完成后整理语义卡片
+    ├── structure/route.ts  # 回答完成后整理语义卡片
+    └── auxo/route.ts       # 受限任务树规划与校验
 
 src/
 ├── types/tree.ts                  # MindNode, Project, TreeState, Actions
@@ -148,8 +154,11 @@ src/
 │   └── overlays/                 # 小地图、历史、搜索、对话框
 ├── hooks/
 │   ├── useTreeLayout.ts          # D3 树布局 + 常量
-│   └── useAIChat.ts              # DeepSeek API 交互
+│   ├── useAIChat.ts              # DeepSeek API 交互
+│   └── useAuxo.ts                # 可取消的 Auxo 请求 + 客户端校验
 └── lib/
+    ├── auxo.ts                   # 全量资料预算、来源保真与计划图校验
+    ├── deepseek.ts               # 统一的运行时模型配置
     ├── contextCompiler.ts        # Tree-aware Context Compiler
     ├── semanticCard.ts           # 语义卡片校验与格式化
     ├── nutrients.ts              # 资料提取、分块与轻量相关性选择

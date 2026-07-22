@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { GitBranch, StickyNote, Scissors, Trash2, Sun } from "lucide-react";
+import { GitBranch, StickyNote, Scissors, Trash2, Sun, Sparkles } from "lucide-react";
 import { useTreeState, useTreeDispatch } from "@/src/state/TreeContext";
 import { ConfirmDialog } from "@/src/components/overlays/ConfirmDialog";
 
@@ -17,7 +17,13 @@ type ToolButton = {
 
 type ComposerMode = "ai" | "note";
 
-export function TreeToolbar() {
+export function TreeToolbar({
+  onOpenAuxo,
+  isAuxoGenerating,
+}: {
+  onOpenAuxo: () => void;
+  isAuxoGenerating: boolean;
+}) {
   const state = useTreeState();
   const dispatch = useTreeDispatch();
   const [showPruneConfirm, setShowPruneConfirm] = useState(false);
@@ -26,6 +32,7 @@ export function TreeToolbar() {
   const activeProject = state.projects[state.activeProjectId];
   const selectedNode = activeProject?.nodes[state.selectedNodeId];
   const isRoot = selectedNode?.id === activeProject?.rootNodeId;
+  const hasRootChildren = Boolean(isRoot && selectedNode && selectedNode.children.length > 0);
 
   function handlePruneClick() {
     if (isRoot || !selectedNode) return;
@@ -47,6 +54,22 @@ export function TreeToolbar() {
   }, []);
 
   const buttons: ToolButton[] = [
+    ...(isRoot
+      ? [
+          {
+            id: "auxo",
+            icon: <Sparkles size={17} />,
+            label: isAuxoGenerating ? "规划中" : "Auxo",
+            title:
+              hasRootChildren
+                ? "Auxo 仅用于空白根任务；请新建项目，或先撤销/修剪现有分支"
+                : "Auxo — 从根任务和全部启用资料生成基础任务树",
+            active: isAuxoGenerating,
+            disabled: isAuxoGenerating || hasRootChildren,
+            onClick: onOpenAuxo,
+          } satisfies ToolButton,
+        ]
+      : []),
     {
       id: "branch",
       icon: <GitBranch size={17} />,

@@ -25,6 +25,9 @@ export function HarvestDialog({
 
       const prefix = "  ".repeat(depth);
       lines.push(`${prefix}- **${node.prompt}**`);
+      if (node.taskDescription) {
+        lines.push(`${prefix}  > Auxo 规划：${node.taskDescription.replace(/\n/g, `\n${prefix}  > `)}`);
+      }
       if (node.response) {
         lines.push(`${prefix}  ${node.response.replace(/\n/g, `\n${prefix}  `)}`);
       }

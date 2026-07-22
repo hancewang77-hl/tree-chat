@@ -63,7 +63,8 @@ app/
 ├── globals.css                 # CSS vars, grain texture, animations
 ├── api/
 │   ├── chat/route.ts           # Streaming DeepSeek answers
-│   └── structure/route.ts      # Post-answer semantic-card extraction
+│   ├── structure/route.ts      # Post-answer semantic-card extraction
+│   └── auxo/route.ts           # Constrained Auxo task-tree planning
 └── favicon.ico
 
 src/
@@ -71,6 +72,8 @@ src/
 │   └── tree.ts                 # MindNode, NodesMap, Project, TreeState, TreeAction, ToolMode
 ├── lib/
 │   ├── contextCompiler.ts      # Tree-aware bounded model context
+│   ├── auxo.ts                 # Full-input budget + provenance/graph validation
+│   ├── deepseek.ts             # Shared runtime model + mode configuration
 │   ├── semanticCard.ts         # Semantic-card parsing and validation
 │   ├── nutrientMarkdown.ts     # Browser-side DOCX/PDF/HTML/text → Markdown conversion
 │   ├── nutrients.ts            # Nutrient ingestion, structure-aware chunking, relevance selection
@@ -94,7 +97,7 @@ src/
 │   │   ├── InspectorSidebar.tsx # Right sidebar: node path + inspector + actions
 │   │   └── BottomComposer.tsx  # Bottom bar: AI/Note mode toggle + prompt input
 │   ├── toolbar/
-│   │   ├── TreeToolbar.tsx     # Floating vertical: 分支/叶片/嫁接/修剪/聚焦
+│   │   ├── TreeToolbar.tsx     # Floating vertical: Auxo/分支/叶片/嫁接/修剪/聚焦
 │   │   └── ZoomControls.tsx    # Zoom in/out
 │   ├── overlays/
 │   │   ├── EmptyState.tsx      # "Plant a seed" onboarding
@@ -102,13 +105,15 @@ src/
 │   │   ├── CanopyMinimap.tsx   # SVG tree minimap overlay
 │   │   ├── RingsPanel.tsx      # Undo/redo history slide-out
 │   │   ├── HarvestDialog.tsx   # Placeholder (export logic in AppHeader)
-│   │   ├── HelpDialog.tsx      # Tree metaphor guide (11 features)
+│   │   ├── HelpDialog.tsx      # Tree metaphor guide (12 features)
+│   │   ├── AuxoDialog.tsx      # Root-only task-tree generation dialog
 │   │   └── ConfirmDialog.tsx   # Reusable confirmation modal
 │   └── LayerNameDialog.tsx     # Plane naming modal
 
 hooks/
 ├── useTreeLayout.ts            # D3 tree layout + shared types + constants
 ├── useAIChat.ts                # Streaming chat + semantic-card requests
+├── useAuxo.ts                  # Cancelable plan request + client validation
 └── useResizableSidebar.ts      # Sidebar drag-to-resize behavior (kept, not used in current layout)
 ```
 
@@ -140,6 +145,11 @@ type MindNode = {
   semanticCard?: SemanticCard;
   contextManifest?: ContextManifest;
   includeInContext?: boolean;
+  nodeRole?: "answer" | "task-group" | "task";
+  taskDescription?: string;
+  auxoGenerationId?: string;
+  auxoSource?: AuxoSourceReference;
+  auxoManifest?: AuxoGenerationManifest; // root only
 };
 
 type Project = {
@@ -193,14 +203,18 @@ All state is managed by `treeReducer` via `TreeContext`. No useState for tree da
 - `contextCompiler.ts` compiles root task → valid parent-path semantics → explicitly enabled Leaf notes → current task → relevant nutrient chunks → current question.
 - `missing`, `stale`, failed, incomplete, duplicate, and over-budget context is excluded and recorded in a per-node `ContextManifest`.
 - Leaf notes are isolated by default. A user must explicitly enable `includeInContext`.
-- Graft preserves prompts and responses while marking Branch semantics in the moved subtree `stale`; invalid moves and Leaf targets are rejected.
-- Sprout/tree generation is not implemented in this phase.
+- Graft preserves prompts and responses while marking only answer semantics in the moved subtree `stale`; immutable Auxo task source remains valid.
+- Auxo compiles the root task plus every enabled ready Nutrient within a 50,000-character hard budget. Nutrients travel as contiguous lossless chunks with offsets, allowing server-side reconstruction and exact validation even when a question crosses chunk boundaries.
+- Before chunk transport Auxo extracts explicit numbered questions into stable source units. The fixed non-thinking `deepseek-v4-flash` planner returns only source-unit IDs and hierarchy, never copied question text or free descriptions.
+- Every detected source unit must map to exactly one atomic task in source order. Auxo also validates DFS preorder, parents, cycles, duplicates, a 40-node cap, and four-layer depth before one atomic write; any failure produces zero writes.
+- Auxo task/task-group source text is included directly on the selected parent path; execution uses the generation-time Nutrient ID snapshot, and sibling answers remain excluded.
 
-### Tree-metaphor action system (11 core action groups)
+### Tree-metaphor action system (12 core action groups)
 
 | Action   | Dispatch                         | Behavior                                            |
 | -------- | -------------------------------- | --------------------------------------------------- |
 | Seed     | `SEED`                           | Create project with root node, save to localStorage |
+| Auxo     | `APPLY_AUXO_PLAN`                | Atomically apply a validated pending task tree      |
 | Branch   | streaming actions                | Stream `/api/chat`, then extract a semantic card    |
 | Leaf     | `LEAF` / `TOGGLE_LEAF_CONTEXT`   | Add a manual note and optionally include it         |
 | Graft    | `GRAFT_START` → `GRAFT_CONFIRM`  | Re-parent safely and invalidate moved semantics     |
@@ -235,9 +249,11 @@ AI responses pass through two formatting layers:
 
 ### DeepSeek APIs
 
+- Runtime model selection is centralized in `src/lib/deepseek.ts`; chat, semantic structuring, and Auxo use `deepseek-v4-flash` with thinking explicitly disabled.
 - `POST /api/chat` accepts compiled messages and streams the answer used by the UI; a non-streaming mode remains available.
 - `POST /api/structure` accepts one prompt/response pair and returns a validated JSON semantic card.
-- Both routes read `DEEPSEEK_API_KEY` only from the server environment and apply independent request limits.
+- `POST /api/auxo` accepts one bounded root task plus all enabled Markdown chunks and returns a validated plan; it never persists model-supplied IDs or bulk answers.
+- All routes read `DEEPSEEK_API_KEY` only from the server environment and apply independent request limits.
 
 ### Important constants (in `hooks/useTreeLayout.ts`)
 

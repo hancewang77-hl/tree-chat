@@ -2,6 +2,7 @@
 
 import { Undo2, Redo2, History } from "lucide-react";
 import { useTreeState, useTreeDispatch } from "@/src/state/TreeContext";
+import type { HistoryEntry } from "@/src/types/tree";
 
 export function RingsPanel() {
   const state = useTreeState();
@@ -15,10 +16,20 @@ export function RingsPanel() {
     ? state.projects[state.activeProjectId]?.nodes[state.ringsFocusNodeId!]
     : null;
   const scopedPast = isNodeMode
-    ? past.filter((entry) => entry.affectedNodeIds.includes(state.ringsFocusNodeId!))
+    ? nodeHistoryUntilBarrier(
+        past,
+        state.activeProjectId,
+        state.ringsFocusNodeId!,
+        "past",
+      )
     : past;
   const scopedFuture = isNodeMode
-    ? future.filter((entry) => entry.affectedNodeIds.includes(state.ringsFocusNodeId!))
+    ? nodeHistoryUntilBarrier(
+        future,
+        state.activeProjectId,
+        state.ringsFocusNodeId!,
+        "future",
+      )
     : future;
 
   return (
@@ -137,4 +148,26 @@ export function RingsPanel() {
       </div>
     </div>
   );
+}
+
+function nodeHistoryUntilBarrier(
+  entries: HistoryEntry[],
+  projectId: string,
+  nodeId: string,
+  direction: "past" | "future",
+): HistoryEntry[] {
+  const indexes =
+    direction === "past"
+      ? Array.from({ length: entries.length }, (_, index) => entries.length - 1 - index)
+      : Array.from({ length: entries.length }, (_, index) => index);
+  const visible: HistoryEntry[] = [];
+
+  for (const index of indexes) {
+    const entry = entries[index];
+    if (entry.projectId !== projectId || !entry.affectedNodeIds.includes(nodeId)) continue;
+    if (entry.nodeUndoable === false) break;
+    visible.push(entry);
+  }
+
+  return direction === "past" ? visible.reverse() : visible;
 }

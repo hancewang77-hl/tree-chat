@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { NODE_W, NODE_H } from "@/hooks/useTreeLayout";
 import { truncateText, roundRect, drawWrappedText } from "@/src/lib/utils";
 import { summarizeForCard } from "@/src/lib/formatResponse";
+import type { NodeRole } from "@/src/types/tree";
 
 const CARD_OLIVE = "#747A55";
 const CARD_OLIVE_DEEP = "#565B3D";
@@ -14,10 +15,10 @@ const CARD_PAPER_MID = "#D1CAA7";
 const CARD_PAPER_DARK = "#C0BA91";
 
 export function CardTexture({
-  prompt, response, kind, status, selected, inPath, layer,
+  prompt, response, kind, status, nodeRole, taskDescription, selected, inPath, layer,
 }: {
   prompt: string; response: string; kind: "root" | "branch" | "leaf"; status?: string; selected: boolean;
-  inPath: boolean; layer: number;
+  nodeRole?: NodeRole; taskDescription?: string; inPath: boolean; layer: number;
   interactive: boolean; priority: boolean;
 }) {
   const texture = useMemo(() => {
@@ -31,9 +32,18 @@ export function CardTexture({
 
     const nodeStatus = status ?? "complete";
     const isNote = kind === "leaf";
-    const promptLabel = isNote ? "LEAF / 记录" : "SEED / 提问";
+    const isAuxoTask = nodeRole === "task" || nodeRole === "task-group";
+    const promptLabel = isNote
+      ? "LEAF / 记录"
+      : nodeRole === "task-group"
+        ? "AUXO / 任务组"
+        : nodeRole === "task"
+          ? "AUXO / 原子任务"
+          : "SEED / 提问";
     const responseLabel = isNote
       ? "SOIL / 备注"
+      : isAuxoTask
+        ? "STATUS / 待执行"
       : nodeStatus === "streaming"
         ? "GROWTH / 生成中"
         : nodeStatus === "failed"
@@ -43,6 +53,10 @@ export function CardTexture({
             : "CANOPY / 回答";
     const summary = isNote
       ? "这是一片手动记录的叶片，可继续生长出新的分支。"
+      : isAuxoTask
+        ? taskDescription?.trim()
+          ? summarizeForCard(taskDescription, 150)
+          : "Auxo 已建立任务骨架，选中后可逐项执行。"
       : nodeStatus === "failed"
         ? "生成失败。请检查网络或 API 配置后重新提问。"
         : response.trim()
@@ -79,7 +93,7 @@ export function CardTexture({
     tex.anisotropy = 8;
     tex.needsUpdate = true;
     return tex;
-  }, [prompt, response, kind, status, selected, inPath, layer]);
+  }, [prompt, response, kind, status, nodeRole, taskDescription, selected, inPath, layer]);
 
   if (!texture) return null;
 

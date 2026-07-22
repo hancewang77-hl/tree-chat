@@ -12,6 +12,7 @@ import {
   createRootSemanticCard,
   isUsableSemanticCard,
 } from "@/src/lib/semanticCard";
+import { compileAuxoInput, validateAuxoPlan } from "@/src/lib/auxo";
 
 const MAX_HISTORY = 50;
 
@@ -62,6 +63,14 @@ function normalizeNode(node: MindNode, rootNodeId: string): MindNode {
         ? "leaf"
         : "branch");
   const status = node.status === "streaming" ? "stopped" : (node.status ?? "complete");
+  const nodeRole =
+    kind === "branch" &&
+    (node.nodeRole === "task" || node.nodeRole === "task-group" || node.nodeRole === "answer")
+      ? node.nodeRole
+      : kind === "branch"
+        ? "answer"
+        : undefined;
+  const isAuxoTask = nodeRole === "task" || nodeRole === "task-group";
   const semanticCard = isUsableSemanticCard(node.semanticCard)
     ? node.semanticCard
     : kind === "root"
@@ -70,6 +79,8 @@ function normalizeNode(node: MindNode, rootNodeId: string): MindNode {
   const contextState =
     kind === "root"
       ? "valid"
+      : isAuxoTask
+        ? "valid"
       : node.contextState === "stale"
         ? "stale"
         : node.contextState === "missing"
@@ -88,6 +99,11 @@ function normalizeNode(node: MindNode, rootNodeId: string): MindNode {
       : [],
     nutrientRefs: node.nutrientRefs ?? [],
     status,
+    nodeRole,
+    taskDescription:
+      isAuxoTask && typeof node.taskDescription === "string"
+        ? node.taskDescription.trim()
+        : undefined,
     contextState,
     semanticCard,
     includeInContext: kind === "leaf" ? Boolean(node.includeInContext) : undefined,
@@ -124,6 +140,7 @@ function createHistoryEntry({
   label,
   primaryNodeId,
   affectedNodeIds,
+  nodeUndoable,
   patch,
 }: {
   state: TreeState;
@@ -131,6 +148,7 @@ function createHistoryEntry({
   label: string;
   primaryNodeId: string;
   affectedNodeIds: string[];
+  nodeUndoable?: boolean;
   patch: HistoryPatch;
 }): HistoryEntry {
   return {
@@ -140,6 +158,7 @@ function createHistoryEntry({
     timestamp: Date.now(),
     primaryNodeId,
     affectedNodeIds: Array.from(new Set(affectedNodeIds)),
+    nodeUndoable,
     patch,
   };
 }
@@ -476,13 +495,28 @@ function redoAtIndex(state: TreeState, index: number): TreeState {
 
 function latestPastIndexForNode(state: TreeState, nodeId: string) {
   for (let index = state.history.past.length - 1; index >= 0; index--) {
-    if (state.history.past[index].affectedNodeIds.includes(nodeId)) return index;
+    const entry = state.history.past[index];
+    if (
+      entry.projectId !== state.activeProjectId ||
+      !entry.affectedNodeIds.includes(nodeId)
+    ) continue;
+    if (entry.nodeUndoable === false) return -1;
+    return index;
   }
   return -1;
 }
 
 function firstFutureIndexForNode(state: TreeState, nodeId: string) {
-  return state.history.future.findIndex((entry) => entry.affectedNodeIds.includes(nodeId));
+  for (let index = 0; index < state.history.future.length; index++) {
+    const entry = state.history.future[index];
+    if (
+      entry.projectId !== state.activeProjectId ||
+      !entry.affectedNodeIds.includes(nodeId)
+    ) continue;
+    if (entry.nodeUndoable === false) return -1;
+    return index;
+  }
+  return -1;
 }
 
 export function treeReducer(state: TreeState, action: TreeAction): TreeState {
@@ -513,6 +547,155 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
       return persist(pushHistory(next, entry));
     }
 
+    case "APPLY_AUXO_PLAN": {
+      const project = state.projects[action.projectId];
+      const root = project?.nodes[action.rootNodeId];
+      if (
+        !project ||
+        project.rootNodeId !== action.rootNodeId ||
+        !root ||
+        root.kind !== "root" ||
+        root.children.length > 0 ||
+        Object.values(project.nodes).some((node) => Boolean(node.auxoGenerationId))
+      ) {
+        return state;
+      }
+
+      let currentInput: ReturnType<typeof compileAuxoInput>;
+      let validatedPlan: typeof action.plan;
+      try {
+        currentInput = compileAuxoInput(project);
+        validatedPlan = validateAuxoPlan(action.plan, currentInput.request, {
+          generatedAt: action.plan.generatedAt,
+          model: action.plan.model,
+        });
+      } catch {
+        return state;
+      }
+      if (
+        currentInput.inputFingerprint !== action.inputFingerprint ||
+        currentInput.nutrientRefs.length !== action.nutrientRefs.length ||
+        currentInput.nutrientRefs.some((id, index) => id !== action.nutrientRefs[index])
+      ) {
+        return state;
+      }
+
+      const orderedPlan = [...validatedPlan.nodes].sort((a, b) => a.order - b.order);
+      const idByPlanId = new Map<string, string>();
+      const reservedIds = new Set(Object.keys(project.nodes));
+      for (const planNode of orderedPlan) {
+        let nodeId = `auxo-${crypto.randomUUID()}`;
+        while (reservedIds.has(nodeId)) nodeId = `auxo-${crypto.randomUUID()}`;
+        reservedIds.add(nodeId);
+        idByPlanId.set(planNode.planId, nodeId);
+      }
+
+      const generatedNodes: NodesMap = {};
+      for (const planNode of orderedPlan) {
+        const nodeId = idByPlanId.get(planNode.planId)!;
+        const parentId =
+          planNode.parentPlanId === "root"
+            ? root.id
+            : idByPlanId.get(planNode.parentPlanId);
+        if (!parentId) return state;
+        const prompt = planNode.source?.exactQuote ?? planNode.title;
+        const taskDescription =
+          planNode.nodeRole === "task-group"
+            ? "Auxo 任务组 · 按顺序完成其子任务。"
+            : planNode.source
+              ? "Auxo 原题任务 · 保持原文，独立完成并核验。"
+              : "Auxo 原子任务 · 独立完成并核验。";
+        generatedNodes[nodeId] = {
+          id: nodeId,
+          kind: "branch",
+          nodeRole: planNode.nodeRole,
+          prompt,
+          response: "",
+          taskDescription,
+          children: [],
+          parentId,
+          timestamp: validatedPlan.generatedAt + planNode.order,
+          offsetX: 0,
+          offsetY: 0,
+          layer: root.layer,
+          nutrientRefs: [...action.nutrientRefs],
+          status: "complete",
+          contextState: "valid",
+          auxoGenerationId: action.generationId,
+          auxoSource: planNode.source,
+        };
+      }
+
+      const rootChildren: string[] = [];
+      for (const planNode of orderedPlan) {
+        const nodeId = idByPlanId.get(planNode.planId)!;
+        if (planNode.parentPlanId === "root") {
+          rootChildren.push(nodeId);
+        } else {
+          const parentId = idByPlanId.get(planNode.parentPlanId)!;
+          generatedNodes[parentId] = {
+            ...generatedNodes[parentId],
+            children: [...generatedNodes[parentId].children, nodeId],
+          };
+        }
+      }
+
+      const rootAfter: MindNode = {
+        ...root,
+        children: [...root.children, ...rootChildren],
+        auxoManifest: {
+          version: 1,
+          generationId: action.generationId,
+          generatedAt: validatedPlan.generatedAt,
+          model: validatedPlan.model,
+          rootNodeId: root.id,
+          nodeCount: orderedPlan.length,
+          inputFingerprint: action.inputFingerprint,
+          nutrientChunks: currentInput.request.nutrientChunks.map((chunk) => ({
+            nutrientId: chunk.nutrientId,
+            nutrientName: chunk.nutrientName,
+            chunkId: chunk.chunkId,
+          })),
+        },
+      };
+      const nodesAfter = {
+        ...project.nodes,
+        [root.id]: rootAfter,
+        ...generatedNodes,
+      };
+      let next: TreeState = {
+        ...state,
+        projects: {
+          ...state.projects,
+          [project.id]: { ...project, nodes: nodesAfter, updatedAt: Date.now() },
+        },
+      };
+      if (state.activeProjectId === project.id && rootChildren[0]) {
+        next = {
+          ...next,
+          selectedNodeId: rootChildren[0],
+          selectedLayer: root.layer,
+        };
+      }
+
+      const generatedList = Object.values(generatedNodes);
+      const entry = createHistoryEntry({
+        state,
+        projectId: project.id,
+        label: `Auxo · ${generatedList.length} 个待执行任务`,
+        primaryNodeId: root.id,
+        affectedNodeIds: [root.id, ...generatedList.map((node) => node.id)],
+        nodeUndoable: false,
+        patch: {
+          nodeChanges: [
+            { nodeId: root.id, before: root, after: rootAfter },
+            ...generatedList.map((node) => ({ nodeId: node.id, before: null, after: node })),
+          ],
+        },
+      });
+      return persist(pushHistory(next, entry));
+    }
+
     case "BRANCH": {
       const project = getActiveProject(state);
       if (!project) return state;
@@ -525,6 +708,7 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
       const newNode: MindNode = {
         id: newNodeId,
         kind: "branch",
+        nodeRole: "answer",
         prompt: action.prompt,
         response: action.response,
         children: [],
@@ -577,6 +761,7 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
       const newNode: MindNode = {
         id: action.nodeId,
         kind: "branch",
+        nodeRole: "answer",
         prompt: action.prompt,
         response: "",
         children: [],
@@ -734,6 +919,7 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
         !project ||
         !node ||
         node.kind !== "branch" ||
+        (node.nodeRole ?? "answer") !== "answer" ||
         node.status !== "complete" ||
         node.contextState === "stale" ||
         node.parentId !== action.expectedParentId ||
@@ -934,7 +1120,11 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
         const before = nodes[nodeId];
         if (!before) continue;
         let after = before;
-        if (before.kind === "branch" && before.contextState !== "stale") {
+        if (
+          before.kind === "branch" &&
+          (before.nodeRole ?? "answer") === "answer" &&
+          before.contextState !== "stale"
+        ) {
           after = { ...after, contextState: "stale" };
         }
         if (nodeId === sourceId) {

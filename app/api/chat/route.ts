@@ -1,4 +1,12 @@
 import OpenAI from "openai";
+import type {
+  ChatCompletionCreateParamsNonStreaming,
+  ChatCompletionCreateParamsStreaming,
+} from "openai/resources/chat/completions";
+import {
+  DEEPSEEK_MODEL,
+  DEEPSEEK_NON_THINKING,
+} from "@/src/lib/deepseek";
 
 const rateMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT = 30;
@@ -42,9 +50,8 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
-    const { messages, model = "deepseek-chat", stream = true } = body as {
+    const { messages, stream = true } = body as {
       messages?: unknown;
-      model?: string;
       stream?: boolean;
     };
 
@@ -61,24 +68,32 @@ export async function POST(req: Request) {
     });
 
     if (!stream) {
-      const completion = await client.chat.completions.create({
-        model,
+      const completionRequest: ChatCompletionCreateParamsNonStreaming & {
+        thinking: { type: "disabled" };
+      } = {
+        model: DEEPSEEK_MODEL,
         messages,
         stream: false,
+        thinking: DEEPSEEK_NON_THINKING,
         max_tokens: 2048,
-      });
+      };
+      const completion = await client.chat.completions.create(completionRequest);
 
       return Response.json({
         content: completion.choices?.[0]?.message?.content ?? "",
       });
     }
 
-    const completion = await client.chat.completions.create({
-      model,
+    const completionRequest: ChatCompletionCreateParamsStreaming & {
+      thinking: { type: "disabled" };
+    } = {
+      model: DEEPSEEK_MODEL,
       messages,
       stream: true,
+      thinking: DEEPSEEK_NON_THINKING,
       max_tokens: 2048,
-    });
+    };
+    const completion = await client.chat.completions.create(completionRequest);
 
     const encoder = new TextEncoder();
     const responseStream = new ReadableStream<Uint8Array>({

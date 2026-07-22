@@ -34,13 +34,14 @@ Every action is named after a botanical operation, making the mental model intui
 | Action | What it does |
 |--------|-------------|
 | 🌱 **Seed** | Create a new project with a root question |
+| ✨ **Auxo** | Turn an empty root task plus all enabled Nutrients into one validated, undoable task tree (planning only, no bulk answers) |
 | 🌿 **Branch** | Ask AI a follow-up — spawns a new child node |
 | 🍃 **Leaf** | Attach a manual note (no AI call, keeps context clean) |
 | 🌳 **Graft** | Two-click re-parent: move a subtree to a different parent |
 | ✂️ **Prune** | Delete a node and its entire subtree |
 | 🔆 **Sunlight** | Focus on a node — selects it and jumps to its layer |
 | 🗺️ **Canopy** | SVG minimap overlay showing the full tree structure |
-| 💍 **Rings** | Undo/redo panel — browse through operation history |
+| 💍 **Rings** | Workspace-wide chronological undo/redo, plus safe node-scoped history |
 | 📦 **Harvest** | Export as Markdown or JSON |
 
 ### Tree-aware context
@@ -49,6 +50,10 @@ Every action is named after a botanical operation, making the mental model intui
 - The Context Compiler builds one bounded input in this order: root task → valid parent-path semantics → explicitly included Leaf notes → current task → relevant nutrient chunks → current question.
 - Leaf notes are isolated from AI context by default and are included only after the user explicitly enables them.
 - Graft preserves every original prompt and response while marking AI semantics in the moved subtree as `stale`, preventing knowledge from the old path from leaking into later requests.
+- Auxo task/task-group source text travels down the selected parent path, while sibling task answers remain isolated.
+- Before model planning, Auxo extracts explicit numbered questions from normalized Markdown into stable source units. The model only groups those IDs; every detected unit must appear exactly once, in source/preorder, or the whole write is rejected.
+- That deterministic guarantee covers detected exam-style numbering. Unnumbered prose is still decomposed by the planning model and should be reviewed as a proposed task structure.
+- A top-level numbered question keeps its nested parenthetical subparts together so the shared stem is neither duplicated nor detached. Standalone parenthetical lists, including those in a separate section, are extracted item by item.
 
 ### Visual Design — Organic Editorial
 
@@ -134,7 +139,8 @@ app/
 ├── globals.css        # CSS vars, grain texture, animations
 └── api/
     ├── chat/route.ts       # Streaming answer → DeepSeek
-    └── structure/route.ts  # Post-answer semantic-card extraction
+    ├── structure/route.ts  # Post-answer semantic-card extraction
+    └── auxo/route.ts       # Constrained task-tree planning and validation
 
 src/
 ├── types/tree.ts                  # MindNode, Project, TreeState, Actions
@@ -148,8 +154,11 @@ src/
 │   └── overlays/                 # Minimap, history, search, dialogs
 ├── hooks/
 │   ├── useTreeLayout.ts          # D3 tree layout + constants
+│   ├── useAuxo.ts                # Cancelable Auxo request + client validation
 │   └── useAIChat.ts              # DeepSeek API interaction
 └── lib/
+    ├── auxo.ts                  # Lossless source units + constrained plan validation
+    ├── deepseek.ts              # Shared runtime model configuration
     ├── contextCompiler.ts        # Tree-aware Context Compiler
     ├── semanticCard.ts           # Semantic-card validation and formatting
     ├── nutrients.ts              # Extraction, chunking, lightweight relevance ranking

@@ -17,7 +17,8 @@ export function SearchPalette() {
     ? allNodes.filter(
         (n) =>
           n.prompt.toLowerCase().includes(query.toLowerCase()) ||
-          n.response.toLowerCase().includes(query.toLowerCase())
+          n.response.toLowerCase().includes(query.toLowerCase()) ||
+          n.taskDescription?.toLowerCase().includes(query.toLowerCase())
       ).slice(0, 10)
     : [];
 
@@ -95,9 +96,9 @@ export function SearchPalette() {
                 >
                   {node.prompt}
                 </p>
-                {node.response && (
+                {(node.response || node.taskDescription) && (
                   <p className="text-[11px] truncate mt-0.5" style={{ color: "var(--text-muted)" }}>
-                    {node.response.slice(0, 80)}
+                    {(node.response || node.taskDescription || "").slice(0, 80)}
                   </p>
                 )}
               </div>

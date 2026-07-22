@@ -1,5 +1,89 @@
 export type ContextState = "valid" | "missing" | "stale";
 
+export type NodeRole = "answer" | "task-group" | "task";
+
+export type AuxoNutrientChunk = {
+  nutrientId: string;
+  nutrientName: string;
+  chunkId: string;
+  offset: number;
+  text: string;
+};
+
+export type AuxoRequest = {
+  rootTask: string;
+  nutrientChunks: AuxoNutrientChunk[];
+  sourceUnits: AuxoSourceUnit[];
+};
+
+export type AuxoSourceReference =
+  | {
+      kind: "root";
+      unitId: string;
+      exactQuote: string;
+      offset: number;
+      order: number;
+    }
+  | {
+      kind: "nutrient";
+      unitId: string;
+      nutrientId: string;
+      nutrientName: string;
+      exactQuote: string;
+      offset: number;
+      order: number;
+    };
+
+export type AuxoSourceUnit =
+  | {
+      unitId: string;
+      kind: "root";
+      text: string;
+      offset: number;
+      order: number;
+    }
+  | {
+      unitId: string;
+      kind: "nutrient";
+      nutrientId: string;
+      nutrientName: string;
+      text: string;
+      offset: number;
+      order: number;
+    };
+
+export type AuxoPlanNode = {
+  planId: string;
+  parentPlanId: "root" | string;
+  nodeRole: "task-group" | "task";
+  title: string;
+  order: number;
+  sourceUnitId?: string;
+  source?: AuxoSourceReference;
+};
+
+export type AuxoPlan = {
+  version: 1;
+  generatedAt: number;
+  model: string;
+  nodes: AuxoPlanNode[];
+};
+
+export type AuxoGenerationManifest = {
+  version: 1;
+  generationId: string;
+  generatedAt: number;
+  model: string;
+  rootNodeId: string;
+  nodeCount: number;
+  inputFingerprint: string;
+  nutrientChunks: Array<{
+    nutrientId: string;
+    nutrientName: string;
+    chunkId: string;
+  }>;
+};
+
 export type SemanticCard = {
   version: 1;
   generatedAt: number;
@@ -49,6 +133,11 @@ export type MindNode = {
   semanticCard?: SemanticCard;
   contextManifest?: ContextManifest;
   includeInContext?: boolean;
+  nodeRole?: NodeRole;
+  taskDescription?: string;
+  auxoGenerationId?: string;
+  auxoSource?: AuxoSourceReference;
+  auxoManifest?: AuxoGenerationManifest;
 };
 
 export type NodesMap = Record<string, MindNode>;
@@ -104,6 +193,7 @@ export type HistoryEntry = {
   timestamp: number;
   primaryNodeId: string;
   affectedNodeIds: string[];
+  nodeUndoable?: boolean;
   patch: HistoryPatch;
 };
 
@@ -197,6 +287,15 @@ export type TreeAction =
   | { type: "SET_NODE_OFFSET"; nodeId: string; offsetX: number; offsetY: number }
   | { type: "RENAME_PROJECT"; projectId: string; name: string }
   | { type: "DELETE_PROJECT"; projectId: string }
+  | {
+      type: "APPLY_AUXO_PLAN";
+      projectId: string;
+      rootNodeId: string;
+      generationId: string;
+      inputFingerprint: string;
+      nutrientRefs: string[];
+      plan: AuxoPlan;
+    }
   | { type: "ADD_NUTRIENTS"; projectId: string; nutrients: NutrientItem[] }
   | { type: "REMOVE_NUTRIENT"; nutrientId: string }
   | { type: "TOGGLE_NUTRIENT_ACTIVE"; nutrientId: string };

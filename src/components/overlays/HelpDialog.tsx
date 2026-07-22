@@ -1,6 +1,6 @@
 "use client";
 
-import { HelpCircle, GitBranch, StickyNote, Scissors, Trash2, Sun, LayoutGrid, History, Download, Trees, Plus, Search } from "lucide-react";
+import { HelpCircle, GitBranch, StickyNote, Scissors, Trash2, Sun, LayoutGrid, History, Download, Trees, Plus, Search, Sparkles } from "lucide-react";
 
 const helpItems = [
   {
@@ -12,6 +12,11 @@ const helpItems = [
     icon: <Plus size={16} />,
     label: "Seed · 播种",
     desc: "创建新项目，种下一棵新的思维之树。",
+  },
+  {
+    icon: <Sparkles size={16} />,
+    label: "Auxo · 任务树",
+    desc: "选中空白根节点后，从根任务和全部启用的 Nutrient 一次生成经校验的任务骨架。带编号题目按原文逐项保留；Auxo 只规划、不批量作答，整批可在全局 Rings 中一次撤销。",
   },
   {
     icon: <GitBranch size={16} />,
@@ -46,7 +51,7 @@ const helpItems = [
   {
     icon: <History size={16} />,
     label: "Rings · 年轮",
-    desc: "打开操作历史面板，支持撤销 (Undo) 和重做 (Redo)。最多保留 50 步历史。",
+    desc: "打开工作区级操作历史，按时间顺序撤销 (Undo) / 重做 (Redo)，可跨项目生效，最多保留 50 步。节点年轮只显示当前节点可安全撤销的操作。",
   },
   {
     icon: <Download size={16} />,

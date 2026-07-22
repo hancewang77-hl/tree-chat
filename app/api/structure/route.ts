@@ -1,7 +1,11 @@
 import OpenAI from "openai";
+import type { ChatCompletionCreateParamsNonStreaming } from "openai/resources/chat/completions";
 import { parseSemanticCard } from "@/src/lib/semanticCard";
+import {
+  DEEPSEEK_MODEL,
+  DEEPSEEK_NON_THINKING,
+} from "@/src/lib/deepseek";
 
-const MODEL = "deepseek-chat";
 const MAX_SOURCE_CHARS = 50_000;
 const RATE_LIMIT = 30;
 const RATE_WINDOW = 60_000;
@@ -81,8 +85,10 @@ export async function POST(req: Request) {
       apiKey,
       baseURL: "https://api.deepseek.com",
     });
-    const completion = await client.chat.completions.create({
-      model: MODEL,
+    const completionRequest: ChatCompletionCreateParamsNonStreaming & {
+      thinking: { type: "disabled" };
+    } = {
+      model: DEEPSEEK_MODEL,
       messages: [
         { role: "system", content: STRUCTURE_SYSTEM_PROMPT },
         {
@@ -92,14 +98,16 @@ export async function POST(req: Request) {
       ],
       response_format: { type: "json_object" },
       stream: false,
+      thinking: DEEPSEEK_NON_THINKING,
       temperature: 0.1,
       max_tokens: 1_200,
-    });
+    };
+    const completion = await client.chat.completions.create(completionRequest);
 
     const content = completion.choices[0]?.message?.content ?? "";
     const semanticCard = parseSemanticCard(content, {
       generatedAt: Date.now(),
-      model: completion.model || MODEL,
+      model: completion.model || DEEPSEEK_MODEL,
     });
 
     return Response.json({ semanticCard });

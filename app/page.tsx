@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getContextPath } from "@/hooks/useTreeLayout";
 import { useAIChat } from "@/hooks/useAIChat";
+import { useAuxo } from "@/hooks/useAuxo";
 import { compileContext } from "@/src/lib/contextCompiler";
+import { compileAuxoInput } from "@/src/lib/auxo";
+import { DEEPSEEK_MODEL } from "@/src/lib/deepseek";
 import { clamp } from "@/src/lib/utils";
 import { TreeProvider, useTreeState, useTreeDispatch } from "@/src/state/TreeContext";
 import { TreeScene } from "@/src/components/scene/TreeScene";
@@ -18,13 +21,20 @@ import { SearchPalette } from "@/src/components/overlays/SearchPalette";
 import { CanopyMinimap } from "@/src/components/overlays/CanopyMinimap";
 import { RingsPanel } from "@/src/components/overlays/RingsPanel";
 import { LayerNameDialog } from "@/src/components/LayerNameDialog";
+import { AuxoDialog } from "@/src/components/overlays/AuxoDialog";
 
-const CHAT_MODEL = "deepseek-chat";
+const CHAT_MODEL = DEEPSEEK_MODEL;
 
 function App() {
   const state = useTreeState();
   const dispatch = useTreeDispatch();
   const { isAiTyping, isTypingRef, sendMessage, structureNode, stopStreaming } = useAIChat();
+  const {
+    generatePlan: generateAuxoPlan,
+    isGenerating: isAuxoGenerating,
+    isGeneratingRef: isAuxoGeneratingRef,
+    cancel: cancelAuxo,
+  } = useAuxo();
 
   const activeProject = state.projects[state.activeProjectId];
   const nodes = useMemo(() => activeProject?.nodes ?? {}, [activeProject]);
@@ -35,6 +45,8 @@ function App() {
   const structuringNodeIdsRef = useRef<Set<string>>(new Set());
   const [renameLayer, setRenameLayer] = useState<number | null>(null);
   const [planeNameInput, setPlaneNameInput] = useState("");
+  const [isAuxoOpen, setIsAuxoOpen] = useState(false);
+  const [auxoError, setAuxoError] = useState<string | null>(null);
 
   // Refs for latest values used in callbacks — avoids stale closures
   const nodesRef = useRef(nodes);
@@ -316,6 +328,76 @@ function App() {
     }
   }, [dispatch]);
 
+  const handleOpenAuxo = useCallback(() => {
+    const currentState = stateRef.current;
+    const project = currentState.projects[currentState.activeProjectId];
+    const root = project?.nodes[project.rootNodeId];
+    if (!project || !root || currentState.selectedNodeId !== root.id) return;
+    if (root.children.length > 0) {
+      setError("Auxo 仅用于空白根任务。请新建项目，或先撤销/修剪现有分支。");
+      return;
+    }
+    setAuxoError(null);
+    setIsAuxoOpen(true);
+  }, []);
+
+  const handleCancelAuxo = useCallback(() => {
+    if (isAuxoGeneratingRef.current) cancelAuxo();
+    setIsAuxoOpen(false);
+  }, [cancelAuxo, isAuxoGeneratingRef]);
+
+  const handleGenerateAuxo = useCallback(async () => {
+    if (isAuxoGeneratingRef.current) return;
+    setAuxoError(null);
+
+    const startingState = stateRef.current;
+    const project = startingState.projects[startingState.activeProjectId];
+    const root = project?.nodes[project.rootNodeId];
+    if (!project || !root || startingState.selectedNodeId !== root.id) {
+      setAuxoError("请先选中当前项目的根节点。");
+      return;
+    }
+    if (root.children.length > 0) {
+      setAuxoError("根节点已有内容。为防止重复或覆盖，Auxo 本次不会创建节点。");
+      return;
+    }
+
+    try {
+      const input = compileAuxoInput(project);
+      const plan = await generateAuxoPlan(input.request);
+
+      const latestState = stateRef.current;
+      const latestProject = latestState.projects[project.id];
+      const latestRoot = latestProject?.nodes[root.id];
+      if (!latestProject || !latestRoot || latestProject.rootNodeId !== root.id) {
+        throw new Error("请求期间目标项目已被删除或根节点已变化，本次没有创建节点。");
+      }
+      if (latestRoot.children.length > 0) {
+        throw new Error("请求期间根节点已产生新内容，本次没有合并 Auxo 计划。");
+      }
+      const latestInput = compileAuxoInput(latestProject);
+      if (latestInput.inputFingerprint !== input.inputFingerprint) {
+        throw new Error("请求期间根任务或启用资料发生变化，请重新运行 Auxo。");
+      }
+
+      dispatch({
+        type: "APPLY_AUXO_PLAN",
+        projectId: project.id,
+        rootNodeId: root.id,
+        generationId: `auxo-run-${crypto.randomUUID()}`,
+        inputFingerprint: input.inputFingerprint,
+        nutrientRefs: input.nutrientRefs,
+        plan,
+      });
+      setIsAuxoOpen(false);
+    } catch (auxoFailure) {
+      const message = auxoFailure instanceof Error
+        ? auxoFailure.message
+        : "Auxo 生成失败，本次没有创建任何节点。";
+      setAuxoError(message);
+    }
+  }, [dispatch, generateAuxoPlan, isAuxoGeneratingRef]);
+
   const zoom = state.is3DMode ? state.zoom3D : state.zoom2D;
 
   if (isEmpty) {
@@ -369,7 +451,10 @@ function App() {
             onOpenNodeRings={(nodeId) => dispatch({ type: "OPEN_NODE_RINGS", nodeId })}
           />
 
-          <TreeToolbar />
+          <TreeToolbar
+            onOpenAuxo={handleOpenAuxo}
+            isAuxoGenerating={isAuxoGenerating}
+          />
 
           <ZoomControls
             zoom={zoom}
@@ -399,6 +484,25 @@ function App() {
 
       <SearchPalette />
       <RingsPanel />
+      {isAuxoOpen && activeProject && (
+        <AuxoDialog
+          rootTask={activeProject.nodes[activeProject.rootNodeId]?.prompt ?? activeProject.name}
+          nutrients={activeProject.activeNutrientIds.flatMap((nutrientId) => {
+            const nutrient = activeProject.nutrients[nutrientId];
+            return nutrient
+              ? [{
+                  id: nutrient.id,
+                  name: nutrient.name,
+                  extractedCharCount: nutrient.extractedCharCount,
+                }]
+              : [];
+          })}
+          isGenerating={isAuxoGenerating}
+          error={auxoError}
+          onGenerate={handleGenerateAuxo}
+          onCancel={handleCancelAuxo}
+        />
+      )}
       {renameLayer !== null && (
         <LayerNameDialog
           isOpen={true}

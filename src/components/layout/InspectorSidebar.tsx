@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { GitBranch, MessageSquare, RefreshCw, StickyNote, Trash2, Sun } from "lucide-react";
+import { GitBranch, MessageSquare, RefreshCw, StickyNote, Trash2, Sun, Sparkles } from "lucide-react";
 import type { MindNode, NodesMap, SemanticCard } from "@/src/types/tree";
 import { useTreeState, useTreeDispatch } from "@/src/state/TreeContext";
 import { renderMarkdownToHTML } from "@/src/lib/formatResponse";
@@ -27,6 +27,7 @@ export function InspectorSidebar({
   const activeProject = state.projects[state.activeProjectId];
   const selectedNode = activeProject?.nodes[state.selectedNodeId];
   const isRoot = selectedNode?.id === activeProject?.rootNodeId;
+  const isAuxoTask = selectedNode?.nodeRole === "task" || selectedNode?.nodeRole === "task-group";
   const isStructuring = selectedNode ? structuringNodeIds.has(selectedNode.id) : false;
 
   useEffect(() => {
@@ -104,9 +105,17 @@ export function InspectorSidebar({
                   color: selectedNode.kind === "leaf" ? "var(--accent-sage)" : "var(--text-muted)",
                 }}
               >
-                {selectedNode.kind === "leaf" ? <StickyNote size={10} /> : <GitBranch size={10} />}
+                {selectedNode.kind === "leaf"
+                  ? <StickyNote size={10} />
+                  : isAuxoTask
+                    ? <Sparkles size={10} />
+                    : <GitBranch size={10} />}
                 {selectedNode.kind === "leaf"
                   ? "Leaf · 笔记"
+                  : selectedNode.nodeRole === "task-group"
+                    ? "Auxo · 任务组"
+                    : selectedNode.nodeRole === "task"
+                      ? "Auxo · 原子任务"
                   : selectedNode.kind === "root"
                     ? "Root · 根任务"
                     : "Branch · 回答"}
@@ -133,6 +142,28 @@ export function InspectorSidebar({
                 }}
               >
                 {selectedNode.error || "生成失败，请检查网络连接和 API 配置后重试。"}
+              </div>
+            ) : isAuxoTask ? (
+              <div
+                className="rounded-lg border px-3 py-2.5"
+                style={{
+                  background: "rgba(116, 122, 85, 0.08)",
+                  borderColor: "rgba(116, 122, 85, 0.22)",
+                }}
+              >
+                <div className="mb-1.5 flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-semibold" style={{ color: "var(--accent-sage)" }}>
+                    待执行
+                  </span>
+                  {selectedNode.auxoSource && (
+                    <span className="text-[9px]" style={{ color: "var(--text-muted)" }}>
+                      已核验原文
+                    </span>
+                  )}
+                </div>
+                <p className="whitespace-pre-wrap text-[12px] leading-relaxed" style={{ color: "var(--text-charcoal)" }}>
+                  {selectedNode.taskDescription || "选中该任务后，从下方输入问题逐项执行。"}
+                </p>
               </div>
             ) : selectedNode.kind === "leaf" ? (
               <div
@@ -212,6 +243,7 @@ export function InspectorSidebar({
         {currentPath.map((node) => {
           const isSelected = node.id === state.selectedNodeId;
           const isLeafNote = node.kind === "leaf";
+          const isAuxoPathNode = node.nodeRole === "task" || node.nodeRole === "task-group";
 
           return (
             <button
@@ -235,8 +267,18 @@ export function InspectorSidebar({
                     color: isSelected ? "#FBF7F0" : "var(--text-muted)",
                   }}
                 >
-                  {isLeafNote ? <StickyNote size={10} /> : <GitBranch size={10} />}
-                  {isLeafNote ? "笔记" : "AI"}
+                  {isLeafNote
+                    ? <StickyNote size={10} />
+                    : isAuxoPathNode
+                      ? <Sparkles size={10} />
+                      : <GitBranch size={10} />}
+                  {isLeafNote
+                    ? "笔记"
+                    : node.nodeRole === "task-group"
+                      ? "任务组"
+                      : node.nodeRole === "task"
+                        ? "任务"
+                        : "AI"}
                 </span>
                 <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
                   z={node.layer}
@@ -350,6 +392,7 @@ function NodeContextPanel({
 
   const canRetry =
     node.kind === "branch" &&
+    (node.nodeRole ?? "answer") === "answer" &&
     node.contextState === "missing" &&
     node.status === "complete" &&
     Boolean(node.response.trim());
@@ -397,6 +440,8 @@ function NodeContextPanel({
             {node.contextState === "valid"
               ? node.kind === "root"
                 ? "后续追问读取根任务原文，根节点无需调用模型整理。"
+                : node.nodeRole === "task" || node.nodeRole === "task-group"
+                  ? "后续追问直接读取经 Auxo 校验的任务原文与规划说明；不会把它误当成已完成答案。"
                 : "后续追问只读取下方语义卡片，不重复拼接完整回答。"
               : node.contextState === "stale"
                 ? "节点已被嫁接到新路径；原回答保留，但旧语义不再进入模型。"
@@ -451,6 +496,24 @@ function NodeContextPanel({
               )}
             </details>
           )}
+
+          {node.auxoManifest && (
+            <details className="mt-2 text-[10px]" style={{ color: "var(--text-muted)" }}>
+              <summary className="cursor-pointer select-none">
+                Auxo 清单 · {node.auxoManifest.nodeCount} 节点 / {node.auxoManifest.nutrientChunks.length} 资料片段
+              </summary>
+              <p className="mt-1 break-all leading-relaxed">
+                Auxo v{node.auxoManifest.version} · {node.auxoManifest.model}
+              </p>
+              {node.auxoManifest.nutrientChunks.length > 0 && (
+                <p className="mt-1 break-all leading-relaxed">
+                  资料：{node.auxoManifest.nutrientChunks
+                    .map((chunk) => `${chunk.nutrientName}#${chunk.chunkId}`)
+                    .join("、")}
+                </p>
+              )}
+            </details>
+          )}
         </>
       )}
     </div>
@@ -471,7 +534,13 @@ function formatNodeLabel(nodeId: string, nodes: NodesMap): string {
   const siblingIndex = parent ? parent.children.indexOf(nodeId) : -1;
   const pos = siblingIndex >= 0 ? `#${siblingIndex + 1}` : "#?";
 
-  const kind = node.kind === "leaf" ? "笔记" : "分支";
+  const kind = node.kind === "leaf"
+    ? "笔记"
+    : node.nodeRole === "task-group"
+      ? "任务组"
+      : node.nodeRole === "task"
+        ? "任务"
+        : "分支";
   return `z${node.layer} ${kind}${pos}`;
 }
 
@@ -508,6 +577,7 @@ function SemanticCardDetails({ card }: { card: SemanticCard }) {
 
 function contextStateLabel(node: MindNode): string {
   if (node.kind === "leaf") return node.includeInContext ? "已纳入" : "默认隔离";
+  if (node.nodeRole === "task" || node.nodeRole === "task-group") return "源任务";
   if (node.contextState === "valid") return "有效";
   if (node.contextState === "stale") return "已失效";
   return "待整理";
