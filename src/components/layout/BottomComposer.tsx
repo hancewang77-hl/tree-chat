@@ -4,12 +4,12 @@ import { useState, useEffect, useRef } from "react";
 import { Send, GitBranch, StickyNote, Paperclip, X } from "lucide-react";
 import { useTreeDispatch, useTreeState } from "@/src/state/TreeContext";
 import { extractNutrientFromFile } from "@/src/lib/nutrients";
+import { MAX_NUTRIENT_FILE_BYTES } from "@/src/lib/nutrientMarkdown";
 import { deleteNutrientBlob, saveNutrientBlob } from "@/src/lib/nutrientStorage";
 
 type ComposerMode = "ai" | "note";
 
 const MAX_NUTRIENT_FILES = 3;
-const MAX_NUTRIENT_BYTES = 10 * 1024 * 1024;
 
 const SEED_PARTICLES = [
   { angle: 0, dist: 22 },
@@ -45,6 +45,8 @@ export function BottomComposer({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   const nutrients = Object.values(activeProject?.nutrients ?? {}).sort(
     (a, b) => b.createdAt - a.createdAt,
@@ -72,7 +74,7 @@ export function BottomComposer({
 
   function handleSubmit() {
     if (!text.trim()) return;
-    if (mode === "ai" && (isAiTyping || isContextPreparing)) return;
+    if (mode === "ai" && (isAiTyping || isContextPreparing || isUploading)) return;
     // Seed burst animation
     setBurst(true);
     setTimeout(() => setBurst(false), 500);
@@ -86,27 +88,49 @@ export function BottomComposer({
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
+    const targetProjectId = activeProject?.id;
+    if (!targetProjectId) {
+      setUploadError("请先创建一棵树，再加入 Nutrient 文件。");
+      return;
+    }
     setUploadError(null);
     setIsUploading(true);
 
     try {
+      const errors: string[] = [];
       const accepted = Array.from(files).slice(0, MAX_NUTRIENT_FILES);
-      const oversized = accepted.find((file) => file.size > MAX_NUTRIENT_BYTES);
-      if (oversized) {
-        setUploadError(`${oversized.name} 超过 10MB，未加入养分上下文`);
+      if (files.length > MAX_NUTRIENT_FILES) {
+        errors.push(`一次最多处理 ${MAX_NUTRIENT_FILES} 个文件，其余文件未加入`);
+      }
+      for (const oversized of accepted.filter((file) => file.size > MAX_NUTRIENT_FILE_BYTES)) {
+        errors.push(`${oversized.name} 超过 10MB，未加入养分上下文`);
       }
 
       const items = [];
       for (const file of accepted) {
-        if (file.size > MAX_NUTRIENT_BYTES) continue;
+        if (file.size > MAX_NUTRIENT_FILE_BYTES) continue;
         const item = await extractNutrientFromFile(file);
         const blobKey = await saveNutrientBlob(item.id, file).catch(() => undefined);
         items.push({ ...item, blobKey });
+        if (!blobKey) {
+          errors.push(`${item.name}：原文件未能持久化到本机，但转换结果仍可用于当前项目`);
+        }
+        if (item.extractionStatus !== "ready") {
+          errors.push(`${item.name}：${item.excerpt}`);
+        }
       }
 
       if (items.length > 0) {
-        dispatch({ type: "ADD_NUTRIENTS", nutrients: items });
+        if (!stateRef.current.projects[targetProjectId]) {
+          await Promise.all(
+            items.map((item) => deleteNutrientBlob(item.blobKey).catch(() => undefined)),
+          );
+          errors.push("开始上传时的项目已被删除，文件未加入任何项目");
+        } else {
+          dispatch({ type: "ADD_NUTRIENTS", projectId: targetProjectId, nutrients: items });
+        }
       }
+      setUploadError(errors.length > 0 ? errors.join("；") : null);
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -118,9 +142,13 @@ export function BottomComposer({
       ? "AI 正在生成回答，可点击停止..."
       : mode === "ai" && isContextPreparing
         ? "正在整理当前节点的模型上下文，请稍候..."
+      : mode === "ai" && isUploading
+        ? "正在本地转换附件为 Markdown，完成后才能发送..."
       : mode === "ai"
       ? `在 z = ${state.selectedLayer} 层继续延伸你的思考... (Enter 发送)`
       : "记录一个想法或笔记... (Enter 保存)";
+  const isAiSubmitBlocked = mode === "ai" && (isContextPreparing || isUploading);
+  const hasActionableText = Boolean(text.trim()) && !isAiSubmitBlocked;
 
   return (
     <div
@@ -194,8 +222,13 @@ export function BottomComposer({
 
       {/* Main composer body */}
       <div className="px-4 pb-3 pt-0.5">
-        {(nutrients.length > 0 || uploadError) && (
+        {(nutrients.length > 0 || uploadError || isUploading) && (
           <div className="mb-2 flex flex-wrap items-center gap-1.5">
+            {isUploading && (
+              <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                正在本地转换为 Markdown…
+              </span>
+            )}
             {nutrients.map((nutrient) => {
               const isActive = activeNutrients.has(nutrient.id);
               const isReady = nutrient.extractionStatus === "ready";
@@ -219,7 +252,11 @@ export function BottomComposer({
                     {isActive ? "●" : "○"} {nutrient.name}
                   </button>
                   <span style={{ color: "var(--text-muted)" }}>
-                    {isReady ? `${nutrient.extractedCharCount}字` : "仅附件"}
+                    {isReady
+                      ? `MD · ${nutrient.extractedCharCount}字`
+                      : nutrient.extractionStatus === "failed"
+                        ? "转换失败"
+                        : "不支持"}
                   </span>
                   <button
                     type="button"
@@ -296,7 +333,7 @@ export function BottomComposer({
               background: "var(--accent-olive-soft)",
               color: "var(--accent-olive-deep)",
             }}
-            title="Nutrients · 养分"
+            title="Nutrients · 正文在浏览器内转为 Markdown，并尝试将原文件保存在本机"
           >
             <Paperclip size={13} />
             <span className="hidden lg:inline">{isUploading ? "提取中" : "养分"}</span>
@@ -336,23 +373,26 @@ export function BottomComposer({
           {/* Send — seed-shaped button with burst effect */}
           <button
             onClick={mode === "ai" && isAiTyping ? onStop : handleSubmit}
-            disabled={mode === "ai" && isContextPreparing || (!(mode === "ai" && isAiTyping) && !text.trim())}
+            disabled={
+              (!(mode === "ai" && isAiTyping) && isAiSubmitBlocked) ||
+              (!(mode === "ai" && isAiTyping) && !text.trim())
+            }
             className="flex h-10 w-10 shrink-0 items-center justify-center transition-all relative"
             style={{
               background: mode === "ai" && isAiTyping
                 ? "var(--accent-bark)"
-                : text.trim()
+                : hasActionableText
                 ? "var(--accent-sage)"
                 : "var(--accent-olive-soft)",
-              color: mode === "ai" && isAiTyping || text.trim() ? "#FBF7F0" : "var(--accent-olive-deep)",
+              color: mode === "ai" && isAiTyping || hasActionableText ? "#FBF7F0" : "var(--accent-olive-deep)",
               border: `1px solid ${
-                mode === "ai" && isAiTyping || text.trim()
+                mode === "ai" && isAiTyping || hasActionableText
                   ? "rgba(86, 91, 61, 0.42)"
                   : "rgba(116, 122, 85, 0.24)"
               }`,
               borderRadius: "60% 40% 50% 50% / 55% 45% 55% 45%",
-              transform: mode === "ai" && isAiTyping || text.trim() ? "scale(1.05)" : "scale(1)",
-              boxShadow: mode === "ai" && isAiTyping || text.trim()
+              transform: mode === "ai" && isAiTyping || hasActionableText ? "scale(1.05)" : "scale(1)",
+              boxShadow: mode === "ai" && isAiTyping || hasActionableText
                 ? "0 2px 8px rgba(86, 91, 61, 0.28)"
                 : "none",
             }}
@@ -360,6 +400,8 @@ export function BottomComposer({
               ? "停止生成"
               : mode === "ai" && isContextPreparing
                 ? "模型上下文整理中"
+                : mode === "ai" && isUploading
+                  ? "附件正在转换为 Markdown"
                 : mode === "ai"
                   ? "播种 · Plant"
                   : "保存 · Keep"}
@@ -369,7 +411,7 @@ export function BottomComposer({
             ) : (
               <Send size={14} style={{ transform: "rotate(-8deg)" }} />
             )}
-            {text.trim() && !(mode === "ai" && isAiTyping) && (
+            {hasActionableText && !(mode === "ai" && isAiTyping) && (
               <span
                 className="absolute -top-1.5 -right-1"
                 style={{ fontSize: 10, lineHeight: 1 }}

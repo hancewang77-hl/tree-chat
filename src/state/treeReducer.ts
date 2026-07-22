@@ -1206,7 +1206,7 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
 
     case "ADD_NUTRIENTS": {
       if (action.nutrients.length === 0) return state;
-      const next = updateActiveProject(state, (project) => {
+      const next = updateProjectById(state, action.projectId, (project) => {
         const nutrients = { ...project.nutrients };
         const active = new Set(project.activeNutrientIds);
         for (const nutrient of action.nutrients) {

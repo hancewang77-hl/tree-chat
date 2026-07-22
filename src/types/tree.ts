@@ -197,6 +197,6 @@ export type TreeAction =
   | { type: "SET_NODE_OFFSET"; nodeId: string; offsetX: number; offsetY: number }
   | { type: "RENAME_PROJECT"; projectId: string; name: string }
   | { type: "DELETE_PROJECT"; projectId: string }
-  | { type: "ADD_NUTRIENTS"; nutrients: NutrientItem[] }
+  | { type: "ADD_NUTRIENTS"; projectId: string; nutrients: NutrientItem[] }
   | { type: "REMOVE_NUTRIENT"; nutrientId: string }
   | { type: "TOGGLE_NUTRIENT_ACTIVE"; nutrientId: string };

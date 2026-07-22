@@ -206,7 +206,11 @@ describe("treeReducer product functions", () => {
       extractedCharCount: 57,
     };
 
-    let state = treeReducer(baseState(), { type: "ADD_NUTRIENTS", nutrients: [nutrient] });
+    let state = treeReducer(baseState(), {
+      type: "ADD_NUTRIENTS",
+      projectId: "project",
+      nutrients: [nutrient],
+    });
 
     expect(state.projects.project.activeNutrientIds).toEqual(["nutrient-1"]);
 
@@ -219,6 +223,40 @@ describe("treeReducer product functions", () => {
 
     const branch = findNodeByPrompt(state, "What should we build?");
     expect(branch?.nutrientRefs).toEqual(["nutrient-1"]);
+  });
+
+  test("async nutrient results stay with the project where ingestion started", () => {
+    const initial = baseState();
+    initial.projects.other = {
+      ...initial.projects.project,
+      id: "other",
+      name: "Other",
+      nutrients: {},
+      activeNutrientIds: [],
+    };
+    initial.activeProjectId = "other";
+    const nutrient: NutrientItem = {
+      id: "nutrient-delayed",
+      name: "source.docx",
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      size: 128,
+      kind: "document",
+      createdAt: 2,
+      extractionStatus: "ready",
+      extractedText: "# Delayed result",
+      excerpt: "Delayed result",
+      extractedCharCount: 16,
+    };
+
+    const state = treeReducer(initial, {
+      type: "ADD_NUTRIENTS",
+      projectId: "project",
+      nutrients: [nutrient],
+    });
+
+    expect(state.projects.project.nutrients["nutrient-delayed"]).toEqual(nutrient);
+    expect(state.projects.other.nutrients["nutrient-delayed"]).toBeUndefined();
+    expect(state.activeProjectId).toBe("other");
   });
 
   test("streaming branch starts selected before any response arrives", () => {

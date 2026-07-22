@@ -72,7 +72,9 @@ src/
 ├── lib/
 │   ├── contextCompiler.ts      # Tree-aware bounded model context
 │   ├── semanticCard.ts         # Semantic-card parsing and validation
-│   ├── nutrients.ts            # File extraction, chunking, relevance selection
+│   ├── nutrientMarkdown.ts     # Browser-side DOCX/PDF/HTML/text → Markdown conversion
+│   ├── nutrients.ts            # Nutrient ingestion, structure-aware chunking, relevance selection
+│   ├── nutrientStorage.ts      # IndexedDB storage for original local attachments
 │   ├── storage.ts              # localStorage load/save helpers
 │   ├── utils.ts                # clamp, truncateText, roundRect, drawWrappedText
 │   └── formatResponse.ts       # Markdown conversion for cards and Inspector
@@ -208,7 +210,7 @@ All state is managed by `treeReducer` via `TreeContext`. No useState for tree da
 | Rings    | `TOGGLE_RINGS` / `UNDO` / `REDO` | Global and node-specific patch undo/redo            |
 | Harvest  | (in AppHeader)                   | Export as Markdown or JSON                          |
 | Forest   | `SWITCH_PROJECT`                 | Change active project                               |
-| Nutrient | nutrient actions                 | Add, remove, and enable local reference files       |
+| Nutrient | nutrient actions                 | Convert, add, remove, and enable local references   |
 
 ### Response formatting pipeline
 
