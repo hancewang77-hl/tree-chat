@@ -1,6 +1,10 @@
 import OpenAI from "openai";
-import type { ChatCompletionCreateParamsNonStreaming } from "openai/resources/chat/completions";
-import { DEEPSEEK_NON_THINKING } from "@/src/lib/deepseek";
+import {
+  DEEPSEEK_NON_THINKING,
+  deepSeekClientOptions,
+  type DeepSeekChatParamsNonStreaming,
+} from "@/src/lib/deepseek";
+import { createRateLimiter, getClientIp } from "@/src/lib/rateLimit";
 import {
   AUXO_MAX_BODY_BYTES,
   AUXO_MAX_DEPTH,
@@ -14,7 +18,10 @@ import {
 const RATE_LIMIT = 6;
 const RATE_WINDOW = 60_000;
 const REQUEST_TIMEOUT = 45_000;
-const rateMap = new Map<string, { count: number; resetAt: number }>();
+const auxoRateLimiter = createRateLimiter({
+  limit: RATE_LIMIT,
+  windowMs: RATE_WINDOW,
+});
 
 const AUXO_SYSTEM_PROMPT = `
 你是「智构树语」的 Auxo 任务规划器。你的唯一职责是把根任务和参考资料拆成一棵可执行的任务树；不得回答、求解或完成任何任务。
@@ -92,7 +99,7 @@ export async function POST(req: Request) {
     return json({ error: "DEEPSEEK_API_KEY 未配置" }, 500);
   }
 
-  const client = new OpenAI({ apiKey, baseURL: "https://api.deepseek.com" });
+  const client = new OpenAI(deepSeekClientOptions(apiKey));
   const controller = new AbortController();
   let didTimeout = false;
   const handleClientAbort = () => controller.abort();
@@ -105,9 +112,7 @@ export async function POST(req: Request) {
   let content = "";
   let model = AUXO_MODEL;
   try {
-    const completionRequest: ChatCompletionCreateParamsNonStreaming & {
-      thinking: { type: "disabled" };
-    } = {
+    const completionRequest: DeepSeekChatParamsNonStreaming = {
       model: AUXO_MODEL,
       messages: [
         { role: "system", content: AUXO_SYSTEM_PROMPT },
@@ -161,21 +166,9 @@ export async function POST(req: Request) {
 }
 
 function checkRateLimit(req: Request): Response | null {
-  const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    req.headers.get("x-real-ip") ||
-    "unknown";
-  const now = Date.now();
-  const entry = rateMap.get(ip);
-  if (entry && now < entry.resetAt) {
-    if (entry.count >= RATE_LIMIT) {
-      return json({ error: "Auxo 请求过于频繁，请稍后再试" }, 429);
-    }
-    entry.count += 1;
-  } else {
-    rateMap.set(ip, { count: 1, resetAt: now + RATE_WINDOW });
+  if (!auxoRateLimiter.check(getClientIp(req)).allowed) {
+    return json({ error: "Auxo 请求过于频繁，请稍后再试" }, 429);
   }
-  if (rateMap.size > 10_000) rateMap.clear();
   return null;
 }
 

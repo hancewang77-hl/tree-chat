@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { GitBranch, StickyNote, Scissors, Trash2, Sun, Sparkles } from "lucide-react";
 import { useTreeState, useTreeDispatch } from "@/src/state/TreeContext";
-import { ConfirmDialog } from "@/src/components/overlays/ConfirmDialog";
+import { usePruneConfirm } from "@/src/components/overlays/ConfirmDialog";
 
 type ToolButton = {
   id: string;
@@ -26,23 +26,13 @@ export function TreeToolbar({
 }) {
   const state = useTreeState();
   const dispatch = useTreeDispatch();
-  const [showPruneConfirm, setShowPruneConfirm] = useState(false);
   const [composerMode, setComposerMode] = useState<ComposerMode>("ai");
 
   const activeProject = state.projects[state.activeProjectId];
   const selectedNode = activeProject?.nodes[state.selectedNodeId];
   const isRoot = selectedNode?.id === activeProject?.rootNodeId;
   const hasRootChildren = Boolean(isRoot && selectedNode && selectedNode.children.length > 0);
-
-  function handlePruneClick() {
-    if (isRoot || !selectedNode) return;
-    setShowPruneConfirm(true);
-  }
-
-  function handlePruneConfirm() {
-    dispatch({ type: "PRUNE", nodeId: state.selectedNodeId });
-    setShowPruneConfirm(false);
-  }
+  const { requestPrune, pruneConfirmDialog } = usePruneConfirm({ selectedNode, isRoot });
 
   useEffect(() => {
     const handleMode = (event: Event) => {
@@ -113,7 +103,7 @@ export function TreeToolbar({
       label: "修剪",
       title: "Prune — 删除选中节点及子树",
       disabled: isRoot,
-      onClick: handlePruneClick,
+      onClick: requestPrune,
     },
     {
       id: "sunlight",
@@ -177,17 +167,7 @@ export function TreeToolbar({
         </div>
       </div>
 
-      {showPruneConfirm && selectedNode && (
-        <ConfirmDialog
-          title="修剪分支 · Prune"
-          message={`确定要删除「${selectedNode.prompt.slice(0, 40)}」${
-            selectedNode.children.length > 0 ? `及其 ${selectedNode.children.length} 个子节点` : ""
-          }吗？此操作可通过 Rings 撤销。`}
-          confirmLabel="确认删除"
-          onConfirm={handlePruneConfirm}
-          onCancel={() => setShowPruneConfirm(false)}
-        />
-      )}
+      {pruneConfirmDialog}
     </>
   );
 }

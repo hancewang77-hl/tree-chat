@@ -1,27 +1,25 @@
 import OpenAI from "openai";
-import type {
-  ChatCompletionCreateParamsNonStreaming,
-  ChatCompletionCreateParamsStreaming,
-} from "openai/resources/chat/completions";
 import {
   DEEPSEEK_MODEL,
   DEEPSEEK_NON_THINKING,
+  deepSeekClientOptions,
+  type DeepSeekChatParamsNonStreaming,
+  type DeepSeekChatParamsStreaming,
 } from "@/src/lib/deepseek";
-import { createRateLimiter } from "@/src/lib/rateLimit";
+import { createRateLimiter, getClientIp } from "@/src/lib/rateLimit";
 
 const RATE_LIMIT = 30;
 const RATE_WINDOW = 60_000;
-export const chatRateLimiter = createRateLimiter({
+const MAX_TOKENS = 2048;
+
+// 路由文件只导出 handler；限流器为模块内状态
+const chatRateLimiter = createRateLimiter({
   limit: RATE_LIMIT,
   windowMs: RATE_WINDOW,
 });
 
 export async function POST(req: Request) {
-  const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    req.headers.get("x-real-ip") ||
-    "unknown";
-  const rateLimit = chatRateLimiter.check(ip);
+  const rateLimit = chatRateLimiter.check(getClientIp(req));
   if (!rateLimit.allowed) {
     return Response.json({ error: "请求过于频繁，请稍后再试" }, { status: 429 });
   }
@@ -57,20 +55,15 @@ export async function POST(req: Request) {
       );
     }
 
-    const client = new OpenAI({
-      apiKey,
-      baseURL: "https://api.deepseek.com",
-    });
+    const client = new OpenAI(deepSeekClientOptions(apiKey));
 
     if (!stream) {
-      const completionRequest: ChatCompletionCreateParamsNonStreaming & {
-        thinking: { type: "disabled" };
-      } = {
+      const completionRequest: DeepSeekChatParamsNonStreaming = {
         model: DEEPSEEK_MODEL,
         messages,
         stream: false,
         thinking: DEEPSEEK_NON_THINKING,
-        max_tokens: 2048,
+        max_tokens: MAX_TOKENS,
       };
       const completion = await client.chat.completions.create(completionRequest);
 
@@ -79,17 +72,17 @@ export async function POST(req: Request) {
       });
     }
 
-    const completionRequest: ChatCompletionCreateParamsStreaming & {
-      thinking: { type: "disabled" };
-    } = {
+    const completionRequest: DeepSeekChatParamsStreaming = {
       model: DEEPSEEK_MODEL,
       messages,
       stream: true,
       thinking: DEEPSEEK_NON_THINKING,
-      max_tokens: 2048,
+      max_tokens: MAX_TOKENS,
     };
     const completion = await client.chat.completions.create(completionRequest);
 
+    // 流式响应体是纯文本增量拼接（不是 SSE 帧），客户端按字节流累计解码；
+    // 客户端断开时 ReadableStream 的 cancel 钩子负责中止上游 DeepSeek 请求。
     const encoder = new TextEncoder();
     const responseStream = new ReadableStream<Uint8Array>({
       async start(controller) {

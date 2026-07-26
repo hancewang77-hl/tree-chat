@@ -1,3 +1,6 @@
+// IndexedDB store for original Nutrient attachments. The database name, store
+// name, version, and the `nutrient-blob:<id>` key format are persisted
+// client-side state and must remain stable.
 const DB_NAME = "tree-chat-nutrients";
 const STORE_NAME = "files";
 const DB_VERSION = 1;

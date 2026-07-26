@@ -8,6 +8,24 @@ import type {
 } from "@/src/types/tree";
 import { DEEPSEEK_MODEL } from "@/src/lib/deepseek";
 
+/**
+ * Auxo full-input compilation and validation.
+ *
+ * Core guarantees enforced in this module:
+ * - Verbatim provenance: every source unit (and every plan source reference)
+ *   must appear character-for-character at its claimed offset in the submitted
+ *   root task or in the Nutrient document reconstructed from its chunks.
+ * - Plan `order` values must equal the DFS preorder of the plan tree.
+ * - Every detected source unit maps to exactly one atomic task, in the order
+ *   the units appear in the source material.
+ * - Any failure throws AuxoValidationError before any tree mutation: an
+ *   invalid input or plan always produces zero writes.
+ */
+
+// ---------------------------------------------------------------------------
+// Budgets & patterns
+// ---------------------------------------------------------------------------
+
 export const AUXO_MODEL = DEEPSEEK_MODEL;
 export const AUXO_MAX_NODES = 40;
 export const AUXO_MAX_DEPTH = 4;
@@ -35,6 +53,15 @@ const GENERIC_SECTION_PATTERN = new RegExp(
   "^(?:单项选择题|多项选择题|选择题|填空题|判断题|简答题|计算题|证明题|问答题|材料题|综合题|应用题|作图题|论述题|阅读理解|写作|听力|选择|填空)(?:\\s*[（(][^）)]*[)）])?[：:]?$",
   "i",
 );
+// Characters rejected in verbatim source text (and replaced with spaces in
+// display text): C0 controls except \t \n \r, plus DEL. The non-global form is
+// for .test(); the global form is only safe with .replace().
+const CONTROL_CHARACTER_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
+const CONTROL_CHARACTER_PATTERN_GLOBAL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 export type AuxoInputBundle = {
   request: AuxoRequest;
@@ -67,6 +94,16 @@ export class AuxoValidationError extends Error {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Input compilation (client entry)
+// ---------------------------------------------------------------------------
+
+/**
+ * Compiles the full Auxo request from the active project: normalized root
+ * task, every enabled ready Nutrient as lossless chunks, and the detected
+ * source units. Enforces every budget before returning; throws
+ * AuxoValidationError without side effects on any violation.
+ */
 export function compileAuxoInput(project: Project): AuxoInputBundle {
   const root = project.nodes[project.rootNodeId];
   const rootTask = normalizeSourceDocument(root?.prompt ?? "");
@@ -179,6 +216,22 @@ export function compileAuxoInput(project: Project): AuxoInputBundle {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Normalization
+// ---------------------------------------------------------------------------
+
+/**
+ * CRLF/CR → LF plus outer trim. Every offset used for provenance checks in
+ * this module is relative to this normalized form.
+ */
+function normalizeSourceDocument(value: string): string {
+  return value.replace(/\r\n?/g, "\n").trim();
+}
+
+// ---------------------------------------------------------------------------
+// Source-unit extraction
+// ---------------------------------------------------------------------------
+
 /**
  * Extracts explicit, line-led question units before Nutrient chunking. The
  * returned text is an exact span of the normalized Markdown source, so a long
@@ -216,15 +269,13 @@ export function extractAuxoSourceUnits(
   const primaryStarts = candidates
     .filter((candidate) => candidate.kind === "primary")
     .map((candidate) => candidate.start);
+  // A parenthetical marker only starts a unit when no primary marker precedes
+  // it, or when a section boundary resets the numbering after the last primary.
   const starts = candidates.filter((candidate) => {
     if (candidate.kind === "primary") return true;
-    const previousPrimary = [...primaryStarts]
-      .reverse()
-      .find((offset) => offset < candidate.start);
+    const previousPrimary = lastOffsetBefore(primaryStarts, candidate.start);
     if (previousPrimary === undefined) return true;
-    const previousBoundary = [...sectionBoundaries]
-      .reverse()
-      .find((offset) => offset < candidate.start);
+    const previousBoundary = lastOffsetBefore(sectionBoundaries, candidate.start);
     return previousBoundary !== undefined && previousBoundary > previousPrimary;
   });
   if (starts.length === 0) return [];
@@ -267,6 +318,166 @@ export function extractAuxoSourceUnits(
   });
 }
 
+function detectTaskMarker(line: string): TaskMarker["kind"] | null {
+  const candidate = normalizeMarkerCandidate(line);
+
+  const primary = candidate.match(PRIMARY_TASK_PATTERN);
+  if (primary) {
+    if (isGenericSectionLabel(candidate, primary[0])) return null;
+    return "primary";
+  }
+  const parenthetical = candidate.match(PARENTHETICAL_TASK_PATTERN);
+  if (parenthetical) {
+    if (isGenericSectionLabel(candidate, parenthetical[0])) return null;
+    return "parenthetical";
+  }
+  return null;
+}
+
+function isGenericSectionLine(line: string): boolean {
+  const candidate = normalizeMarkerCandidate(line);
+  const marker = candidate.match(PRIMARY_TASK_PATTERN) ?? candidate.match(PARENTHETICAL_TASK_PATTERN);
+  return Boolean(marker && isGenericSectionLabel(candidate, marker[0]));
+}
+
+function normalizeMarkerCandidate(line: string): string {
+  return line
+    .trimStart()
+    .replace(/^#{1,6}[ \t]+/, "")
+    .replace(/^(?:>\s*)+/, "")
+    .replace(/^(?:\*\*|__)/, "")
+    .replace(/^[-+*][ \t]+/, "");
+}
+
+function isGenericSectionLabel(candidate: string, marker: string): boolean {
+  const remainder = candidate
+    .slice(marker.length)
+    .replace(/^(?:\*\*|__)/, "")
+    .replace(/(?:\*\*|__)$/, "")
+    .replace(/^[\s:：—-]+/, "")
+    .trim();
+  return GENERIC_SECTION_PATTERN.test(remainder);
+}
+
+function splitSourceLines(source: string): SourceLine[] {
+  const lines: SourceLine[] = [];
+  let start = 0;
+  let fence: { character: "`" | "~"; length: number } | null = null;
+  while (start < source.length) {
+    const newline = source.indexOf("\n", start);
+    const end = newline < 0 ? source.length : newline;
+    const text = source.slice(start, end);
+    const marker = readFenceMarker(text);
+    const inFence = fence !== null || marker !== null;
+    lines.push({ start, text, inFence });
+    if (!fence && marker) {
+      fence = marker;
+    } else if (
+      fence &&
+      marker &&
+      marker.character === fence.character &&
+      marker.length >= fence.length
+    ) {
+      fence = null;
+    }
+    if (newline < 0) break;
+    start = newline + 1;
+  }
+  return lines;
+}
+
+function readFenceMarker(line: string): { character: "`" | "~"; length: number } | null {
+  const match = line.match(/^[ \t]{0,3}(`{3,}|~{3,})/);
+  if (!match) return null;
+  return {
+    character: match[1][0] as "`" | "~",
+    length: match[1].length,
+  };
+}
+
+function isMarkdownHeading(line: string): boolean {
+  return /^[ \t]{0,3}#{1,6}[ \t]+\S/.test(line);
+}
+
+/**
+ * Trims surrounding whitespace while keeping the offset pointing at the first
+ * kept character, so the span still verifies verbatim against the source.
+ */
+function trimSourceSpan(
+  source: string,
+  start: number,
+  end: number,
+): { text: string; offset: number } {
+  const raw = source.slice(start, end);
+  const leading = raw.match(/^\s*/)?.[0].length ?? 0;
+  const trailing = raw.match(/\s*$/)?.[0].length ?? 0;
+  const contentEnd = Math.max(leading, raw.length - trailing);
+  return {
+    text: raw.slice(leading, contentEnd),
+    offset: start + leading,
+  };
+}
+
+function lastOffsetBefore(
+  offsets: readonly number[],
+  position: number,
+): number | undefined {
+  for (let index = offsets.length - 1; index >= 0; index--) {
+    if (offsets[index] < position) return offsets[index];
+  }
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Chunk transport
+// ---------------------------------------------------------------------------
+
+/**
+ * Splits a normalized Nutrient document into contiguous lossless slices:
+ * offsets start at 0, every character is covered exactly once, and
+ * concatenating the chunk texts reproduces the source. The server relies on
+ * this to reconstruct each document for verbatim provenance checks.
+ */
+function chunkAuxoNutrientText(
+  source: string,
+  nutrientId: string,
+  nutrientName: string,
+): AuxoRequest["nutrientChunks"] {
+  const chunks: AuxoRequest["nutrientChunks"] = [];
+  let offset = 0;
+
+  while (offset < source.length) {
+    let end = Math.min(source.length, offset + AUXO_TARGET_CHUNK_CHARS);
+    if (end < source.length) {
+      const newline = source.lastIndexOf("\n", end - 1);
+      if (newline > offset + Math.floor(AUXO_TARGET_CHUNK_CHARS * 0.6)) {
+        end = newline + 1;
+      }
+    }
+    const text = source.slice(offset, end);
+    chunks.push({
+      nutrientId,
+      nutrientName,
+      chunkId: `chunk-${String(chunks.length + 1).padStart(3, "0")}`,
+      offset,
+      text,
+    });
+    offset = end;
+  }
+
+  return chunks;
+}
+
+// ---------------------------------------------------------------------------
+// Request validation
+// ---------------------------------------------------------------------------
+
+/**
+ * Validates a full Auxo request. Chunks must arrive as contiguous slices from
+ * offset 0 per Nutrient (the reconstructed documents back the verbatim checks
+ * below), and every source unit must quote its claimed span exactly, without
+ * overlapping a previously accepted unit of the same source.
+ */
 export function validateAuxoRequest(value: unknown): AuxoRequest {
   const object = asObject(value, "请求体必须是 JSON 对象。");
   const rootTask = readSourceText(
@@ -440,6 +651,31 @@ export function validateAuxoRequest(value: unknown): AuxoRequest {
   return { rootTask, nutrientChunks, sourceUnits };
 }
 
+function assertNonOverlappingSourceSpan(
+  spans: Map<string, { end: number }>,
+  sourceId: string,
+  offset: number,
+  length: number,
+  unitId: string,
+): void {
+  const previous = spans.get(sourceId);
+  if (previous && offset < previous.end) {
+    throw new AuxoValidationError(
+      "OVERLAPPING_SOURCE_UNITS",
+      `题目单元 ${unitId} 与前一个题目单元重叠。`,
+    );
+  }
+  spans.set(sourceId, { end: offset + length });
+}
+
+function sourceKey(nutrientId: string, chunkId: string): string {
+  return `${nutrientId}\u0000${chunkId}`;
+}
+
+// ---------------------------------------------------------------------------
+// Plan validation
+// ---------------------------------------------------------------------------
+
 export function parseAuxoPlan(
   raw: string,
   request: AuxoRequest,
@@ -449,6 +685,13 @@ export function parseAuxoPlan(
   return validateAuxoPlan(value, request, metadata);
 }
 
+/**
+ * Validates a model-produced plan against the (re-validated) request. Accepts
+ * only when the plan tree is well-formed, its `order` values equal DFS
+ * preorder, and every source unit is covered by exactly one atomic task in
+ * source order. Throws AuxoValidationError otherwise — callers create tree
+ * nodes only after this returns, so a rejected plan writes nothing.
+ */
 export function validateAuxoPlan(
   value: unknown,
   request: AuxoRequest,
@@ -493,7 +736,7 @@ export function validateAuxoPlan(
     version: 1,
     generatedAt,
     model,
-    nodes: [...nodes].sort((a, b) => a.order - b.order),
+    nodes: sortedByOrder(nodes),
   };
 }
 
@@ -509,20 +752,6 @@ export function assertAuxoPlanStructure(plan: AuxoPlan): void {
     throw new AuxoValidationError("INVALID_PLAN", "Auxo 计划元数据无效。");
   }
   assertAuxoPlanNodes(plan.nodes);
-}
-
-export function fingerprintAuxoInput(request: AuxoRequest): string {
-  const serialized = JSON.stringify(request);
-  let first = 0x811c9dc5;
-  let second = 0x9e3779b9;
-  for (let index = 0; index < serialized.length; index++) {
-    const code = serialized.charCodeAt(index);
-    first = Math.imul(first ^ code, 0x01000193);
-    second = Math.imul(second ^ (code + index), 0x85ebca6b);
-  }
-  return `auxo-v1-${(first >>> 0).toString(16).padStart(8, "0")}${(second >>> 0)
-    .toString(16)
-    .padStart(8, "0")}-${serialized.length}`;
 }
 
 function normalizePlanNode(
@@ -566,6 +795,8 @@ function normalizePlanNode(
       `节点 ${planId} 引用了不存在的题目单元 ${sourceUnitId}。`,
     );
   }
+  // The source reference is always rebuilt from the validated unit — never
+  // taken from the model output — so quotes and offsets stay verbatim.
   const source = unit ? sourceReferenceFromUnit(unit) : undefined;
 
   return {
@@ -697,7 +928,7 @@ function assertAuxoPlanNodes(nodes: AuxoPlanNode[]): void {
 
   const taskKeys = new Set<string>();
   const siblingTitles = new Set<string>();
-  for (const node of [...nodes].sort((a, b) => a.order - b.order)) {
+  for (const node of sortedByOrder(nodes)) {
     const normalizedTitle = normalizeDuplicateKey(node.title);
     const siblingKey = `${node.parentPlanId}\u0000${normalizedTitle}`;
     if (siblingTitles.has(siblingKey)) {
@@ -761,6 +992,7 @@ function assertNormalizedSource(node: AuxoPlanNode): void {
   }
 }
 
+/** Plan `order` sequence must equal the DFS preorder walk of the plan tree. */
 function assertPlanIsPreorder(
   nodes: AuxoPlanNode[],
   byId: Map<string, AuxoPlanNode>,
@@ -782,7 +1014,7 @@ function assertPlanIsPreorder(
   };
   for (const rootChild of childrenByParent.get("root") ?? []) visit(rootChild);
 
-  const ordered = [...nodes].sort((a, b) => a.order - b.order).map((node) => node.planId);
+  const ordered = sortedByOrder(nodes).map((node) => node.planId);
   if (
     preorder.length !== byId.size ||
     ordered.some((planId, index) => preorder[index] !== planId)
@@ -794,12 +1026,16 @@ function assertPlanIsPreorder(
   }
 }
 
+/**
+ * Every source unit must be claimed by exactly one atomic task, and the tasks
+ * must reference the units in their original source order.
+ */
 function assertSourceUnitCoverage(nodes: AuxoPlanNode[], sourceUnits: AuxoSourceUnit[]): void {
-  const orderedUnits = [...sourceUnits].sort((a, b) => a.order - b.order);
+  const orderedUnits = sortedByOrder(sourceUnits);
   const seen = new Set<string>();
   const referenced: string[] = [];
 
-  for (const node of [...nodes].sort((a, b) => a.order - b.order)) {
+  for (const node of sortedByOrder(nodes)) {
     if (node.nodeRole !== "task" || !node.sourceUnitId) continue;
     if (seen.has(node.sourceUnitId)) {
       throw new AuxoValidationError(
@@ -857,155 +1093,8 @@ function resolveDepth(
   return depth;
 }
 
-function detectTaskMarker(line: string): TaskMarker["kind"] | null {
-  const candidate = normalizeMarkerCandidate(line);
-
-  const primary = candidate.match(PRIMARY_TASK_PATTERN);
-  if (primary) {
-    if (isGenericSectionLabel(candidate, primary[0])) return null;
-    return "primary";
-  }
-  const parenthetical = candidate.match(PARENTHETICAL_TASK_PATTERN);
-  if (parenthetical) {
-    if (isGenericSectionLabel(candidate, parenthetical[0])) return null;
-    return "parenthetical";
-  }
-  return null;
-}
-
-function isGenericSectionLine(line: string): boolean {
-  const candidate = normalizeMarkerCandidate(line);
-  const marker = candidate.match(PRIMARY_TASK_PATTERN) ?? candidate.match(PARENTHETICAL_TASK_PATTERN);
-  return Boolean(marker && isGenericSectionLabel(candidate, marker[0]));
-}
-
-function normalizeMarkerCandidate(line: string): string {
-  return line
-    .trimStart()
-    .replace(/^#{1,6}[ \t]+/, "")
-    .replace(/^(?:>\s*)+/, "")
-    .replace(/^(?:\*\*|__)/, "")
-    .replace(/^[-+*][ \t]+/, "");
-}
-
-function isGenericSectionLabel(candidate: string, marker: string): boolean {
-  const remainder = candidate
-    .slice(marker.length)
-    .replace(/^(?:\*\*|__)/, "")
-    .replace(/(?:\*\*|__)$/, "")
-    .replace(/^[\s:：—-]+/, "")
-    .trim();
-  return GENERIC_SECTION_PATTERN.test(remainder);
-}
-
-function splitSourceLines(source: string): SourceLine[] {
-  const lines: SourceLine[] = [];
-  let start = 0;
-  let fence: { character: "`" | "~"; length: number } | null = null;
-  while (start < source.length) {
-    const newline = source.indexOf("\n", start);
-    const end = newline < 0 ? source.length : newline;
-    const text = source.slice(start, end);
-    const marker = readFenceMarker(text);
-    const inFence = fence !== null || marker !== null;
-    lines.push({ start, text, inFence });
-    if (!fence && marker) {
-      fence = marker;
-    } else if (
-      fence &&
-      marker &&
-      marker.character === fence.character &&
-      marker.length >= fence.length
-    ) {
-      fence = null;
-    }
-    if (newline < 0) break;
-    start = newline + 1;
-  }
-  return lines;
-}
-
-function readFenceMarker(line: string): { character: "`" | "~"; length: number } | null {
-  const match = line.match(/^[ \t]{0,3}(`{3,}|~{3,})/);
-  if (!match) return null;
-  return {
-    character: match[1][0] as "`" | "~",
-    length: match[1].length,
-  };
-}
-
-function isMarkdownHeading(line: string): boolean {
-  return /^[ \t]{0,3}#{1,6}[ \t]+\S/.test(line);
-}
-
-function trimSourceSpan(
-  source: string,
-  start: number,
-  end: number,
-): { text: string; offset: number } {
-  const raw = source.slice(start, end);
-  const leading = raw.match(/^\s*/)?.[0].length ?? 0;
-  const trailing = raw.match(/\s*$/)?.[0].length ?? 0;
-  const contentEnd = Math.max(leading, raw.length - trailing);
-  return {
-    text: raw.slice(leading, contentEnd),
-    offset: start + leading,
-  };
-}
-
-function normalizeSourceDocument(value: string): string {
-  return value.replace(/\r\n?/g, "\n").trim();
-}
-
-function chunkAuxoNutrientText(
-  source: string,
-  nutrientId: string,
-  nutrientName: string,
-): AuxoRequest["nutrientChunks"] {
-  const chunks: AuxoRequest["nutrientChunks"] = [];
-  let offset = 0;
-
-  while (offset < source.length) {
-    let end = Math.min(source.length, offset + AUXO_TARGET_CHUNK_CHARS);
-    if (end < source.length) {
-      const newline = source.lastIndexOf("\n", end - 1);
-      if (newline > offset + Math.floor(AUXO_TARGET_CHUNK_CHARS * 0.6)) {
-        end = newline + 1;
-      }
-    }
-    const text = source.slice(offset, end);
-    chunks.push({
-      nutrientId,
-      nutrientName,
-      chunkId: `chunk-${String(chunks.length + 1).padStart(3, "0")}`,
-      offset,
-      text,
-    });
-    offset = end;
-  }
-
-  return chunks;
-}
-
-function assertNonOverlappingSourceSpan(
-  spans: Map<string, { end: number }>,
-  sourceId: string,
-  offset: number,
-  length: number,
-  unitId: string,
-): void {
-  const previous = spans.get(sourceId);
-  if (previous && offset < previous.end) {
-    throw new AuxoValidationError(
-      "OVERLAPPING_SOURCE_UNITS",
-      `题目单元 ${unitId} 与前一个题目单元重叠。`,
-    );
-  }
-  spans.set(sourceId, { end: offset + length });
-}
-
-function sourceKey(nutrientId: string, chunkId: string): string {
-  return `${nutrientId}\u0000${chunkId}`;
+function sortedByOrder<T extends { order: number }>(items: readonly T[]): T[] {
+  return [...items].sort((a, b) => a.order - b.order);
 }
 
 function parseJsonObject(raw: string): Record<string, unknown> {
@@ -1035,6 +1124,33 @@ function parseJsonObject(raw: string): Record<string, unknown> {
   }
   throw new AuxoValidationError("INVALID_JSON", "Auxo 返回了无效 JSON。");
 }
+
+// ---------------------------------------------------------------------------
+// Fingerprint
+// ---------------------------------------------------------------------------
+
+/**
+ * Dual 32-bit hash over the serialized request. Fingerprints are persisted in
+ * Auxo generation manifests, so the algorithm and the `auxo-v1-` format must
+ * stay stable across releases.
+ */
+export function fingerprintAuxoInput(request: AuxoRequest): string {
+  const serialized = JSON.stringify(request);
+  let first = 0x811c9dc5;
+  let second = 0x9e3779b9;
+  for (let index = 0; index < serialized.length; index++) {
+    const code = serialized.charCodeAt(index);
+    first = Math.imul(first ^ code, 0x01000193);
+    second = Math.imul(second ^ (code + index), 0x85ebca6b);
+  }
+  return `auxo-v1-${(first >>> 0).toString(16).padStart(8, "0")}${(second >>> 0)
+    .toString(16)
+    .padStart(8, "0")}-${serialized.length}`;
+}
+
+// ---------------------------------------------------------------------------
+// Validation primitives (shared field readers)
+// ---------------------------------------------------------------------------
 
 function asObject(value: unknown, message: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -1085,7 +1201,7 @@ function readText(
   if (typeof value !== "string") {
     throw new AuxoValidationError("INVALID_TEXT", `${field} 必须是字符串。`);
   }
-  const withoutControls = value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ");
+  const withoutControls = value.replace(CONTROL_CHARACTER_PATTERN_GLOBAL, " ");
   const normalized = (collapseWhitespace ? withoutControls.replace(/\s+/g, " ") : withoutControls).trim();
   if (!normalized) {
     throw new AuxoValidationError("EMPTY_TEXT", `${field} 不能为空。`);
@@ -1096,38 +1212,45 @@ function readText(
   return normalized;
 }
 
-function readSourceText(value: unknown, field: string, maxLength: number): string {
+/** Shared first pass for verbatim text fields: string type + control chars. */
+function readRawSourceString(value: unknown, field: string): string {
   if (typeof value !== "string") {
     throw new AuxoValidationError("INVALID_SOURCE_TEXT", `${field} 必须是字符串。`);
   }
-  if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(value)) {
+  if (CONTROL_CHARACTER_PATTERN.test(value)) {
     throw new AuxoValidationError("INVALID_SOURCE_TEXT", `${field} 包含无效控制字符。`);
   }
-  const normalized = normalizeSourceDocument(value);
+  return value;
+}
+
+function readSourceText(value: unknown, field: string, maxLength: number): string {
+  const normalized = normalizeSourceDocument(readRawSourceString(value, field));
   if (!normalized) {
     throw new AuxoValidationError("EMPTY_SOURCE_TEXT", `${field} 不能为空。`);
   }
-  if (normalized.length > maxLength) {
-    throw new AuxoValidationError("SOURCE_TEXT_TOO_LONG", `${field} 超过 ${maxLength} 字。`);
-  }
+  assertSourceTextWithinBudget(normalized, field, maxLength);
   return normalized;
 }
 
 function readChunkText(value: unknown, field: string, maxLength: number): string {
-  if (typeof value !== "string") {
-    throw new AuxoValidationError("INVALID_SOURCE_TEXT", `${field} 必须是字符串。`);
-  }
-  if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(value)) {
-    throw new AuxoValidationError("INVALID_SOURCE_TEXT", `${field} 包含无效控制字符。`);
-  }
-  const normalized = value.replace(/\r\n?/g, "\n");
+  // Chunks keep surrounding whitespace (offsets must stay lossless); only line
+  // endings are normalized.
+  const normalized = readRawSourceString(value, field).replace(/\r\n?/g, "\n");
   if (!normalized || !normalized.trim()) {
     throw new AuxoValidationError("EMPTY_SOURCE_TEXT", `${field} 不能为空。`);
   }
-  if (normalized.length > maxLength) {
+  assertSourceTextWithinBudget(normalized, field, maxLength);
+  return normalized;
+}
+
+function assertSourceTextWithinBudget(
+  text: string,
+  field: string,
+  maxLength: number,
+): void {
+  if (text.length > maxLength) {
     throw new AuxoValidationError("SOURCE_TEXT_TOO_LONG", `${field} 超过 ${maxLength} 字。`);
   }
-  return normalized;
 }
 
 function readInteger(value: unknown, field: string): number {

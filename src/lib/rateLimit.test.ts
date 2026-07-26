@@ -1,5 +1,19 @@
 import { describe, expect, test } from "vitest";
-import { createRateLimiter } from "./rateLimit";
+import { createRateLimiter, getClientIp } from "./rateLimit";
+
+describe("getClientIp", () => {
+  test("prefers the first x-forwarded-for hop, then x-real-ip, then 'unknown'", () => {
+    const request = (headers: Record<string, string>) =>
+      new Request("http://localhost/api", { headers });
+
+    expect(
+      getClientIp(request({ "x-forwarded-for": "1.2.3.4, 5.6.7.8", "x-real-ip": "9.9.9.9" })),
+    ).toBe("1.2.3.4");
+    expect(getClientIp(request({ "x-forwarded-for": " 1.2.3.4 " }))).toBe("1.2.3.4");
+    expect(getClientIp(request({ "x-real-ip": "9.9.9.9" }))).toBe("9.9.9.9");
+    expect(getClientIp(request({}))).toBe("unknown");
+  });
+});
 
 describe("createRateLimiter", () => {
   test("allows requests until the per-key window limit is reached", () => {

@@ -36,6 +36,11 @@ export function createRootSemanticCard(
   };
 }
 
+/**
+ * Parses a model response into a bounded card: per field at most
+ * MAX_ITEMS_PER_FIELD unique items of MAX_ITEM_LENGTH chars, and at least one
+ * field must end up non-empty. Unknown fields are dropped.
+ */
 export function parseSemanticCard(
   raw: string,
   metadata: SemanticCardMetadata,
@@ -57,6 +62,7 @@ export function parseSemanticCard(
   };
 }
 
+/** Persisted cards may predate validation — recheck shape before compiling. */
 export function isUsableSemanticCard(card: SemanticCard | undefined): card is SemanticCard {
   return Boolean(
     card &&

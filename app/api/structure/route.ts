@@ -1,15 +1,20 @@
 import OpenAI from "openai";
-import type { ChatCompletionCreateParamsNonStreaming } from "openai/resources/chat/completions";
 import { parseSemanticCard } from "@/src/lib/semanticCard";
 import {
   DEEPSEEK_MODEL,
   DEEPSEEK_NON_THINKING,
+  deepSeekClientOptions,
+  type DeepSeekChatParamsNonStreaming,
 } from "@/src/lib/deepseek";
+import { createRateLimiter, getClientIp } from "@/src/lib/rateLimit";
 
 const MAX_SOURCE_CHARS = 50_000;
 const RATE_LIMIT = 30;
 const RATE_WINDOW = 60_000;
-const rateMap = new Map<string, { count: number; resetAt: number }>();
+const structureRateLimiter = createRateLimiter({
+  limit: RATE_LIMIT,
+  windowMs: RATE_WINDOW,
+});
 
 const STRUCTURE_SYSTEM_PROMPT = `
 你是「智构树语」的语义整理器。你只负责将一个问题和它的回答整理为轻量语义卡片，不补充原文中没有的知识。
@@ -32,22 +37,10 @@ const STRUCTURE_SYSTEM_PROMPT = `
 `.trim();
 
 export async function POST(req: Request) {
-  const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    req.headers.get("x-real-ip") ||
-    "unknown";
-  const now = Date.now();
-  const entry = rateMap.get(ip);
-
-  if (entry && now < entry.resetAt) {
-    if (entry.count >= RATE_LIMIT) {
-      return Response.json({ error: "语义整理请求过于频繁，请稍后再试" }, { status: 429 });
-    }
-    entry.count++;
-  } else {
-    rateMap.set(ip, { count: 1, resetAt: now + RATE_WINDOW });
+  const rateLimit = structureRateLimiter.check(getClientIp(req));
+  if (!rateLimit.allowed) {
+    return Response.json({ error: "语义整理请求过于频繁，请稍后再试" }, { status: 429 });
   }
-  if (rateMap.size > 10_000) rateMap.clear();
 
   try {
     const apiKey = process.env.DEEPSEEK_API_KEY;
@@ -81,13 +74,8 @@ export async function POST(req: Request) {
       return Response.json({ error: "待整理内容过长" }, { status: 413 });
     }
 
-    const client = new OpenAI({
-      apiKey,
-      baseURL: "https://api.deepseek.com",
-    });
-    const completionRequest: ChatCompletionCreateParamsNonStreaming & {
-      thinking: { type: "disabled" };
-    } = {
+    const client = new OpenAI(deepSeekClientOptions(apiKey));
+    const completionRequest: DeepSeekChatParamsNonStreaming = {
       model: DEEPSEEK_MODEL,
       messages: [
         { role: "system", content: STRUCTURE_SYSTEM_PROMPT },

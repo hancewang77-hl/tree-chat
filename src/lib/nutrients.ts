@@ -8,12 +8,19 @@ const DEFAULT_CONTEXT_BUDGET = 20_000;
 const DEFAULT_CHUNK_SIZE = 1_600;
 const DEFAULT_RELEVANT_BUDGET = 8_000;
 const DEFAULT_MAX_RELEVANT_CHUNKS = 8;
+
 export function summarizeNutrientText(text: string, maxLen: number = 220): string {
   const compact = text.replace(/\s+/g, " ").trim();
   if (compact.length <= maxLen) return compact;
   return compact.slice(0, Math.max(0, maxLen - 1)).trimEnd() + "…";
 }
 
+/**
+ * Whole-document Nutrient context with per-document truncation. Note:
+ * compileContext does not call this — it selects scored chunks via
+ * selectRelevantNutrientChunks instead. This full-text form is exercised by
+ * tests and must keep its output format stable.
+ */
 export function buildNutrientContext(
   nutrients: NutrientItem[],
   activeIds: string[],
@@ -97,6 +104,13 @@ type MarkdownHeading = {
   text: string;
 };
 
+/**
+ * Structure-aware chunking with heading-stack propagation: a stack of the
+ * currently open headings (h1 ⊃ h2 ⊃ …) is carried across chunk boundaries,
+ * and every flushed chunk starts with as much of that heading path as fits
+ * (deepest headings win). Chunks therefore stay self-describing while body
+ * blocks (text/fence/table) are never reordered or rewritten.
+ */
 function chunkMarkdown(markdown: string, chunkSize: number): string[] {
   const blocks = parseMarkdownBlocks(markdown);
   const chunks: string[] = [];
@@ -454,6 +468,11 @@ function isTableSeparatorRow(line: string): boolean {
   return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
 }
 
+/**
+ * Scores every chunk of the active ready Nutrients against the query and
+ * keeps the best ones within the character budget and chunk cap. When no
+ * chunk scores positive, falls back to each document's first chunk.
+ */
 export function selectRelevantNutrientChunks(
   nutrients: NutrientItem[],
   activeIds: string[],

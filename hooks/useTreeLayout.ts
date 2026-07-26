@@ -41,28 +41,6 @@ export function getContextPath(nodes: NodesMap, nodeId: string): MindNode[] {
   return path;
 }
 
-export function getVisibleIdsForPlane(nodes: NodesMap, layer: number) {
-  const ids = new Set<string>();
-  const planeIds = Object.values(nodes)
-    .filter((node) => node.layer === layer)
-    .map((node) => node.id);
-
-  if (planeIds.length === 0) {
-    ids.add("root");
-    return ids;
-  }
-
-  for (const id of planeIds) {
-    let current: string | null = id;
-    while (current && nodes[current]) {
-      ids.add(current);
-      current = nodes[current].parentId;
-    }
-  }
-
-  return ids;
-}
-
 type TreeLayoutInput = {
   nodes: NodesMap;
   selectedNodeId: string;

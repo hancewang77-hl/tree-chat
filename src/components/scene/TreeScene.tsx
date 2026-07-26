@@ -119,6 +119,12 @@ export function TreeScene({
 
   const userInteractingRef = useRef(false);
 
+  // Coordinate convention (applies to every node/link/leaf below):
+  // d3-hierarchy lays the tree out with `x` along the sibling axis and `y`
+  // along the depth axis, so world X = d3 `y` (depth grows rightward) and
+  // world Y = -d3 `x` (sibling spread). Persisted offsetX/offsetY are stored
+  // ×100 and scaled back down at render time.
+
   // Compute the selected node's world-space position for camera tracking.
   // Checks trunk nodes (renderedNodes) first, then leaf attachments.
   const targetPos = useMemo(() => {
@@ -198,6 +204,11 @@ export function TreeScene({
         color="#AAB4C8"
       />
 
+      {/* Layer z counter-translation: planes/nodes inside this group sit at
+          layer * LAYER_SPACING, and the group itself is shifted by the active
+          layer's -z so that layer always lands at world z = 0. In 3D the
+          animated displayLayer drives the shift (pinned to selectedLayer
+          while picking a target layer in layerMove mode). */}
       <group
         rotation={[0, 0, 0]}
         position={
@@ -296,7 +307,6 @@ export function TreeScene({
           const isInteractiveNode =
             !(is3DMode && toolMode === "layerMove") || isCurrentLayerNode;
 
-          const isPriorityNode = !is3DMode || isCurrentLayerNode;
           const isMovingNode = movingNodeId === node.data.id;
 
           const nodeZ = is3DMode
@@ -316,8 +326,6 @@ export function TreeScene({
                 selected={node.data.id === selectedNodeId}
                 inPath={currentPathIds.has(node.data.id)}
                 interactive={isInteractiveNode}
-                priority={isPriorityNode}
-                moving={isMovingNode}
                 onSelect={() => {
                   if (!isInteractiveNode) return;
 

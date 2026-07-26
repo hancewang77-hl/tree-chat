@@ -98,51 +98,47 @@ export function summarizeForCard(response: string, maxLen: number = 140): string
 /**
  * Strip markdown to plain text suitable for Canvas2D rendering.
  * Math, code blocks, and images get replaced with short labels.
+ *
+ * Stage ordering invariants:
+ * - Code fences are labeled first so `$`, `*`, `[` inside code can never
+ *   match later math/emphasis/link stages.
+ * - Display math $$...$$ must run before inline $...$ so a `$$` pair is not
+ *   consumed as two inline delimiters.
+ * - Images run before links because `![..](..)` contains a link-shaped tail.
+ * - Bracket labels use [^\]] so a bare bracketed segment with no URL (e.g. a
+ *   `[公式]` label emitted by an earlier stage) is never swallowed into a
+ *   later link/image match.
  */
 export function stripMarkdown(text: string): string {
   let out = text;
 
-  // Replace fenced code blocks
-  out = out.replace(/```[\s\S]*?```/g, "[代码块]");
+  // Stage 1 — heavy blocks → short labels
+  out = out.replace(/```[\s\S]*?```/g, "[代码块]"); // fenced code blocks
+  out = out.replace(/\$\$[\s\S]*?\$\$/g, "[公式]"); // display math $$...$$
+  out = out.replace(/\$(.+?)\$/g, "[公式]"); // inline math $...$
+  out = out.replace(/!\[[^\]\n]*\]\(.*?\)/g, "[图片]"); // images
 
-  // Replace display math $$...$$
-  out = out.replace(/\$\$[\s\S]*?\$\$/g, "[公式]");
+  // Stage 2 — links: drop URL, keep text
+  out = out.replace(/\[([^\]\n]+)\]\(.*?\)/g, "$1");
 
-  // Replace inline math $...$
-  out = out.replace(/\$(.+?)\$/g, "[公式]");
-
-  // Replace images
-  out = out.replace(/!\[.*?\]\(.*?\)/g, "[图片]");
-
-  // Replace links, keep text
-  out = out.replace(/\[(.+?)\]\(.*?\)/g, "$1");
-
-  // Remove bold/italic markers, keep text
+  // Stage 3 — inline emphasis: drop markers, keep text
   out = out.replace(/\*\*(.+?)\*\*/g, "$1");
   out = out.replace(/\*(.+?)\*/g, "$1");
   out = out.replace(/__(.+?)__/g, "$1");
   out = out.replace(/_(.+?)_/g, "$1");
 
-  // Remove heading markers
-  out = out.replace(/^#{1,6}\s+/gm, "");
+  // Stage 4 — line-level markers
+  out = out.replace(/^#{1,6}\s+/gm, ""); // headings
+  out = out.replace(/^[\s]*[-*+]\s+/gm, "• "); // unordered list markers
+  out = out.replace(/^\d+\.\s+/gm, ""); // ordered list markers
+  out = out.replace(/^>\s?/gm, ""); // blockquote markers
 
-  // Convert list markers
-  out = out.replace(/^[\s]*[-*+]\s+/gm, "• ");
-  out = out.replace(/^\d+\.\s+/gm, "");
-
-  // Remove blockquote markers
-  out = out.replace(/^>\s?/gm, "");
-
-  // Remove inline code backticks
+  // Stage 5 — remaining inline code backticks
   out = out.replace(/`(.+?)`/g, "$1");
 
-  // Remove horizontal rules
+  // Stage 6 — cleanup: rules, blank runs, raw HTML tags
   out = out.replace(/^[-*_]{3,}\s*$/gm, "");
-
-  // Collapse excessive newlines
   out = out.replace(/\n{3,}/g, "\n\n");
-
-  // Remove HTML tags
   out = out.replace(/<[^>]*>/g, "");
 
   return out.trim();
@@ -152,17 +148,25 @@ export function stripMarkdown(text: string): string {
  * Convert markdown to simple HTML for the inspector sidebar.
  * Supports: paragraphs, bold, italic, inline code, fenced code blocks,
  * inline math ($...$), display math ($$...$$), unordered lists, headings.
+ *
+ * Stage ordering invariants:
+ * - Entity escaping runs first, with code/math bodies placeholder-protected
+ *   so they reach their dedicated renderers verbatim (they escape their own
+ *   content or delegate to KaTeX).
+ * - Code fences must be replaced before math, and math before inline code,
+ *   so `$` inside a fence or backticks inside math are never re-parsed.
+ * - Bold (**) must run before italic (*) so a `**` pair is not consumed as
+ *   two italic delimiters.
+ * - Block-level stages (headings, lists, quotes, rules) run after inline
+ *   stages; the paragraph split is last and skips already-HTML blocks.
  */
 export function renderMarkdownToHTML(text: string): string {
   if (!text) return "";
 
-  // Escape HTML entities in the raw text first, but we need to do it selectively
-  let html = text;
+  // Stage 1 — escape & < > everywhere except inside code blocks and math
+  let html = escapeHTMLPreserving(text);
 
-  // Escape & < > except in code blocks and math
-  html = escapeHTMLPreserving(html);
-
-  // Fenced code blocks ```lang\n...\n``` → <pre><code>...</code></pre>
+  // Stage 2 — fenced code blocks ```lang\n...\n``` → <pre><code>...</code></pre>
   html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, lang, code) => {
     const escaped = code
       .replace(/&/g, "&amp;")
@@ -171,37 +175,37 @@ export function renderMarkdownToHTML(text: string): string {
     return `<pre class="bg-[#F0EBE0] rounded-lg p-3 my-2 overflow-x-auto text-[12px] leading-relaxed" style="font-family:var(--font-mono)"><code>${escaped.trim()}</code></pre>`;
   });
 
-  // Display math $$...$$
+  // Stage 3 — display math $$...$$ (before inline $ so `$$` is one block)
   html = html.replace(/\$\$([\s\S]*?)\$\$/g, (_m, math) => {
     return `<div class="my-2 rounded-lg px-3 py-2 text-[13px] text-center overflow-x-auto" style="background:rgba(116,122,85,0.08);color:var(--accent-bark);font-family:var(--font-serif)">${renderMath(math.trim(), true)}</div>`;
   });
 
-  // Inline math $...$
+  // Stage 4 — inline math $...$
   html = html.replace(/\$(.+?)\$/g, (_m, math) => {
     return `<span class="px-0.5 rounded" style="background:rgba(116,122,85,0.06);color:var(--accent-bark);font-family:var(--font-serif)">${renderMath(math.trim(), false)}</span>`;
   });
 
-  // Inline code `...`
+  // Stage 5 — inline code `...`
   html = html.replace(/`(.+?)`/g, (_m, code) => {
     const escaped = code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     return `<code class="rounded px-1 py-0.5 text-[12px]" style="background:var(--border-warm);color:var(--accent-bark);font-family:var(--font-mono)">${escaped}</code>`;
   });
 
-  // Bold **...** or __...__
+  // Stage 6 — bold **...** / __...__ (must precede italic)
   html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   html = html.replace(/__(.+?)__/g, "<strong>$1</strong>");
 
-  // Italic *...* or _..._ (but not inside words)
+  // Stage 7 — italic *...* / _..._ (but not inside words)
   html = html.replace(/\b\*(.+?)\*\b/g, "<em>$1</em>");
   html = html.replace(/\b_(.+?)_\b/g, "<em>$1</em>");
 
-  // Headings
+  // Stage 8 — headings
   html = html.replace(/^#### (.+)$/gm, '<h4 class="text-[13px] font-semibold mt-3 mb-1" style="color:var(--accent-bark)">$1</h4>');
   html = html.replace(/^### (.+)$/gm, '<h3 class="text-[14px] font-semibold mt-3 mb-1" style="color:var(--accent-bark)">$1</h3>');
   html = html.replace(/^## (.+)$/gm, '<h2 class="text-[15px] font-semibold mt-3 mb-1" style="color:var(--accent-bark);font-family:var(--font-serif)">$1</h2>');
   html = html.replace(/^# (.+)$/gm, '<h1 class="text-[16px] font-semibold mt-3 mb-1" style="color:var(--accent-bark);font-family:var(--font-serif)">$1</h1>');
 
-  // Unordered lists — collect consecutive list items
+  // Stage 9 — unordered lists: collect consecutive list items
   html = html.replace(/((?:^[\s]*[-*+]\s+.+(?:\n|$))+)/gm, (match) => {
     const items = match
       .split(/\n/)
@@ -211,7 +215,7 @@ export function renderMarkdownToHTML(text: string): string {
     return `<ul class="my-1">${items}</ul>`;
   });
 
-  // Ordered lists
+  // Stage 10 — ordered lists
   html = html.replace(/((?:^\d+\.\s+.+(?:\n|$))+)/gm, (match) => {
     const items = match
       .split(/\n/)
@@ -221,13 +225,13 @@ export function renderMarkdownToHTML(text: string): string {
     return `<ol class="my-1">${items}</ol>`;
   });
 
-  // Blockquotes
+  // Stage 11 — blockquotes
   html = html.replace(/^>\s?(.+)$/gm, '<blockquote class="border-l-2 pl-3 my-1 text-[13px] italic" style="border-color:var(--accent-sage);color:var(--text-muted)">$1</blockquote>');
 
-  // Horizontal rules
+  // Stage 12 — horizontal rules
   html = html.replace(/^[-*_]{3,}\s*$/gm, '<hr class="my-2" style="border-color:var(--border-warm)">');
 
-  // Split into paragraphs (double newlines)
+  // Stage 13 — paragraph split on double newlines (must be last)
   html = html
     .split(/\n\n+/)
     .map((block) => {
@@ -246,7 +250,9 @@ export function renderMarkdownToHTML(text: string): string {
 }
 
 function escapeHTMLPreserving(text: string): string {
-  // We escape text but skip content inside ```code```, $$math$$, and $math$
+  // We escape text but skip content inside ```code```, $$math$$, $math$, and
+  // `inline code`. Placeholders use \x00 sentinels, which cannot occur in the
+  // source text, so restoration is exact.
   const protectedBlocks: string[] = [];
 
   let result = text

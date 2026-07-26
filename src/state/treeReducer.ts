@@ -16,6 +16,10 @@ import { compileAuxoInput, validateAuxoPlan } from "@/src/lib/auxo";
 
 const MAX_HISTORY = 50;
 
+// ---------------------------------------------------------------------------
+// Node / project construction & normalization
+// ---------------------------------------------------------------------------
+
 function makeRootNode(prompt: string): MindNode {
   const timestamp = Date.now();
   return {
@@ -51,6 +55,15 @@ function createProject(name: string): Project {
   };
 }
 
+/**
+ * Fills in every semantic field a legacy (pre-schema-v2) node may lack while
+ * preserving unknown extra fields. Invariants enforced here:
+ * - a node stored mid-stream reloads as "stopped", never "streaming";
+ * - Auxo task / task-group nodes are always context-"valid" (immutable source);
+ * - a non-root node without a usable semantic card is "missing" unless it was
+ *   explicitly marked "stale";
+ * - includeInContext exists only on leaf nodes and defaults to false.
+ */
 function normalizeNode(node: MindNode, rootNodeId: string): MindNode {
   const prompt = typeof node.prompt === "string" ? node.prompt : "";
   const response = typeof node.response === "string" ? node.response : "";
@@ -134,47 +147,9 @@ function normalizeProjects(projects: Record<string, Project>): Record<string, Pr
   );
 }
 
-function createHistoryEntry({
-  state,
-  projectId,
-  label,
-  primaryNodeId,
-  affectedNodeIds,
-  nodeUndoable,
-  patch,
-}: {
-  state: TreeState;
-  projectId?: string;
-  label: string;
-  primaryNodeId: string;
-  affectedNodeIds: string[];
-  nodeUndoable?: boolean;
-  patch: HistoryPatch;
-}): HistoryEntry {
-  return {
-    id: `history-${crypto.randomUUID()}`,
-    projectId: projectId ?? state.activeProjectId,
-    label,
-    timestamp: Date.now(),
-    primaryNodeId,
-    affectedNodeIds: Array.from(new Set(affectedNodeIds)),
-    nodeUndoable,
-    patch,
-  };
-}
-
-function pushHistory(state: TreeState, entry: HistoryEntry): TreeState {
-  const past = [...state.history.past, entry].slice(-MAX_HISTORY);
-  return { ...state, history: { past, future: [] } };
-}
-
-function getActiveProject(state: TreeState): Project | undefined {
-  return state.projects[state.activeProjectId];
-}
-
-function getActiveNodes(state: TreeState): NodesMap {
-  return getActiveProject(state)?.nodes ?? {};
-}
+// ---------------------------------------------------------------------------
+// Initial state
+// ---------------------------------------------------------------------------
 
 const EMPTY_STATE: TreeState = {
   projects: {},
@@ -200,6 +175,11 @@ export function initialState(): TreeState {
   return EMPTY_STATE;
 }
 
+/**
+ * Loads and normalizes the persisted workspace. Only projects, selection and
+ * plane names survive a reload; every view field (3D mode, zoom, open panels)
+ * and the Rings history always restart from their defaults.
+ */
 export function loadInitialState(): TreeState {
   const workspace = loadWorkspace();
   const projects = normalizeProjects(workspace.projects);
@@ -239,37 +219,16 @@ export function loadInitialState(): TreeState {
   return EMPTY_STATE;
 }
 
-function collectSubtreeIds(nodes: NodesMap, nodeId: string): Set<string> {
-  const ids = new Set<string>();
-  const pending = [nodeId];
-  while (pending.length > 0) {
-    const currentId = pending.pop();
-    if (!currentId || ids.has(currentId)) continue;
-    ids.add(currentId);
-    const current = nodes[currentId];
-    if (current) pending.push(...current.children);
-  }
-  return ids;
+// ---------------------------------------------------------------------------
+// State access & update helpers
+// ---------------------------------------------------------------------------
+
+function getActiveProject(state: TreeState): Project | undefined {
+  return state.projects[state.activeProjectId];
 }
 
-function resolveBranchParent(nodes: NodesMap, parentId: string): string {
-  const parent = nodes[parentId];
-  if (parent?.kind === "leaf" && parent.parentId) {
-    return parent.parentId;
-  }
-  return parentId;
-}
-
-function updateActiveProject(state: TreeState, updater: (project: Project) => Project): TreeState {
-  const project = getActiveProject(state);
-  if (!project) return state;
-  return {
-    ...state,
-    projects: {
-      ...state.projects,
-      [state.activeProjectId]: updater(project),
-    },
-  };
+function getActiveNodes(state: TreeState): NodesMap {
+  return getActiveProject(state)?.nodes ?? {};
 }
 
 function updateProjectById(
@@ -288,11 +247,112 @@ function updateProjectById(
   };
 }
 
+function updateActiveProject(state: TreeState, updater: (project: Project) => Project): TreeState {
+  return updateProjectById(state, state.activeProjectId, updater);
+}
+
+/**
+ * Replaces one node in a project and bumps the project's updatedAt. Callers
+ * must have verified the project (and usually the node) exists.
+ */
+function replaceProjectNode(state: TreeState, projectId: string, node: MindNode): TreeState {
+  return updateProjectById(state, projectId, (project) => ({
+    ...project,
+    nodes: { ...project.nodes, [node.id]: node },
+    updatedAt: Date.now(),
+  }));
+}
+
+function collectSubtreeIds(nodes: NodesMap, nodeId: string): Set<string> {
+  const ids = new Set<string>();
+  const pending = [nodeId];
+  while (pending.length > 0) {
+    const currentId = pending.pop();
+    if (!currentId || ids.has(currentId)) continue;
+    ids.add(currentId);
+    const current = nodes[currentId];
+    if (current) pending.push(...current.children);
+  }
+  return ids;
+}
+
+/**
+ * New branches/leaves never attach under a leaf: a leaf parent resolves to its
+ * own parent, so notes stay siblings of the answers that follow them.
+ */
+function resolveBranchParent(nodes: NodesMap, parentId: string): string {
+  const parent = nodes[parentId];
+  if (parent?.kind === "leaf" && parent.parentId) {
+    return parent.parentId;
+  }
+  return parentId;
+}
+
+/** Leaves graft mode without touching the tree (used by every rejected graft). */
+function exitGraftMode(state: TreeState): TreeState {
+  return { ...state, toolMode: "view", graftSourceId: null };
+}
+
+// ---------------------------------------------------------------------------
+// Persistence
+// ---------------------------------------------------------------------------
+
+/**
+ * Deliberate in-reducer side effect: synchronously mirrors the committed state
+ * to localStorage. Every case whose outcome must survive a reload wraps its
+ * return value in persist(); pure view-state cases (zoom, panels, graft mode)
+ * intentionally do not. Keeping the write inside the reducer means storage can
+ * never lag behind a committed transition.
+ */
 function persist(next: TreeState): TreeState {
   saveWorkspace(next);
   return next;
 }
 
+// ---------------------------------------------------------------------------
+// Rings history — recording
+// ---------------------------------------------------------------------------
+
+function createHistoryEntry({
+  state,
+  projectId,
+  label,
+  primaryNodeId,
+  affectedNodeIds,
+  nodeUndoable,
+  patch,
+}: {
+  state: TreeState;
+  projectId?: string;
+  label: string;
+  primaryNodeId: string;
+  affectedNodeIds: string[];
+  nodeUndoable?: boolean;
+  patch: HistoryPatch;
+}): HistoryEntry {
+  return {
+    id: `history-${crypto.randomUUID()}`,
+    projectId: projectId ?? state.activeProjectId,
+    label,
+    timestamp: Date.now(),
+    primaryNodeId,
+    affectedNodeIds: Array.from(new Set(affectedNodeIds)),
+    nodeUndoable,
+    patch,
+  };
+}
+
+/** Appends an entry (capped at MAX_HISTORY) and clears the redo future. */
+function pushHistory(state: TreeState, entry: HistoryEntry): TreeState {
+  const past = [...state.history.past, entry].slice(-MAX_HISTORY);
+  return { ...state, history: { past, future: [] } };
+}
+
+/**
+ * Finds the past entry that recorded nodeId's creation (before === null).
+ * STREAM_BRANCH_FINISH/FAIL use this so a stream that settles again after its
+ * creation was already recorded does not record a second creation entry.
+ */
 function latestCreationHistoryForNode(state: TreeState, projectId: string, nodeId: string) {
   return state.history.past.find(
     (entry) =>
@@ -304,6 +364,118 @@ function latestCreationHistoryForNode(state: TreeState, projectId: string, nodeI
   );
 }
 
+/**
+ * Shared commit for BRANCH and LEAF: attaches newNode under parent, selects
+ * it, and records one entry whose patch (parent before/after plus
+ * before === null for the new node) lets a single undo remove both the node
+ * and its edge. requestedParentId is the pre-resolveBranchParent id; it is
+ * kept in affectedNodeIds so node Rings on the originally clicked node still
+ * reaches this entry.
+ */
+function commitNewChild(
+  state: TreeState,
+  {
+    parent,
+    newNode,
+    requestedParentId,
+    label,
+  }: { parent: MindNode; newNode: MindNode; requestedParentId: string; label: string },
+): TreeState {
+  const updatedParent = { ...parent, children: [...parent.children, newNode.id] };
+
+  let next = updateActiveProject(state, (activeProject) => ({
+    ...activeProject,
+    nodes: {
+      ...activeProject.nodes,
+      [parent.id]: updatedParent,
+      [newNode.id]: newNode,
+    },
+    updatedAt: Date.now(),
+  }));
+  next = { ...next, selectedNodeId: newNode.id };
+
+  const entry = createHistoryEntry({
+    state,
+    label,
+    primaryNodeId: newNode.id,
+    affectedNodeIds: [parent.id, newNode.id, requestedParentId],
+    patch: {
+      nodeChanges: [
+        { nodeId: parent.id, before: parent, after: updatedParent },
+        { nodeId: newNode.id, before: null, after: newNode },
+      ],
+    },
+  });
+  return persist(pushHistory(next, entry));
+}
+
+/**
+ * Shared settle step for STREAM_BRANCH_FINISH / STREAM_BRANCH_FAIL. Streaming
+ * emits no token-level history, so settling fabricates the single creation
+ * entry for the whole streamed branch — a parent snapshot without the child
+ * plus before === null for the node — letting one node undo remove prompt,
+ * response and edge together. Skipped when a creation entry already exists
+ * for the node (e.g. settling again after undo/redo).
+ */
+function settleStreamedBranch(
+  state: TreeState,
+  projectId: string,
+  parent: MindNode,
+  nodeAfter: MindNode,
+  label: string,
+): TreeState {
+  const next = replaceProjectNode(state, projectId, nodeAfter);
+
+  if (latestCreationHistoryForNode(next, projectId, nodeAfter.id)) {
+    return persist(next);
+  }
+
+  const parentBefore: MindNode = {
+    ...parent,
+    children: parent.children.filter((id) => id !== nodeAfter.id),
+  };
+  const entry = createHistoryEntry({
+    state,
+    projectId,
+    label,
+    primaryNodeId: nodeAfter.id,
+    affectedNodeIds: [parent.id, nodeAfter.id],
+    patch: {
+      nodeChanges: [
+        { nodeId: parent.id, before: parentBefore, after: parent },
+        { nodeId: nodeAfter.id, before: null, after: nodeAfter },
+      ],
+    },
+  });
+  return persist(pushHistory(next, entry));
+}
+
+/**
+ * Applies the same rewrite to past AND future entries. Snapshot
+ * synchronization must cover both directions, otherwise undo or redo could
+ * resurrect a pre-rewrite version of a node.
+ */
+function rewriteHistorySnapshots(
+  state: TreeState,
+  rewrite: (entries: HistoryEntry[]) => HistoryEntry[],
+): TreeState {
+  return {
+    ...state,
+    history: {
+      past: rewrite(state.history.past),
+      future: rewrite(state.history.future),
+    },
+  };
+}
+
+/**
+ * Synchronizes a freshly extracted semantic card into every history snapshot
+ * of the node — past AND future — so undo/redo can never resurrect a pre-card
+ * version. Semantic cards are derived data: SET_NODE_SEMANTICS records no
+ * Rings entry, so existing snapshots must be rewritten in place. Snapshots
+ * taken under a different parentId (pre-graft topology) are left untouched,
+ * and a "stale" snapshot keeps its stale marker.
+ */
 function updateNodeSemanticSnapshots(
   entries: HistoryEntry[],
   projectId: string,
@@ -337,6 +509,12 @@ function updateNodeSemanticSnapshots(
   });
 }
 
+/**
+ * Mirrors the latest includeInContext flag into every past AND future snapshot
+ * of a leaf node, so node undo/redo cannot silently flip a note back into (or
+ * out of) the compiled context. Like semantic cards, the toggle itself records
+ * no Rings entry.
+ */
 function updateLeafContextSnapshots(
   entries: HistoryEntry[],
   projectId: string,
@@ -364,6 +542,15 @@ function updateLeafContextSnapshots(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Rings history — undo/redo application
+// ---------------------------------------------------------------------------
+
+/**
+ * Applies one entry in the given direction. Restored projects/nodes are
+ * re-normalized, and the selection is kept valid: if the selected node
+ * disappears it falls back to the entry's primary node, then to the root.
+ */
 function applyPatch(state: TreeState, entry: HistoryEntry, direction: "undo" | "redo"): TreeState {
   const next: TreeState = {
     ...state,
@@ -415,6 +602,12 @@ function applyPatch(state: TreeState, entry: HistoryEntry, direction: "undo" | "
   return next;
 }
 
+/**
+ * Direction-aware value for a single node change. `children` is delta-merged
+ * (see mergeTargetChildren) instead of overwritten, so an out-of-order node
+ * undo does not erase sibling edges created after the entry was recorded.
+ * Creation/deletion changes (one side missing) use the raw snapshot as-is.
+ */
 function resolveNodePatchValue(
   current: MindNode | undefined,
   before: MindNode | null,
@@ -430,6 +623,17 @@ function resolveNodePatchValue(
   return { ...target, children: mergedChildren };
 }
 
+/**
+ * Delta-merges a recorded children patch onto the *current* children array.
+ *
+ * Node-level Rings can apply history entries out of order, so the current
+ * array may already contain edges added (or lack edges removed) by later,
+ * unrelated work. Overwriting with the recorded target would destroy that
+ * work; instead only the entry's own delta (target vs. source) is replayed:
+ * edges the entry removed are dropped, edges it added are re-inserted — next
+ * to a recorded sibling when one still exists, appended otherwise — and every
+ * unrelated edge is left exactly where it is.
+ */
 function mergeTargetChildren(
   currentChildren: string[],
   sourceChildren: string[],
@@ -493,6 +697,12 @@ function redoAtIndex(state: TreeState, index: number): TreeState {
   });
 }
 
+/**
+ * Index of the newest past entry affecting nodeId, or -1. An entry with
+ * nodeUndoable === false (an atomic Auxo batch) is a hard barrier: node-level
+ * Rings may neither undo the batch itself nor reach through it to older
+ * entries, otherwise a partial undo could leave orphan task nodes.
+ */
 function latestPastIndexForNode(state: TreeState, nodeId: string) {
   for (let index = state.history.past.length - 1; index >= 0; index--) {
     const entry = state.history.past[index];
@@ -506,6 +716,11 @@ function latestPastIndexForNode(state: TreeState, nodeId: string) {
   return -1;
 }
 
+/**
+ * Index of the oldest future entry affecting nodeId, or -1. Applies the same
+ * nodeUndoable === false barrier as latestPastIndexForNode, in the redo
+ * direction.
+ */
 function firstFutureIndexForNode(state: TreeState, nodeId: string) {
   for (let index = 0; index < state.history.future.length; index++) {
     const entry = state.history.future[index];
@@ -519,9 +734,14 @@ function firstFutureIndexForNode(state: TreeState, nodeId: string) {
   return -1;
 }
 
+// ---------------------------------------------------------------------------
+// Reducer
+// ---------------------------------------------------------------------------
+
 export function treeReducer(state: TreeState, action: TreeAction): TreeState {
   switch (action.type) {
     case "HYDRATE": {
+      // Rings history is session-only: hydration always starts empty.
       return { ...action.state, history: { past: [], future: [] } };
     }
 
@@ -548,6 +768,8 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
     }
 
     case "APPLY_AUXO_PLAN": {
+      // Auxo only writes onto a pristine root: no children yet and no node
+      // from a previous generation anywhere in the project.
       const project = state.projects[action.projectId];
       const root = project?.nodes[action.rootNodeId];
       if (
@@ -561,6 +783,8 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
         return state;
       }
 
+      // The plan is re-validated against the freshly compiled input; any
+      // validation failure or fingerprint drift produces zero writes.
       let currentInput: ReturnType<typeof compileAuxoInput>;
       let validatedPlan: typeof action.plan;
       try {
@@ -686,6 +910,10 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
         };
       }
 
+      // One atomic entry for the whole batch. nodeUndoable: false makes it a
+      // node-Rings barrier (see latestPastIndexForNode): only global
+      // Undo/Redo may revert an Auxo generation, so a partial undo can never
+      // orphan task nodes.
       const generatedList = Object.values(generatedNodes);
       const entry = createHistoryEntry({
         state,
@@ -711,10 +939,8 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
       const parent = project.nodes[parentId];
       if (!parent) return state;
 
-      const newNodeId = `node-${crypto.randomUUID()}`;
-      const nutrientRefs = action.nutrientRefs ?? project.activeNutrientIds;
       const newNode: MindNode = {
-        id: newNodeId,
+        id: `node-${crypto.randomUUID()}`,
         kind: "branch",
         nodeRole: "answer",
         prompt: action.prompt,
@@ -725,39 +951,22 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
         offsetX: 0,
         offsetY: 0,
         layer: state.selectedLayer,
-        nutrientRefs,
+        nutrientRefs: action.nutrientRefs ?? project.activeNutrientIds,
         status: "complete",
         contextState: "missing",
         contextManifest: action.contextManifest,
       };
-      const updatedParent = { ...parent, children: [...parent.children, newNodeId] };
-
-      let next = updateActiveProject(state, (activeProject) => {
-        const nodes = {
-          ...activeProject.nodes,
-          [parentId]: updatedParent,
-          [newNodeId]: newNode,
-        };
-        return { ...activeProject, nodes, updatedAt: Date.now() };
-      });
-
-      next = { ...next, selectedNodeId: newNodeId };
-      const entry = createHistoryEntry({
-        state,
+      return commitNewChild(state, {
+        parent,
+        newNode,
+        requestedParentId: action.parentId,
         label: `Branch · ${action.prompt.slice(0, 32)}`,
-        primaryNodeId: newNodeId,
-        affectedNodeIds: [parentId, newNodeId, action.parentId],
-        patch: {
-          nodeChanges: [
-            { nodeId: parentId, before: parent, after: updatedParent },
-            { nodeId: newNodeId, before: null, after: newNode },
-          ],
-        },
       });
-      return persist(pushHistory(next, entry));
     }
 
     case "STREAM_BRANCH_START": {
+      // No history entry yet — the single creation entry is fabricated when
+      // the stream settles (see settleStreamedBranch).
       const project = state.projects[action.projectId];
       if (!project || project.nodes[action.nodeId]) return state;
 
@@ -837,40 +1046,13 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
         status: action.status,
         error: undefined,
       };
-
-      let next = updateProjectById(state, action.projectId, (activeProject) => ({
-        ...activeProject,
-        nodes: {
-          ...activeProject.nodes,
-          [action.nodeId]: nodeAfter,
-        },
-        updatedAt: Date.now(),
-      }));
-
-      if (latestCreationHistoryForNode(next, action.projectId, action.nodeId)) {
-        return persist(next);
-      }
-
-      const parentBefore: MindNode = {
-        ...parent,
-        children: parent.children.filter((id) => id !== action.nodeId),
-      };
-      const entry = createHistoryEntry({
+      return settleStreamedBranch(
         state,
-        projectId: action.projectId,
-        label: `${action.status === "stopped" ? "Stopped" : "Branch"} · ${node.prompt.slice(0, 32)}`,
-        primaryNodeId: action.nodeId,
-        affectedNodeIds: [parent.id, action.nodeId],
-        patch: {
-          nodeChanges: [
-            { nodeId: parent.id, before: parentBefore, after: parent },
-            { nodeId: action.nodeId, before: null, after: nodeAfter },
-          ],
-        },
-      });
-
-      next = pushHistory(next, entry);
-      return persist(next);
+        action.projectId,
+        parent,
+        nodeAfter,
+        `${action.status === "stopped" ? "Stopped" : "Branch"} · ${node.prompt.slice(0, 32)}`,
+      );
     }
 
     case "STREAM_BRANCH_FAIL": {
@@ -884,43 +1066,19 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
         status: "failed",
         error: action.error,
       };
-
-      let next = updateProjectById(state, action.projectId, (activeProject) => ({
-        ...activeProject,
-        nodes: {
-          ...activeProject.nodes,
-          [action.nodeId]: nodeAfter,
-        },
-        updatedAt: Date.now(),
-      }));
-
-      if (latestCreationHistoryForNode(next, action.projectId, action.nodeId)) {
-        return persist(next);
-      }
-
-      const parentBefore: MindNode = {
-        ...parent,
-        children: parent.children.filter((id) => id !== action.nodeId),
-      };
-      const entry = createHistoryEntry({
+      return settleStreamedBranch(
         state,
-        projectId: action.projectId,
-        label: `Failed branch · ${node.prompt.slice(0, 32)}`,
-        primaryNodeId: action.nodeId,
-        affectedNodeIds: [parent.id, action.nodeId],
-        patch: {
-          nodeChanges: [
-            { nodeId: parent.id, before: parentBefore, after: parent },
-            { nodeId: action.nodeId, before: null, after: nodeAfter },
-          ],
-        },
-      });
-
-      next = pushHistory(next, entry);
-      return persist(next);
+        action.projectId,
+        parent,
+        nodeAfter,
+        `Failed branch · ${node.prompt.slice(0, 32)}`,
+      );
     }
 
     case "SET_NODE_SEMANTICS": {
+      // expectedParentId guards against a graft that landed while the
+      // extraction request was in flight: a card computed for the old
+      // topology must not mark the moved node "valid".
       const project = state.projects[action.projectId];
       const node = project?.nodes[action.nodeId];
       if (
@@ -941,32 +1099,13 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
         semanticCard: action.semanticCard,
         contextState: "valid",
       };
-      const next = updateProjectById(state, action.projectId, (activeProject) => ({
-        ...activeProject,
-        nodes: {
-          ...activeProject.nodes,
-          [action.nodeId]: nodeAfter,
-        },
-        updatedAt: Date.now(),
-      }));
+      const next = replaceProjectNode(state, action.projectId, nodeAfter);
 
-      return persist({
-        ...next,
-        history: {
-          past: updateNodeSemanticSnapshots(
-            next.history.past,
-            action.projectId,
-            action.nodeId,
-            nodeAfter,
-          ),
-          future: updateNodeSemanticSnapshots(
-            next.history.future,
-            action.projectId,
-            action.nodeId,
-            nodeAfter,
-          ),
-        },
-      });
+      return persist(
+        rewriteHistorySnapshots(next, (entries) =>
+          updateNodeSemanticSnapshots(entries, action.projectId, action.nodeId, nodeAfter),
+        ),
+      );
     }
 
     case "LEAF": {
@@ -976,9 +1115,8 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
       const parent = project.nodes[parentId];
       if (!parent) return state;
 
-      const newNodeId = `note-${crypto.randomUUID()}`;
       const newNode: MindNode = {
-        id: newNodeId,
+        id: `note-${crypto.randomUUID()}`,
         kind: "leaf",
         prompt: action.content,
         response: "",
@@ -993,66 +1131,29 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
         contextState: "missing",
         includeInContext: false,
       };
-      const updatedParent = { ...parent, children: [...parent.children, newNodeId] };
-
-      let next = updateActiveProject(state, (activeProject) => {
-        const nodes = {
-          ...activeProject.nodes,
-          [parentId]: updatedParent,
-          [newNodeId]: newNode,
-        };
-        return { ...activeProject, nodes, updatedAt: Date.now() };
-      });
-
-      next = { ...next, selectedNodeId: newNodeId };
-      const entry = createHistoryEntry({
-        state,
+      return commitNewChild(state, {
+        parent,
+        newNode,
+        requestedParentId: action.parentId,
         label: `Leaf · ${action.content.slice(0, 32)}`,
-        primaryNodeId: newNodeId,
-        affectedNodeIds: [parentId, newNodeId, action.parentId],
-        patch: {
-          nodeChanges: [
-            { nodeId: parentId, before: parent, after: updatedParent },
-            { nodeId: newNodeId, before: null, after: newNode },
-          ],
-        },
       });
-      return persist(pushHistory(next, entry));
     }
 
     case "TOGGLE_LEAF_CONTEXT": {
       const project = getActiveProject(state);
       const node = project?.nodes[action.nodeId];
       if (!project || !node || node.kind !== "leaf") return state;
+
       const includeInContext = !node.includeInContext;
-      const next = updateActiveProject(state, (activeProject) => ({
-        ...activeProject,
-        nodes: {
-          ...activeProject.nodes,
-          [action.nodeId]: {
-            ...node,
-            includeInContext,
-          },
-        },
-        updatedAt: Date.now(),
-      }));
-      return persist({
-        ...next,
-        history: {
-          past: updateLeafContextSnapshots(
-            next.history.past,
-            state.activeProjectId,
-            action.nodeId,
-            includeInContext,
-          ),
-          future: updateLeafContextSnapshots(
-            next.history.future,
-            state.activeProjectId,
-            action.nodeId,
-            includeInContext,
-          ),
-        },
+      const next = replaceProjectNode(state, state.activeProjectId, {
+        ...node,
+        includeInContext,
       });
+      return persist(
+        rewriteHistorySnapshots(next, (entries) =>
+          updateLeafContextSnapshots(entries, state.activeProjectId, action.nodeId, includeInContext),
+        ),
+      );
     }
 
     case "GRAFT_START": {
@@ -1062,7 +1163,7 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
     case "GRAFT_CONFIRM": {
       const sourceId = state.graftSourceId;
       if (!sourceId || sourceId === action.newParentId) {
-        return { ...state, toolMode: "view", graftSourceId: null };
+        return exitGraftMode(state);
       }
 
       const project = getActiveProject(state);
@@ -1078,21 +1179,23 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
         newParentBefore.kind === "leaf" ||
         sourceBefore.parentId === action.newParentId
       ) {
-        return { ...state, toolMode: "view", graftSourceId: null };
+        return exitGraftMode(state);
       }
 
       const subtreeIds = collectSubtreeIds(nodes, sourceId);
       if (subtreeIds.has(action.newParentId)) {
-        return { ...state, toolMode: "view", graftSourceId: null };
+        return exitGraftMode(state);
       }
 
+      // Grafts never touch a streaming node: a history snapshot of an
+      // unfinished node could otherwise be restored later.
       const oldParentBefore = sourceBefore?.parentId ? nodes[sourceBefore.parentId] : null;
       const touchesStreamingNode =
         newParentBefore.status === "streaming" ||
         oldParentBefore?.status === "streaming" ||
         Array.from(subtreeIds).some((nodeId) => nodes[nodeId]?.status === "streaming");
       if (touchesStreamingNode) {
-        return { ...state, toolMode: "view", graftSourceId: null };
+        return exitGraftMode(state);
       }
 
       const updatedNodes = { ...nodes };
@@ -1124,6 +1227,8 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
         after: newParentAfter,
       });
 
+      // Prompts and responses move untouched; only answer semantics in the
+      // moved subtree become "stale" (immutable Auxo task source stays valid).
       for (const nodeId of subtreeIds) {
         const before = nodes[nodeId];
         if (!before) continue;
@@ -1171,7 +1276,7 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
     }
 
     case "GRAFT_CANCEL": {
-      return { ...state, toolMode: "view", graftSourceId: null };
+      return exitGraftMode(state);
     }
 
     case "PRUNE": {
@@ -1210,7 +1315,7 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
 
       // Cancel active graft if source was pruned
       if (next.graftSourceId && subtreeIds.has(next.graftSourceId)) {
-        next = { ...next, toolMode: "view", graftSourceId: null };
+        next = exitGraftMode(next);
       }
 
       const nodeChanges = [
@@ -1252,11 +1357,7 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
     }
 
     case "TOGGLE_3D": {
-      const is3D = !state.is3DMode;
-      if (is3D) {
-        return { ...state, is3DMode: true };
-      }
-      return { ...state, is3DMode: false };
+      return { ...state, is3DMode: !state.is3DMode };
     }
 
     case "TOGGLE_CANOPY": {

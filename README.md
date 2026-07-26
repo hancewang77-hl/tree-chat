@@ -60,7 +60,7 @@ Every action is named after a botanical operation, making the mental model intui
 Tree Chat deliberately avoids the generic AI-chatbot aesthetic (neon blues, purple gradients, glowing orbs). Instead it uses a warm, tactile, editorial palette inspired by botanical field guides and print typography:
 
 - **Base tones**: cream paper (`#FBF7F0`), warm parchment (`#F5F0E8`)
-- **Typography**: Lora (serif headings) + Geist (sans-serif UI) + Geist Mono (code)
+- **Typography**: serif headings + sans-serif UI + monospace code, via system font stacks (Georgia/Noto Serif SC, Inter/system-ui — no webfonts shipped)
 - **Texture**: CSS grain overlay on every surface — it feels like paper, not glass
 - **Accents**: bark brown, sage green, amber gold — nothing glows, everything breathes
 
@@ -135,7 +135,7 @@ npx wrangler deploy
 ```
 app/
 ├── page.tsx           # TreeProvider shell + app orchestration
-├── layout.tsx         # Root layout (fonts)
+├── layout.tsx         # Root layout (theme script, KaTeX CSS)
 ├── globals.css        # CSS vars, grain texture, animations
 └── api/
     ├── chat/route.ts       # Streaming answer → DeepSeek

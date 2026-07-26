@@ -60,7 +60,7 @@
 Tree Chat 刻意避开了 AI 聊天工具千篇一律的"霓虹蓝紫渐变色 + 发光光球"风格，转而采用温暖、有触感的编辑美学，灵感来自植物图鉴和印刷排版：
 
 - **底色**：奶油纸 (`#FBF7F0`)、暖羊皮纸 (`#F5F0E8`)
-- **字体**：Lora（衬线标题）+ Geist（无衬线界面）+ Geist Mono（代码）
+- **字体**：衬线标题 + 无衬线界面 + 等宽代码，均使用系统回退字体栈（Georgia/Noto Serif SC、Inter/system-ui——不加载网络字体）
 - **肌理**：全局 CSS 噪点叠加——触摸感如纸张，而非玻璃
 - **强调色**：树皮棕、鼠尾草绿、琥珀金——不发光的配色，会呼吸的界面
 
@@ -135,7 +135,7 @@ npx wrangler deploy
 ```
 app/
 ├── page.tsx           # TreeProvider 外壳与应用流程编排
-├── layout.tsx         # 根布局（字体）
+├── layout.tsx         # 根布局（主题脚本、KaTeX 样式）
 ├── globals.css        # CSS 变量、噪点肌理、动画
 └── api/
     ├── chat/route.ts       # 流式回答 → DeepSeek

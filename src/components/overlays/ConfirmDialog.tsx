@@ -1,6 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { AlertTriangle } from "lucide-react";
+import type { MindNode } from "@/src/types/tree";
+import { useTreeDispatch } from "@/src/state/TreeContext";
 
 export function ConfirmDialog({
   title,
@@ -65,4 +68,43 @@ export function ConfirmDialog({
       </div>
     </div>
   );
+}
+
+/**
+ * 修剪确认流程（TreeToolbar 与 InspectorSidebar 共用）。
+ * 约束：根节点受保护，requestPrune 对根节点/空选择不弹窗；
+ * 文案与 PRUNE 派发必须在两处入口保持一致。
+ * 弹窗以调用方渲染 pruneConfirmDialog 的位置为定位上下文。
+ */
+export function usePruneConfirm({
+  selectedNode,
+  isRoot,
+}: {
+  selectedNode: MindNode | undefined;
+  isRoot: boolean;
+}) {
+  const dispatch = useTreeDispatch();
+  const [showPruneConfirm, setShowPruneConfirm] = useState(false);
+
+  function requestPrune() {
+    if (isRoot || !selectedNode) return;
+    setShowPruneConfirm(true);
+  }
+
+  const pruneConfirmDialog = showPruneConfirm && selectedNode ? (
+    <ConfirmDialog
+      title="修剪分支 · Prune"
+      message={`确定要删除「${selectedNode.prompt.slice(0, 40)}」${
+        selectedNode.children.length > 0 ? `及其 ${selectedNode.children.length} 个子节点` : ""
+      }吗？此操作可通过 Rings 撤销。`}
+      confirmLabel="确认删除"
+      onConfirm={() => {
+        dispatch({ type: "PRUNE", nodeId: selectedNode.id });
+        setShowPruneConfirm(false);
+      }}
+      onCancel={() => setShowPruneConfirm(false)}
+    />
+  ) : null;
+
+  return { requestPrune, pruneConfirmDialog };
 }

@@ -4,6 +4,12 @@ import type { AuxoPlan, AuxoRequest } from "@/src/types/tree";
 
 const CLIENT_TIMEOUT = 55_000;
 
+/**
+ * Cancelable Auxo plan request. Invariants: at most one request in flight
+ * (rejects re-entry), a CLIENT_TIMEOUT abort distinct from user cancellation,
+ * and the returned plan is always re-validated client-side before any node is
+ * created.
+ */
 export function useAuxo() {
   const [isGenerating, setIsGenerating] = useState(false);
   const inFlightRef = useRef(false);

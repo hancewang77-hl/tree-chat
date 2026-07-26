@@ -6,7 +6,7 @@ import type { MindNode, NodesMap, SemanticCard } from "@/src/types/tree";
 import { useTreeState, useTreeDispatch } from "@/src/state/TreeContext";
 import { renderMarkdownToHTML } from "@/src/lib/formatResponse";
 import { CARD_BOTTOM_LEAF_VEIN_PATTERN } from "@/src/lib/visualPatterns";
-import { ConfirmDialog } from "@/src/components/overlays/ConfirmDialog";
+import { usePruneConfirm } from "@/src/components/overlays/ConfirmDialog";
 
 type ComposerMode = "ai" | "note";
 
@@ -21,7 +21,6 @@ export function InspectorSidebar({
 }) {
   const state = useTreeState();
   const dispatch = useTreeDispatch();
-  const [showPruneConfirm, setShowPruneConfirm] = useState(false);
   const [composerMode, setComposerMode] = useState<ComposerMode>("ai");
 
   const activeProject = state.projects[state.activeProjectId];
@@ -29,6 +28,7 @@ export function InspectorSidebar({
   const isRoot = selectedNode?.id === activeProject?.rootNodeId;
   const isAuxoTask = selectedNode?.nodeRole === "task" || selectedNode?.nodeRole === "task-group";
   const isStructuring = selectedNode ? structuringNodeIds.has(selectedNode.id) : false;
+  const { requestPrune, pruneConfirmDialog } = usePruneConfirm({ selectedNode, isRoot });
 
   useEffect(() => {
     const handleMode = (event: Event) => {
@@ -350,27 +350,14 @@ export function InspectorSidebar({
                 icon={<Trash2 size={13} />}
                 label="修剪"
                 danger
-                onClick={() => setShowPruneConfirm(true)}
+                onClick={requestPrune}
               />
             )}
           </div>
         </div>
       )}
 
-      {showPruneConfirm && selectedNode && (
-        <ConfirmDialog
-          title="修剪分支 · Prune"
-          message={`确定要删除「${selectedNode.prompt.slice(0, 40)}」${
-            selectedNode.children.length > 0 ? `及其 ${selectedNode.children.length} 个子节点` : ""
-          }吗？此操作可通过 Rings 撤销。`}
-          confirmLabel="确认删除"
-          onConfirm={() => {
-            dispatch({ type: "PRUNE", nodeId: selectedNode.id });
-            setShowPruneConfirm(false);
-          }}
-          onCancel={() => setShowPruneConfirm(false)}
-        />
-      )}
+      {pruneConfirmDialog}
     </aside>
   );
 }

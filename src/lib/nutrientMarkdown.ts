@@ -285,6 +285,18 @@ function hasReadableMarkdownContent(markdown: string): boolean {
   );
 }
 
+/**
+ * ZIP-bomb guard: walks the ZIP central directory BEFORE any byte is
+ * decompressed (mammoth only runs after this passes). Enforced here:
+ * - single-disk, non-ZIP64 archives only (0xffff / 0xffffffff sentinels and
+ *   disk-split fields are rejected);
+ * - at most MAX_DOCX_ARCHIVE_ENTRIES entries, each with a valid signature and
+ *   in-bounds record;
+ * - declared uncompressed sizes: per entry ≤ MAX_DOCX_ENTRY_BYTES, summed
+ *   ≤ MAX_DOCX_UNCOMPRESSED_BYTES, per-entry ratio ≤ MAX_DOCX_COMPRESSION_RATIO.
+ * Sizes come from the central directory, so an inflating bomb is rejected
+ * from metadata alone.
+ */
 function assertSafeDocxArchive(arrayBuffer: ArrayBuffer): void {
   const view = new DataView(arrayBuffer);
   const eocdOffset = findZipEndOfCentralDirectory(view);
@@ -361,6 +373,10 @@ function assertSafeDocxArchive(arrayBuffer: ArrayBuffer): void {
   }
 }
 
+/**
+ * Scans backwards for the end-of-central-directory signature (0x06054b50),
+ * covering the maximum 0xffff-byte trailing ZIP comment.
+ */
 function findZipEndOfCentralDirectory(view: DataView): number {
   const minimumOffset = Math.max(0, view.byteLength - 22 - 0xffff);
   for (let offset = view.byteLength - 22; offset >= minimumOffset; offset -= 1) {

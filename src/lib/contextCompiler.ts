@@ -6,6 +6,7 @@ import type {
 import {
   formatNutrientChunks,
   selectRelevantNutrientChunks,
+  type NutrientChunk,
 } from "@/src/lib/nutrients";
 import {
   isUsableSemanticCard,
@@ -54,6 +55,28 @@ const MAX_ROOT_PROMPT = 3_000;
 const MAX_ANCHOR_PROMPT = 4_000;
 const MAX_INCLUDED_LEAF_TEXT = 3_000;
 
+type ExcludedNodeIds = ContextManifest["excludedNodeIds"];
+type SemanticSection = { node: MindNode; text: string };
+
+/**
+ * Compiles the bounded model context for the anchor node.
+ *
+ * Assembly order is fixed: 根任务 → 有效父路径语义 → 用户显式纳入的 Leaf 笔记
+ * → 当前任务原文 → 相关 Nutrient 片段 → 当前问题.
+ *
+ * Budget policy is skip-and-continue, never stop: a candidate section that
+ * exceeds the remaining budget is skipped (recorded with reason "budget") and
+ * later candidates may still be included.
+ *
+ * ContextManifest exclusion reason vocabulary:
+ * - "failed"     the node's answer failed
+ * - "incomplete" the node is still streaming or was stopped
+ * - "stale"      answer semantics invalidated (e.g. by graft)
+ * - "missing"    no usable semantic card
+ * - "duplicate"  semantic fingerprint already contributed by a nearer node
+ * - "budget"     skipped by the semantic/leaf character budget
+ * - "leaf"       leaf note not explicitly included (isolated by default)
+ */
 export function compileContext(input: CompileContextInput): CompiledContext {
   const {
     project,
@@ -65,7 +88,7 @@ export function compileContext(input: CompileContextInput): CompiledContext {
   if (!prompt) throw new Error("当前问题不能为空");
 
   const warnings: string[] = [];
-  const excludedNodeIds: ContextManifest["excludedNodeIds"] = [];
+  const excludedNodeIds: ExcludedNodeIds = [];
   const excluded = new Set<string>();
   const root = project.nodes[project.rootNodeId];
   if (!root) throw new Error("项目根节点不存在");
@@ -78,97 +101,33 @@ export function compileContext(input: CompileContextInput): CompiledContext {
     ? uniqueNodes([root, ...path])
     : [root];
 
-  const semanticSections: Array<{ node: MindNode; text: string }> = [];
-  const seenSemantics = new Set<string>();
-  let semanticRemaining = input.semanticBudget ?? DEFAULT_SEMANTIC_BUDGET;
-
-  for (const node of [...pathNodes].reverse()) {
-    if (node.id === root.id || node.kind === "leaf") continue;
-
-    if (node.status === "failed") {
-      addExcluded(node.id, "failed", excluded, excludedNodeIds);
-      continue;
-    }
-    if (node.status && node.status !== "complete") {
-      addExcluded(node.id, "incomplete", excluded, excludedNodeIds);
-      continue;
-    }
-    if (node.nodeRole === "task" || node.nodeRole === "task-group") {
-      const taskParts = [
-        node.id === anchor.id ? "" : `任务原文：${node.prompt.trim()}`,
-        node.taskDescription?.trim()
-          ? `规划说明：${node.taskDescription.trim()}`
-          : "",
-      ].filter(Boolean);
-      const section = `[Auxo ${node.nodeRole === "task-group" ? "任务组" : "原子任务"} ${node.id}]\n${taskParts.join("\n")}`;
-      if (section.length > semanticRemaining) {
-        addExcluded(node.id, "budget", excluded, excludedNodeIds);
-        continue;
-      }
-      semanticSections.push({ node, text: section });
-      semanticRemaining -= section.length;
-      continue;
-    }
-    if (node.contextState === "stale") {
-      addExcluded(node.id, "stale", excluded, excludedNodeIds);
-      continue;
-    }
-    if (node.contextState !== "valid" || !isUsableSemanticCard(node.semanticCard)) {
-      addExcluded(node.id, "missing", excluded, excludedNodeIds);
-      continue;
-    }
-
-    const semanticText = semanticCardToText(node.semanticCard);
-    const fingerprint = semanticText.replace(/\s+/g, " ").trim();
-    if (seenSemantics.has(fingerprint)) {
-      addExcluded(node.id, "duplicate", excluded, excludedNodeIds);
-      continue;
-    }
-    const section = `[节点 ${node.id} 的有效语义]\n${semanticText}`;
-    if (section.length > semanticRemaining) {
-      addExcluded(node.id, "budget", excluded, excludedNodeIds);
-      continue;
-    }
-
-    semanticSections.push({ node, text: section });
-    semanticRemaining -= section.length;
-    seenSemantics.add(fingerprint);
-  }
-  semanticSections.reverse();
-
-  const leafSections: string[] = [];
-  const includedLeafIds: string[] = [];
-  const seenLeafIds = new Set<string>();
-  let leafRemaining = MAX_INCLUDED_LEAF_TEXT;
-  for (const node of pathNodes) {
-    for (const childId of node.children) {
-      const child = project.nodes[childId];
-      if (!child || child.kind !== "leaf") continue;
-      if (seenLeafIds.has(child.id)) continue;
-      seenLeafIds.add(child.id);
-      if (!child.includeInContext) {
-        addExcluded(child.id, "leaf", excluded, excludedNodeIds);
-        continue;
-      }
-      const leafText = child.prompt.trim();
-      if (!leafText) continue;
-      const section = `[用户显式纳入的 Leaf ${child.id}]\n${leafText}`;
-      if (section.length > leafRemaining) {
-        addExcluded(child.id, "budget", excluded, excludedNodeIds);
-        continue;
-      }
-      leafSections.push(section);
-      includedLeafIds.push(child.id);
-      leafRemaining -= section.length;
-    }
-  }
-
+  // Stage 1 — root task.
   const rootPrompt = clipWithWarning(
     root.prompt,
     MAX_ROOT_PROMPT,
     "根任务过长，已在上下文中截断。",
     warnings,
   );
+
+  // Stage 2 — valid parent-path semantics.
+  const semanticSections = collectParentSemanticSections({
+    pathNodes,
+    root,
+    anchor,
+    budget: input.semanticBudget ?? DEFAULT_SEMANTIC_BUDGET,
+    excluded,
+    excludedNodeIds,
+  });
+
+  // Stage 3 — explicitly included Leaf notes.
+  const { leafSections, includedLeafIds } = collectIncludedLeafSections({
+    project,
+    pathNodes,
+    excluded,
+    excludedNodeIds,
+  });
+
+  // Stage 4 — anchor prompt (the current task's own text).
   const isAuxoAnchor = anchor.nodeRole === "task" || anchor.nodeRole === "task-group";
   const anchorPrompt = clipWithWarning(
     anchor.prompt,
@@ -178,33 +137,18 @@ export function compileContext(input: CompileContextInput): CompiledContext {
       : "当前父节点问题过长，已在上下文中截断。",
     warnings,
   );
-  const auxoPathQueries = pathNodes
-    .filter((node) => node.nodeRole === "task" || node.nodeRole === "task-group")
-    .map((node) => node.prompt);
-  const nutrientQuery = [prompt, ...auxoPathQueries, root.prompt].join("\n");
-  const auxoPathNode = [...pathNodes]
-    .reverse()
-    .find((node) => node.nodeRole === "task" || node.nodeRole === "task-group");
-  const nutrientIds = auxoPathNode
-    ? (auxoPathNode.nutrientRefs ?? [])
-    : project.activeNutrientIds;
-  if (auxoPathNode) {
-    const missingNutrientCount = nutrientIds.filter(
-      (nutrientId) => !project.nutrients[nutrientId],
-    ).length;
-    if (missingNutrientCount > 0) {
-      warnings.push(
-        `Auxo 生成时使用的 ${missingNutrientCount} 份资料已被移除，当前上下文无法恢复其内容。`,
-      );
-    }
-  }
-  const nutrientChunks = selectRelevantNutrientChunks(
-    Object.values(project.nutrients),
-    nutrientIds,
-    nutrientQuery,
-    input.nutrientBudget ?? DEFAULT_NUTRIENT_BUDGET,
-  );
 
+  // Stage 5 — relevant Nutrient chunks.
+  const nutrientChunks = selectAnchorNutrientChunks({
+    project,
+    pathNodes,
+    root,
+    prompt,
+    budget: input.nutrientBudget ?? DEFAULT_NUTRIENT_BUDGET,
+    warnings,
+  });
+
+  // Stage 6 — the current question closes the compiled user message.
   const sections = [
     `根任务\n${rootPrompt}`,
     semanticSections.length > 0
@@ -246,6 +190,167 @@ export function compileContext(input: CompileContextInput): CompiledContext {
     ],
     manifest,
   };
+}
+
+/**
+ * Stage 2 — 有效父路径语义. Walks the path nodes from the anchor toward the
+ * root so nearer nodes get budget priority, then restores root→anchor order
+ * for assembly. Only compact semantic cards travel — full answers never do.
+ */
+function collectParentSemanticSections(params: {
+  pathNodes: MindNode[];
+  root: MindNode;
+  anchor: MindNode;
+  budget: number;
+  excluded: Set<string>;
+  excludedNodeIds: ExcludedNodeIds;
+}): SemanticSection[] {
+  const { pathNodes, root, anchor, excluded, excludedNodeIds } = params;
+  const sections: SemanticSection[] = [];
+  const seenSemantics = new Set<string>();
+  let remaining = params.budget;
+
+  for (const node of [...pathNodes].reverse()) {
+    if (node.id === root.id || node.kind === "leaf") continue;
+
+    if (node.status === "failed") {
+      addExcluded(node.id, "failed", excluded, excludedNodeIds);
+      continue;
+    }
+    if (node.status && node.status !== "complete") {
+      addExcluded(node.id, "incomplete", excluded, excludedNodeIds);
+      continue;
+    }
+    // Auxo task/task-group nodes contribute their immutable source text, not
+    // answer semantics, so graft-induced staleness does not affect them.
+    if (node.nodeRole === "task" || node.nodeRole === "task-group") {
+      const taskParts = [
+        node.id === anchor.id ? "" : `任务原文：${node.prompt.trim()}`,
+        node.taskDescription?.trim()
+          ? `规划说明：${node.taskDescription.trim()}`
+          : "",
+      ].filter(Boolean);
+      const section = `[Auxo ${node.nodeRole === "task-group" ? "任务组" : "原子任务"} ${node.id}]\n${taskParts.join("\n")}`;
+      if (section.length > remaining) {
+        addExcluded(node.id, "budget", excluded, excludedNodeIds);
+        continue;
+      }
+      sections.push({ node, text: section });
+      remaining -= section.length;
+      continue;
+    }
+    if (node.contextState === "stale") {
+      addExcluded(node.id, "stale", excluded, excludedNodeIds);
+      continue;
+    }
+    if (node.contextState !== "valid" || !isUsableSemanticCard(node.semanticCard)) {
+      addExcluded(node.id, "missing", excluded, excludedNodeIds);
+      continue;
+    }
+
+    const semanticText = semanticCardToText(node.semanticCard);
+    const fingerprint = semanticText.replace(/\s+/g, " ").trim();
+    if (seenSemantics.has(fingerprint)) {
+      addExcluded(node.id, "duplicate", excluded, excludedNodeIds);
+      continue;
+    }
+    const section = `[节点 ${node.id} 的有效语义]\n${semanticText}`;
+    if (section.length > remaining) {
+      addExcluded(node.id, "budget", excluded, excludedNodeIds);
+      continue;
+    }
+
+    sections.push({ node, text: section });
+    remaining -= section.length;
+    seenSemantics.add(fingerprint);
+  }
+  sections.reverse();
+  return sections;
+}
+
+/**
+ * Stage 3 — 用户显式纳入的 Leaf 笔记. Leaves are isolated by default: only
+ * includeInContext leaves enter; the rest are recorded with reason "leaf".
+ * Shares the skip-and-continue budget policy.
+ */
+function collectIncludedLeafSections(params: {
+  project: Project;
+  pathNodes: MindNode[];
+  excluded: Set<string>;
+  excludedNodeIds: ExcludedNodeIds;
+}): { leafSections: string[]; includedLeafIds: string[] } {
+  const { project, pathNodes, excluded, excludedNodeIds } = params;
+  const leafSections: string[] = [];
+  const includedLeafIds: string[] = [];
+  const seenLeafIds = new Set<string>();
+  let remaining = MAX_INCLUDED_LEAF_TEXT;
+
+  for (const node of pathNodes) {
+    for (const childId of node.children) {
+      const child = project.nodes[childId];
+      if (!child || child.kind !== "leaf") continue;
+      if (seenLeafIds.has(child.id)) continue;
+      seenLeafIds.add(child.id);
+      if (!child.includeInContext) {
+        addExcluded(child.id, "leaf", excluded, excludedNodeIds);
+        continue;
+      }
+      const leafText = child.prompt.trim();
+      if (!leafText) continue;
+      const section = `[用户显式纳入的 Leaf ${child.id}]\n${leafText}`;
+      if (section.length > remaining) {
+        addExcluded(child.id, "budget", excluded, excludedNodeIds);
+        continue;
+      }
+      leafSections.push(section);
+      includedLeafIds.push(child.id);
+      remaining -= section.length;
+    }
+  }
+
+  return { leafSections, includedLeafIds };
+}
+
+/**
+ * Stage 5 — 相关 Nutrient 片段. Inside an Auxo subtree the generation-time
+ * Nutrient ID snapshot (nearest task/task-group's nutrientRefs) wins over the
+ * project's currently active list.
+ */
+function selectAnchorNutrientChunks(params: {
+  project: Project;
+  pathNodes: MindNode[];
+  root: MindNode;
+  prompt: string;
+  budget: number;
+  warnings: string[];
+}): NutrientChunk[] {
+  const { project, pathNodes, root, prompt, warnings } = params;
+  const auxoPathQueries = pathNodes
+    .filter((node) => node.nodeRole === "task" || node.nodeRole === "task-group")
+    .map((node) => node.prompt);
+  const nutrientQuery = [prompt, ...auxoPathQueries, root.prompt].join("\n");
+  const auxoPathNode = [...pathNodes]
+    .reverse()
+    .find((node) => node.nodeRole === "task" || node.nodeRole === "task-group");
+  const nutrientIds = auxoPathNode
+    ? (auxoPathNode.nutrientRefs ?? [])
+    : project.activeNutrientIds;
+  if (auxoPathNode) {
+    const missingNutrientCount = nutrientIds.filter(
+      (nutrientId) => !project.nutrients[nutrientId],
+    ).length;
+    if (missingNutrientCount > 0) {
+      warnings.push(
+        `Auxo 生成时使用的 ${missingNutrientCount} 份资料已被移除，当前上下文无法恢复其内容。`,
+      );
+    }
+  }
+  return selectRelevantNutrientChunks(
+    Object.values(project.nutrients),
+    nutrientIds,
+    nutrientQuery,
+    params.budget,
+  );
 }
 
 function resolveAnchorNode(project: Project, selected: MindNode, root: MindNode): MindNode {
@@ -294,9 +399,9 @@ function uniqueNodes(nodes: MindNode[]): MindNode[] {
 
 function addExcluded(
   nodeId: string,
-  reason: ContextManifest["excludedNodeIds"][number]["reason"],
+  reason: ExcludedNodeIds[number]["reason"],
   seen: Set<string>,
-  output: ContextManifest["excludedNodeIds"],
+  output: ExcludedNodeIds,
 ) {
   if (seen.has(nodeId)) return;
   seen.add(nodeId);

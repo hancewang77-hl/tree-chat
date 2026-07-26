@@ -6,7 +6,7 @@ import { useAIChat } from "@/hooks/useAIChat";
 import { useAuxo } from "@/hooks/useAuxo";
 import { compileContext } from "@/src/lib/contextCompiler";
 import { compileAuxoInput, type AuxoInputBundle } from "@/src/lib/auxo";
-import type { AuxoPlan } from "@/src/types/tree";
+import type { AuxoPlan, MindNode, NodesMap, TreeState } from "@/src/types/tree";
 import { DEEPSEEK_MODEL } from "@/src/lib/deepseek";
 import { clamp } from "@/src/lib/utils";
 import { TreeProvider, useTreeState, useTreeDispatch } from "@/src/state/TreeContext";
@@ -25,6 +25,74 @@ import { LayerNameDialog } from "@/src/components/LayerNameDialog";
 import { AuxoDialog } from "@/src/components/overlays/AuxoDialog";
 
 const CHAT_MODEL = DEEPSEEK_MODEL;
+
+// ———— Pure helpers (no React state) ————
+
+// Context anchor: leaves never anchor context themselves — they delegate to
+// their parent (falling back to the root). Branch/root nodes anchor directly.
+function resolveContextAnchorId<T extends string | undefined>(
+  node: MindNode | undefined,
+  rootNodeId: T,
+): string | T {
+  if (!node) return rootNodeId;
+  return node.kind === "leaf" ? node.parentId ?? rootNodeId : node.id;
+}
+
+// 3D wheel layer switching: may overshoot the occupied layer range by up to
+// 2 layers in each direction (layer 0 always counts as occupied).
+function wheelTargetLayer(nodes: NodesMap, currentLayer: number, direction: number): number {
+  const allLayers = Object.values(nodes).map((n) => n.layer);
+  const minL = Math.min(...allLayers, currentLayer, 0);
+  const maxL = Math.max(...allLayers, currentLayer, 0);
+  return clamp(currentLayer + direction, minL - 2, maxL + 2);
+}
+
+// Representative node for a layer: shallowest context path wins; ties break
+// to the earliest timestamp.
+function pickLayerRepresentative(nodes: NodesMap, candidates: MindNode[]): MindNode {
+  return candidates.reduce((bestNode, currentNode) => {
+    const bestDepth = getContextPath(nodes, bestNode.id).length;
+    const currentDepth = getContextPath(nodes, currentNode.id).length;
+    if (currentDepth < bestDepth) return currentNode;
+    if (currentDepth > bestDepth) return bestNode;
+    return currentNode.timestamp < bestNode.timestamp ? currentNode : bestNode;
+  });
+}
+
+function isAbortError(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "name" in err &&
+    (err as { name?: unknown }).name === "AbortError"
+  );
+}
+
+type AuxoRootDrift = "missing-root" | "root-not-empty" | "fingerprint-changed";
+
+// Shared by the double Auxo validation (once when the plan request returns,
+// once again right before the confirmed write). Any drift aborts the merge
+// with zero writes: the project/root was deleted or replaced, the root grew
+// children during the request, or the root task + enabled nutrients no longer
+// match the fingerprint the plan was generated from. Checks run in this
+// order; the fingerprint is only compiled once the root is known to exist.
+function detectAuxoRootDrift(
+  state: TreeState,
+  projectId: string,
+  rootNodeId: string,
+  inputFingerprint: string,
+): AuxoRootDrift | null {
+  const latestProject = state.projects[projectId];
+  const latestRoot = latestProject?.nodes[rootNodeId];
+  if (!latestProject || !latestRoot || latestProject.rootNodeId !== rootNodeId) {
+    return "missing-root";
+  }
+  if (latestRoot.children.length > 0) return "root-not-empty";
+  if (compileAuxoInput(latestProject).inputFingerprint !== inputFingerprint) {
+    return "fingerprint-changed";
+  }
+  return null;
+}
 
 function App() {
   const state = useTreeState();
@@ -55,13 +123,19 @@ function App() {
     projectId: string;
   } | null>(null);
 
-  // Refs for latest values used in callbacks — avoids stale closures
+  // Ref mirrors of the latest state/nodes, refreshed after every commit.
+  // Stable useCallback handlers and long-running async flows (streaming,
+  // Auxo) read these instead of captured values, so code after an await
+  // always observes the post-dispatch tree rather than a stale closure.
   const nodesRef = useRef(nodes);
   const stateRef = useRef(state);
   useEffect(() => { nodesRef.current = nodes; });
   useEffect(() => { stateRef.current = state; });
 
-  // Animate displayLayer toward selectedLayer
+  // ———— Layer animation ————
+
+  // Animate displayLayer toward selectedLayer: eased each rAF frame
+  // (factor 0.14) and snapped once within 0.001 to end the loop.
   const [displayLayer, setDisplayLayer] = useState(state.selectedLayer);
 
   useEffect(() => {
@@ -92,13 +166,7 @@ function App() {
       return;
     }
 
-    const best = candidates.reduce((bestNode, currentNode) => {
-      const bestDepth = getContextPath(nodes, bestNode.id).length;
-      const currentDepth = getContextPath(nodes, currentNode.id).length;
-      if (currentDepth < bestDepth) return currentNode;
-      if (currentDepth > bestDepth) return bestNode;
-      return currentNode.timestamp < bestNode.timestamp ? currentNode : bestNode;
-    });
+    const best = pickLayerRepresentative(nodes, candidates);
 
     if (best.id !== state.selectedNodeId) {
       dispatch({ type: "SELECT_NODE", nodeId: best.id });
@@ -109,16 +177,15 @@ function App() {
     () => getContextPath(nodes, state.selectedNodeId),
     [nodes, state.selectedNodeId],
   );
-  const selectedContextAnchorId = useMemo(() => {
-    const selectedNode = nodes[state.selectedNodeId];
-    if (!selectedNode) return activeProject?.rootNodeId;
-    return selectedNode.kind === "leaf"
-      ? selectedNode.parentId ?? activeProject?.rootNodeId
-      : selectedNode.id;
-  }, [activeProject?.rootNodeId, nodes, state.selectedNodeId]);
+  const selectedContextAnchorId = useMemo(
+    () => resolveContextAnchorId(nodes[state.selectedNodeId], activeProject?.rootNodeId),
+    [activeProject?.rootNodeId, nodes, state.selectedNodeId],
+  );
   const isSelectedContextStructuring = selectedContextAnchorId
     ? structuringNodeIds.has(selectedContextAnchorId)
     : false;
+
+  // ———— Zoom & wheel ————
 
   const handleZoomIn = useCallback(() => {
     if (stateRef.current.is3DMode) {
@@ -136,6 +203,7 @@ function App() {
     }
   }, [dispatch]);
 
+  // 2D: wheel zooms. 3D: wheel scrolls layers instead.
   const handleSceneWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     const s = stateRef.current;
@@ -145,12 +213,10 @@ function App() {
       return;
     }
     const direction = e.deltaY > 0 ? 1 : -1;
-    const allLayers = Object.values(nodesRef.current).map((n) => n.layer);
-    const minL = Math.min(...allLayers, s.selectedLayer, 0);
-    const maxL = Math.max(...allLayers, s.selectedLayer, 0);
-    const nextLayer = clamp(s.selectedLayer + direction, minL - 2, maxL + 2);
-    dispatch({ type: "SET_LAYER", layer: nextLayer });
+    dispatch({ type: "SET_LAYER", layer: wheelTargetLayer(nodesRef.current, s.selectedLayer, direction) });
   }, [dispatch]);
+
+  // ———— Branch flow (streaming answer + semantic card) ————
 
   const finalizeSemanticCard = useCallback(async ({
     projectId,
@@ -221,10 +287,7 @@ function App() {
     const projectId = s.activeProjectId;
     const project = s.projects[projectId];
     if (!project) return;
-    const selectedNode = project.nodes[s.selectedNodeId];
-    const selectedAnchorId = selectedNode?.kind === "leaf"
-      ? selectedNode.parentId ?? project.rootNodeId
-      : selectedNode?.id ?? project.rootNodeId;
+    const selectedAnchorId = resolveContextAnchorId(project.nodes[s.selectedNodeId], project.rootNodeId);
     if (structuringNodeIdsRef.current.has(selectedAnchorId)) {
       setError("当前节点的模型上下文正在整理，请稍候再追问。");
       return;
@@ -281,13 +344,7 @@ function App() {
         response,
       });
     } catch (err) {
-      const aborted =
-        typeof err === "object" &&
-        err !== null &&
-        "name" in err &&
-        (err as { name?: unknown }).name === "AbortError";
-
-      if (aborted && streamingNodeId) {
+      if (isAbortError(err) && streamingNodeId) {
         dispatch({
           type: "STREAM_BRANCH_FINISH",
           projectId,
@@ -316,6 +373,8 @@ function App() {
     dispatch({ type: "LEAF", content: content.trim(), parentId: s.selectedNodeId });
   }, [activeProject, dispatch]);
 
+  // ———— Node selection & layer move ————
+
   const handleStartLayerMove = useCallback((nodeId: string) => {
     const n = nodesRef.current;
     const s = stateRef.current;
@@ -334,6 +393,11 @@ function App() {
       dispatch({ type: "SELECT_NODE", nodeId: id });
     }
   }, [dispatch]);
+
+  // ———— Auxo choreography ————
+  // Auxo only ever targets an empty root. Guards run at every step — dialog
+  // open, request start, after the plan returns, and on confirmed write; the
+  // latter two share detectAuxoRootDrift (the double fingerprint check).
 
   const handleOpenAuxo = useCallback(() => {
     const currentState = stateRef.current;
@@ -380,17 +444,15 @@ function App() {
       const input = compileAuxoInput(project);
       const plan = await generateAuxoPlan(input.request);
 
-      const latestState = stateRef.current;
-      const latestProject = latestState.projects[project.id];
-      const latestRoot = latestProject?.nodes[root.id];
-      if (!latestProject || !latestRoot || latestProject.rootNodeId !== root.id) {
+      // 第一重校验：计划基于请求时的快照生成，返回后必须对照最新 state。
+      const drift = detectAuxoRootDrift(stateRef.current, project.id, root.id, input.inputFingerprint);
+      if (drift === "missing-root") {
         throw new Error("请求期间目标项目已被删除或根节点已变化，本次没有创建节点。");
       }
-      if (latestRoot.children.length > 0) {
+      if (drift === "root-not-empty") {
         throw new Error("请求期间根节点已产生新内容，本次没有合并 Auxo 计划。");
       }
-      const latestInput = compileAuxoInput(latestProject);
-      if (latestInput.inputFingerprint !== input.inputFingerprint) {
+      if (drift === "fingerprint-changed") {
         throw new Error("请求期间根任务或启用资料发生变化，请重新运行 Auxo。");
       }
 
@@ -407,22 +469,21 @@ function App() {
     const preview = auxoPreview;
     if (!preview) return;
 
-    const latestState = stateRef.current;
-    const latestProject = latestState.projects[preview.projectId];
-    const latestRoot = latestProject?.nodes[preview.rootNodeId];
-    if (!latestProject || !latestRoot || latestProject.rootNodeId !== preview.rootNodeId) {
-      setAuxoError("目标项目已被删除或根节点已变化，本次没有创建节点。");
-      setAuxoPreview(null);
-      return;
-    }
-    if (latestRoot.children.length > 0) {
-      setAuxoError("根节点已产生新内容，本次没有合并 Auxo 计划。");
-      setAuxoPreview(null);
-      return;
-    }
-    const latestInput = compileAuxoInput(latestProject);
-    if (latestInput.inputFingerprint !== preview.request.inputFingerprint) {
-      setAuxoError("根任务或启用资料发生变化，请重新运行 Auxo。");
+    // 第二重校验：预览停留期间树可能继续变化，写入前需再验一次指纹。
+    const drift = detectAuxoRootDrift(
+      stateRef.current,
+      preview.projectId,
+      preview.rootNodeId,
+      preview.request.inputFingerprint,
+    );
+    if (drift) {
+      setAuxoError(
+        drift === "missing-root"
+          ? "目标项目已被删除或根节点已变化，本次没有创建节点。"
+          : drift === "root-not-empty"
+            ? "根节点已产生新内容，本次没有合并 Auxo 计划。"
+            : "根任务或启用资料发生变化，请重新运行 Auxo。",
+      );
       setAuxoPreview(null);
       return;
     }

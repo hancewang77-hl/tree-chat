@@ -46,7 +46,7 @@ The app avoids blue/purple AI-chatbot aesthetics. Instead it uses warm, tactile,
 - **Text**: charcoal (`#2C2416`), muted warm (`#5F5548`)
 - **Accents**: bark brown (`#3D2E1C`), sage green (`#747A55`), olive deep (`#565B3D`), olive soft (`rgba(116,122,85,0.16)`), amber gold (`#C4943A`)
 - **Borders**: warm beige (`#C7B89D`), shadow (`rgba(61,46,28,0.13)`)
-- **Fonts**: Lora (serif, for headings/titles), Geist (sans, for UI chrome), Geist Mono (code)
+- **Fonts**: no webfonts are loaded — `--font-lora` / `--font-geist-*` in `globals.css` are system fallback stacks only (Georgia/Noto Serif SC for serif headings, Inter/system-ui for UI chrome, SFMono/Consolas for code)
 - **Texture**: CSS grain overlay on body (`::before` pseudo-element with SVG fractal noise at 0.035 opacity)
 - **Dark theme**: `[data-theme="dark"]` selector inverts the palette (dark cream → `#1E1B15`, sage → `#8BAF7A`, amber → `#D4A84A`, etc.). Theme is persisted in localStorage and applied before first paint via inline `<script>` in `layout.tsx`.
 
@@ -64,10 +64,10 @@ Components use these via inline `style={{ color: "var(--accent-bark)" }}` etc. S
 ```
 app/
 ├── page.tsx                    # TreeProvider shell + app orchestration
-├── layout.tsx                  # Root layout (Lora, Geist, Geist Mono fonts)
+├── layout.tsx                  # Root layout (pre-paint theme script, KaTeX CSS; no webfonts)
 ├── globals.css                 # CSS vars, grain texture, animations
 ├── api/
-│   ├── chat/route.ts           # Streaming DeepSeek answers
+│   ├── chat/route.ts           # Streaming DeepSeek answers (plain-text deltas)
 │   ├── structure/route.ts      # Post-answer semantic-card extraction
 │   └── auxo/route.ts           # Constrained Auxo task-tree planning
 └── favicon.ico
@@ -76,15 +76,17 @@ src/
 ├── types/
 │   └── tree.ts                 # MindNode, NodesMap, Project, TreeState, TreeAction, ToolMode
 ├── lib/
+│   ├── aiChat.ts               # Client fetch wrappers for /api/chat and /api/structure
 │   ├── contextCompiler.ts      # Tree-aware bounded model context
 │   ├── auxo.ts                 # Full-input budget + provenance/graph validation
-│   ├── deepseek.ts             # Shared runtime model + mode configuration
+│   ├── deepseek.ts             # Shared model/mode config + DeepSeek client options & request types
+│   ├── rateLimit.ts            # Shared fixed-window rate limiter + getClientIp
 │   ├── semanticCard.ts         # Semantic-card parsing and validation
 │   ├── nutrientMarkdown.ts     # Browser-side DOCX/PDF/HTML/text → Markdown conversion
 │   ├── nutrients.ts            # Nutrient ingestion, structure-aware chunking, relevance selection
 │   ├── nutrientStorage.ts      # IndexedDB storage for original local attachments
 │   ├── storage.ts              # localStorage load/save helpers (schema v2)
-│   ├── streamText.ts           # ReadableStream→text helper for SSE responses
+│   ├── streamText.ts           # Cumulative UTF-8 decode of plain-text streams (not SSE)
 │   ├── utils.ts                # clamp, truncateText, roundRect, drawWrappedText, noRaycast
 │   ├── visualPatterns.ts       # SVG leaf vein patterns as data URIs (cards, sidebars)
 │   └── formatResponse.ts       # Markdown→HTML (KaTeX math), Markdown→plaintext, card summaries
@@ -97,6 +99,9 @@ src/
 │   │   ├── Node3D.tsx          # Single 3D node wrapper
 │   │   ├── CardTexture.tsx     # Canvas2D → THREE.CanvasTexture (warm palette)
 │   │   ├── LayerPlane.tsx      # Frosted glass layer (warm tones)
+│   │   ├── LeafAttachment3D.tsx # Leaf note card attached beside its parent node
+│   │   ├── RingsButton3D.tsx   # Per-node Rings (history) button in the scene
+│   │   ├── CameraTracker.tsx   # Animates camera/controls toward target nodes
 │   │   └── CameraModeRig.tsx   # 2D/3D camera switcher
 │   ├── layout/
 │   │   ├── AppHeader.tsx       # Header: app name, search, 2D/3D, canopy/rings/harvest/help
@@ -108,13 +113,13 @@ src/
 │   │   └── ZoomControls.tsx    # Zoom in/out
 │   ├── overlays/
 │   │   ├── EmptyState.tsx      # "Plant a seed" onboarding
-│   │   ├── SearchPalette.tsx   # ⌘K fuzzy search modal
+│   │   ├── SearchPalette.tsx   # ⌘K search modal (case-insensitive substring, top 10)
 │   │   ├── CanopyMinimap.tsx   # SVG tree minimap overlay
 │   │   ├── RingsPanel.tsx      # Undo/redo history slide-out
-│   │   ├── HarvestDialog.tsx   # Placeholder (export logic in AppHeader)
+│   │   ├── HarvestDialog.tsx   # Markdown/JSON export dialog (AppHeader only hosts the trigger)
 │   │   ├── HelpDialog.tsx      # Tree metaphor guide (12 features)
 │   │   ├── AuxoDialog.tsx      # Root-only task-tree generation dialog
-│   │   └── ConfirmDialog.tsx   # Reusable confirmation modal
+│   │   └── ConfirmDialog.tsx   # Reusable confirmation modal + usePruneConfirm hook
 │   └── LayerNameDialog.tsx     # Plane naming modal
 
 hooks/
@@ -128,6 +133,7 @@ hooks/
 
 - `src/components/sidebar/PathSidebar.tsx` → replaced by InspectorSidebar + BottomComposer
 - `src/components/toolbar/SceneToolbar.tsx` → replaced by TreeToolbar
+- `src/components/scene/CameraFocusRig.tsx` → removed (unused; CameraTracker handles focus animation)
 
 ### Key data model
 
@@ -182,7 +188,7 @@ type TreeState = {
   graftSourceId: string | null; // for two-click graft
   zoom2D: number;
   zoom3D: number;
-  planeNames: Record<number, string>;
+  planeNames: Record<number, string>; // layer names live on TreeState (shared across projects, persisted; reset by SEED)
   isCanopyOpen: boolean;
   isRingsOpen: boolean;
   ringsMode: "global" | "node";
@@ -227,7 +233,7 @@ All state is managed by `treeReducer` via `TreeContext`. No useState for tree da
 | Sunlight | `SUNLIGHT`                       | Select node, jump to its layer, highlight path      |
 | Canopy   | `TOGGLE_CANOPY`                  | Toggle SVG minimap overlay                          |
 | Rings    | `TOGGLE_RINGS` / `UNDO` / `REDO` | Global and node-specific patch undo/redo            |
-| Harvest  | (in AppHeader)                   | Export as Markdown or JSON                          |
+| Harvest  | (HarvestDialog)                  | Export as Markdown or JSON                          |
 | Forest   | `SWITCH_PROJECT`                 | Change active project                               |
 | Nutrient | nutrient actions                 | Convert, add, remove, and enable local references   |
 
@@ -240,8 +246,8 @@ AI responses pass through two formatting layers:
 
 ### UI modes
 
-- **2D mode** (default): Shows a single layer at a time (orthographic camera). Scroll switches layers.
-- **3D mode**: Shows all layers as stacked glass panes (perspective camera).
+- **2D mode** (default): Renders the whole tree flattened onto the selected layer's plane (orthographic camera). Scroll wheel zooms.
+- **3D mode**: Shows all layers as stacked glass panes (perspective camera). Scroll wheel steps between layers (see `handleSceneWheel` in `app/page.tsx`).
 - **Graft mode** (`toolMode: "graft"`): Node clicks trigger GRAFT_CONFIRM instead of SELECT_NODE.
 
 ### Rendering pipeline
@@ -249,16 +255,16 @@ AI responses pass through two formatting layers:
 1. `useTreeLayout` runs `d3.tree()` on the full hierarchy to compute X/Y positions
 2. `renderedNodes` / `renderedLinks` filters by visibility
 3. `CardTexture` renders each node onto HTML `<canvas>`, wrapped in `THREE.CanvasTexture`
-4. Edge connections drawn as `<Line>` components; path-to-root highlighted in amber gold (`#C4943A`)
+4. Edge connections drawn as `<Line>` components; path-to-root edges highlighted with a bronze main line (`#8A6A32`) plus a thin gold overlay (`#D4A84A`); cards on the path get olive styling
 5. Layer glass panes rendered in warm cream/beige tones
 
 ### DeepSeek APIs
 
 - Runtime model selection is centralized in `src/lib/deepseek.ts`; chat, semantic structuring, and Auxo use `deepseek-v4-flash` with thinking explicitly disabled (`DEEPSEEK_NON_THINKING = { type: "disabled" }`).
-- `POST /api/chat` — per-IP rate limit 30/min. Accepts compiled messages, streams via SSE (`max_tokens: 2048`). Non-streaming mode available. Supports `AbortController` cancellation.
+- `POST /api/chat` — per-IP rate limit 30/min. Accepts compiled messages, streams plain-text deltas (`text/plain`, no SSE framing; `max_tokens: 2048`). Non-streaming mode available. Supports `AbortController` cancellation.
 - `POST /api/structure` — per-IP rate limit 30/min. Accepts one prompt/response pair (max 50K chars combined). Returns validated JSON semantic card via `response_format: { type: "json_object" }` with `temperature: 0.1`, `max_tokens: 1200`.
 - `POST /api/auxo` — per-IP rate limit 6/min (stricter). 45s server timeout (`AbortController`), 55s client timeout. Accepts bounded root task + all enabled Markdown chunks (max 700KB body). Returns validated plan via `response_format: { type: "json_object" }` with `temperature: 0.1`, `max_tokens: 8000`. Plan is validated both server-side and client-side before any nodes are created.
-- All routes read `DEEPSEEK_API_KEY` only from the server environment. Rate limit maps are cleared when exceeding 10,000 entries.
+- All routes read `DEEPSEEK_API_KEY` only from the server environment. All three routes share the fixed-window limiter and `getClientIp` from `src/lib/rateLimit.ts`; rate limit maps are cleared when exceeding 10,000 entries. Client construction and request typing come from `src/lib/deepseek.ts` (`deepSeekClientOptions`, `DeepSeekChatParams*`).
 
 ### Important constants (in `hooks/useTreeLayout.ts`)
 

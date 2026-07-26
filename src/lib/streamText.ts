@@ -1,3 +1,7 @@
+/**
+ * 把 Response 的字节流按 UTF-8 累计解码为文本；onText 每次收到累计全文快照。
+ * 解码器使用 stream 模式，跨块拆分的多字节字符不会被破坏。
+ */
 export async function readTextStream(
   response: Response,
   onText: (text: string) => void,

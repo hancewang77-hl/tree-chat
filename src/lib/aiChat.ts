@@ -3,6 +3,10 @@ import type { ChatMessage } from "@/src/lib/contextCompiler";
 import type { SemanticCard } from "@/src/types/tree";
 import { isUsableSemanticCard } from "@/src/lib/semanticCard";
 
+/**
+ * 调用 /api/chat 流式接口。响应体是纯文本增量（不是 SSE 帧）；
+ * onText 每次收到的是到当前为止的完整累计文本。
+ */
 export async function requestChatCompletion(
   messages: ChatMessage[],
   onText: (text: string) => void,
@@ -24,6 +28,10 @@ export async function requestChatCompletion(
   return readTextStream(res, onText);
 }
 
+/**
+ * 调用 /api/structure 提取语义卡片。超时由本地 AbortController 触发，
+ * 并统一转换为可重试的中文提示；卡片必须通过 isUsableSemanticCard 校验。
+ */
 export async function requestSemanticCard(
   prompt: string,
   response: string,
