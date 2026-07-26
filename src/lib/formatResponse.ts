@@ -166,13 +166,11 @@ export function renderMarkdownToHTML(text: string): string {
   // Stage 1 — escape & < > everywhere except inside code blocks and math
   let html = escapeHTMLPreserving(text);
 
-  // Stage 2 — fenced code blocks ```lang\n...\n``` → <pre><code>...</code></pre>
+  // Stage 2 — fenced code blocks ```lang\n...\n``` → <pre><code>...</code></pre>.
+  // The body is already entity-escaped by escapeHTMLPreserving (see its
+  // SECURITY INVARIANT), so it must NOT be escaped again here.
   html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, lang, code) => {
-    const escaped = code
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-    return `<pre class="bg-[#F0EBE0] rounded-lg p-3 my-2 overflow-x-auto text-[12px] leading-relaxed" style="font-family:var(--font-mono)"><code>${escaped.trim()}</code></pre>`;
+    return `<pre class="bg-[#F0EBE0] rounded-lg p-3 my-2 overflow-x-auto text-[12px] leading-relaxed" style="font-family:var(--font-mono)"><code>${code.trim()}</code></pre>`;
   });
 
   // Stage 3 — display math $$...$$ (before inline $ so `$$` is one block)
@@ -185,10 +183,9 @@ export function renderMarkdownToHTML(text: string): string {
     return `<span class="px-0.5 rounded" style="background:rgba(116,122,85,0.06);color:var(--accent-bark);font-family:var(--font-serif)">${renderMath(math.trim(), false)}</span>`;
   });
 
-  // Stage 5 — inline code `...`
+  // Stage 5 — inline code `...`. Body already entity-escaped in Stage 1.
   html = html.replace(/`(.+?)`/g, (_m, code) => {
-    const escaped = code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    return `<code class="rounded px-1 py-0.5 text-[12px]" style="background:var(--border-warm);color:var(--accent-bark);font-family:var(--font-mono)">${escaped}</code>`;
+    return `<code class="rounded px-1 py-0.5 text-[12px]" style="background:var(--border-warm);color:var(--accent-bark);font-family:var(--font-mono)">${code}</code>`;
   });
 
   // Stage 6 — bold **...** / __...__ (must precede italic)
@@ -249,22 +246,37 @@ export function renderMarkdownToHTML(text: string): string {
   return html;
 }
 
+function escapeHTMLEntities(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 function escapeHTMLPreserving(text: string): string {
   // We escape text but skip content inside ```code```, $$math$$, $math$, and
   // `inline code`. Placeholders use \x00 sentinels, which cannot occur in the
   // source text, so restoration is exact.
+  //
+  // SECURITY INVARIANT: code bodies (fenced and inline) are entity-escaped HERE,
+  // at protection time, not in the render stages. A later stage's regex can pair
+  // delimiters differently than the protection regex did (e.g. a single-line
+  // ```<img onerror=…>``` or the inline-code lazy match on ```<x>```), which
+  // previously left raw HTML between the rendered <code> spans and reached
+  // dangerouslySetInnerHTML unescaped. Escaping at protection guarantees no raw
+  // < > survives regardless of how the render regexes match. Math is left
+  // verbatim on purpose: KaTeX escapes its own input (trust:false). Because the
+  // bodies are pre-escaped, Stage 2 and Stage 5 must NOT escape again.
   const protectedBlocks: string[] = [];
+  const protect = (block: string) => {
+    protectedBlocks.push(block);
+    return `\x00PROTECT${protectedBlocks.length - 1}\x00`;
+  };
 
   let result = text
-    .replace(/```[\s\S]*?```/g, (m) => { protectedBlocks.push(m); return `\x00PROTECT${protectedBlocks.length - 1}\x00`; })
-    .replace(/\$\$[\s\S]*?\$\$/g, (m) => { protectedBlocks.push(m); return `\x00PROTECT${protectedBlocks.length - 1}\x00`; })
-    .replace(/\$.+?\$/g, (m) => { protectedBlocks.push(m); return `\x00PROTECT${protectedBlocks.length - 1}\x00`; })
-    .replace(/`[^`]+`/g, (m) => { protectedBlocks.push(m); return `\x00PROTECT${protectedBlocks.length - 1}\x00`; });
+    .replace(/```[\s\S]*?```/g, (m) => protect(escapeHTMLEntities(m)))
+    .replace(/\$\$[\s\S]*?\$\$/g, (m) => protect(m))
+    .replace(/\$.+?\$/g, (m) => protect(m))
+    .replace(/`[^`]+`/g, (m) => protect(escapeHTMLEntities(m)));
 
-  result = result
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  result = escapeHTMLEntities(result);
 
   // Restore protected blocks
   result = result.replace(/\x00PROTECT(\d+)\x00/g, (_m, i) => protectedBlocks[+i]);

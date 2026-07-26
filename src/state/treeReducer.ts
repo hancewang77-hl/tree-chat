@@ -68,6 +68,12 @@ function normalizeNode(node: MindNode, rootNodeId: string): MindNode {
   const prompt = typeof node.prompt === "string" ? node.prompt : "";
   const response = typeof node.response === "string" ? node.response : "";
   const timestamp = typeof node.timestamp === "number" ? node.timestamp : Date.now();
+  // Coerce the geometry fields to finite numbers: persisted NaN/Infinity or a
+  // string layer would blank the 2D scene (which renders only the selected
+  // layer) and produce NaN world positions in 3D.
+  const layer = Number.isFinite(node.layer) ? (node.layer as number) : 0;
+  const offsetX = Number.isFinite(node.offsetX) ? (node.offsetX as number) : 0;
+  const offsetY = Number.isFinite(node.offsetY) ? (node.offsetY as number) : 0;
   const kind =
     node.kind ??
     (node.id === rootNodeId || node.parentId === null
@@ -106,6 +112,9 @@ function normalizeNode(node: MindNode, rootNodeId: string): MindNode {
     prompt,
     response,
     timestamp,
+    layer,
+    offsetX,
+    offsetY,
     kind,
     children: Array.isArray(node.children)
       ? node.children.filter((childId): childId is string => typeof childId === "string")
@@ -186,20 +195,25 @@ export function loadInitialState(): TreeState {
   const projectIds = Object.keys(projects);
 
   if (projectIds.length > 0) {
+    // Use own-property checks, not truthiness: a persisted id naming an
+    // Object.prototype member (e.g. "toString") would otherwise pass the
+    // lookup and resolve to a function instead of a real project/node.
     const activeProjectId =
-      workspace.activeProjectId && projects[workspace.activeProjectId]
+      workspace.activeProjectId && Object.hasOwn(projects, workspace.activeProjectId)
         ? workspace.activeProjectId
         : projectIds[0];
     const project = projects[activeProjectId];
     const selectedNodeId =
-      workspace.selectedNodeId && project.nodes[workspace.selectedNodeId]
+      workspace.selectedNodeId && Object.hasOwn(project.nodes, workspace.selectedNodeId)
         ? workspace.selectedNodeId
         : project.rootNodeId;
     return {
       projects,
       activeProjectId,
       selectedNodeId,
-      selectedLayer: workspace.selectedLayer ?? project.nodes[selectedNodeId]?.layer ?? 0,
+      selectedLayer: Number.isFinite(workspace.selectedLayer)
+        ? (workspace.selectedLayer as number)
+        : project.nodes[selectedNodeId]?.layer ?? 0,
       is3DMode: false,
       toolMode: "view",
       movingNodeId: null,
@@ -270,7 +284,9 @@ function collectSubtreeIds(nodes: NodesMap, nodeId: string): Set<string> {
     const currentId = pending.pop();
     if (!currentId || ids.has(currentId)) continue;
     ids.add(currentId);
-    const current = nodes[currentId];
+    // Own-property check: a child id naming a prototype member ("toString")
+    // would otherwise read the inherited function, whose .children is undefined.
+    const current = Object.hasOwn(nodes, currentId) ? nodes[currentId] : undefined;
     if (current) pending.push(...current.children);
   }
   return ids;

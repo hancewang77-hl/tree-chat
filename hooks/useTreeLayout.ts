@@ -31,9 +31,13 @@ export const Y_SPACING = 2.4;
 
 export function getContextPath(nodes: NodesMap, nodeId: string): MindNode[] {
   const path: MindNode[] = [];
+  const seen = new Set<string>();
   let currentId: string | null = nodeId;
 
-  while (currentId && nodes[currentId]) {
+  // The visited guard stops a cyclic parentId chain (e.g. corrupt persisted
+  // state where a → b → a) from looping forever.
+  while (currentId && nodes[currentId] && !seen.has(currentId)) {
+    seen.add(currentId);
     path.unshift(nodes[currentId]);
     currentId = nodes[currentId].parentId;
   }
@@ -96,9 +100,13 @@ export function useTreeLayout({
   );
 
   const fullTreeLayout = useMemo(() => {
+    // `seen` prevents unbounded recursion if corrupt persisted state contains a
+    // children cycle (a lists b, b lists a); a revisited id is skipped.
+    const seen = new Set<string>();
     function buildHierarchy(id: string): HierarchyNodeData | null {
       const node = nodes[id];
-      if (!node) return null;
+      if (!node || seen.has(id)) return null;
+      seen.add(id);
       const hierarchyChildren = getTrunkChildIds(nodes, id)
         .map((childId) => buildHierarchy(childId))
         .filter((c): c is HierarchyNodeData => c !== null);

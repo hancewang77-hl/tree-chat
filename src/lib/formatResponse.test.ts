@@ -43,4 +43,22 @@ describe("response formatting", () => {
     expect(html).toContain("&lt;tag&gt;");
     expect(html).toContain("katex");
   });
+
+  test("renderMarkdownToHTML escapes malformed code fences that Stage 2 does not render (XSS guard)", () => {
+    // Single-line fence: no newline after the marker, so it is never turned
+    // into a <pre> block. It must still be HTML-escaped, not passed through raw.
+    const single = renderMarkdownToHTML("```<img src=x onerror=alert(1)>```");
+    expect(single).not.toContain("<img");
+    expect(single).toContain("&lt;img");
+
+    // Non-word info string (`c++`) also never matches the Stage 2 fence regex.
+    const weirdLang = renderMarkdownToHTML("```c++\n<svg onload=alert(1)>\n```");
+    expect(weirdLang).not.toContain("<svg");
+    expect(weirdLang).toContain("&lt;svg");
+
+    // A well-formed fenced block still renders as <pre><code> unchanged.
+    const valid = renderMarkdownToHTML("```ts\nconst x = 1;\n```");
+    expect(valid).toContain("<pre");
+    expect(valid).toContain("const x = 1;");
+  });
 });

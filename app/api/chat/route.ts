@@ -11,12 +11,45 @@ import { createRateLimiter, getClientIp } from "@/src/lib/rateLimit";
 const RATE_LIMIT = 30;
 const RATE_WINDOW = 60_000;
 const MAX_TOKENS = 2048;
+// Request bounds. Compiled contexts from contextCompiler are far under these
+// (root+path semantics+leaves+anchor+nutrients budgets total well below 60K
+// chars); the caps only stop unbounded/oversized bodies from being buffered
+// and forwarded to the server-held DeepSeek key. Mirrors the sibling routes,
+// which already bound their input (/api/structure 50K chars, /api/auxo 700KB).
+const MAX_BODY_BYTES = 1_000_000;
+const MAX_MESSAGES = 200;
+const MAX_TOTAL_CONTENT_CHARS = 200_000;
+const ALLOWED_ROLES = new Set(["system", "user", "assistant"]);
 
 // 路由文件只导出 handler；限流器为模块内状态
 const chatRateLimiter = createRateLimiter({
   limit: RATE_LIMIT,
   windowMs: RATE_WINDOW,
 });
+
+/**
+ * Reads the body while enforcing a byte ceiling, cancelling the stream the
+ * instant it is exceeded (App Router's req.json() has no default size limit).
+ * Returns null when the cap is passed so the caller can answer 413.
+ */
+async function readBoundedText(req: Request, maxBytes: number): Promise<string | null> {
+  if (!req.body) return "";
+  const reader = req.body.getReader();
+  const decoder = new TextDecoder();
+  let byteLength = 0;
+  let text = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    byteLength += value.byteLength;
+    if (byteLength > maxBytes) {
+      await reader.cancel();
+      return null;
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text + decoder.decode();
+}
 
 export async function POST(req: Request) {
   const rateLimit = chatRateLimiter.check(getClientIp(req));
@@ -34,9 +67,19 @@ export async function POST(req: Request) {
       );
     }
 
+    const declaredLength = Number(req.headers.get("content-length"));
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
+      return Response.json({ error: "请求体过大" }, { status: 413 });
+    }
+
+    const rawBody = await readBoundedText(req, MAX_BODY_BYTES);
+    if (rawBody === null) {
+      return Response.json({ error: "请求体过大" }, { status: 413 });
+    }
+
     let body: Record<string, unknown>;
     try {
-      body = await req.json();
+      body = JSON.parse(rawBody) as Record<string, unknown>;
     } catch {
       return Response.json(
         { error: "请求体格式错误，需要有效的 JSON" },
@@ -53,6 +96,29 @@ export async function POST(req: Request) {
         { error: "messages 不能为空" },
         { status: 400 },
       );
+    }
+
+    if (messages.length > MAX_MESSAGES) {
+      return Response.json({ error: "messages 过多" }, { status: 413 });
+    }
+
+    // Each element must be a well-formed chat message; sum content length so a
+    // single giant message cannot slip past the per-count cap.
+    let totalContentChars = 0;
+    for (const message of messages) {
+      if (
+        !message ||
+        typeof message !== "object" ||
+        typeof (message as { role?: unknown }).role !== "string" ||
+        !ALLOWED_ROLES.has((message as { role: string }).role) ||
+        typeof (message as { content?: unknown }).content !== "string"
+      ) {
+        return Response.json({ error: "messages 格式不合法" }, { status: 400 });
+      }
+      totalContentChars += (message as { content: string }).content.length;
+    }
+    if (totalContentChars > MAX_TOTAL_CONTENT_CHARS) {
+      return Response.json({ error: "待发送内容过长" }, { status: 413 });
     }
 
     const client = new OpenAI(deepSeekClientOptions(apiKey));
@@ -109,18 +175,9 @@ export async function POST(req: Request) {
       },
     });
   } catch (error: unknown) {
+    // Log full detail server-side; return only a fixed message so upstream
+    // provider internals are never disclosed to the client.
     console.error("DeepSeek route error:", error);
-
-    const message =
-      error && typeof error === "object" && "message" in error
-        ? (error as { message: unknown }).message
-        : undefined;
-
-    return Response.json(
-      {
-        error: message || "调用 DeepSeek 失败",
-      },
-      { status: 500 },
-    );
+    return Response.json({ error: "调用 DeepSeek 失败" }, { status: 500 });
   }
 }

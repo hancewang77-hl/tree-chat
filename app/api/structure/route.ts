@@ -100,14 +100,9 @@ export async function POST(req: Request) {
 
     return Response.json({ semanticCard });
   } catch (error: unknown) {
+    // Log full detail server-side; return only a fixed message so upstream
+    // provider internals are never disclosed to the client.
     console.error("DeepSeek structure route error:", error);
-    const message =
-      error && typeof error === "object" && "message" in error
-        ? (error as { message: unknown }).message
-        : undefined;
-    return Response.json(
-      { error: typeof message === "string" ? message : "语义整理失败" },
-      { status: 500 },
-    );
+    return Response.json({ error: "语义整理失败" }, { status: 500 });
   }
 }

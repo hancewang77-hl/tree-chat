@@ -21,6 +21,11 @@ const MAX_DOCX_UNCOMPRESSED_BYTES = 50 * 1024 * 1024;
 const MAX_DOCX_ENTRY_BYTES = 20 * 1024 * 1024;
 const MAX_DOCX_COMPRESSION_RATIO = 200;
 const MAX_PDF_EXTRACTION_MS = 20_000;
+// Generous per-page text-item ceiling, far above any legitimate page. The
+// per-page/time caps below are checked only between pages, so one pathological
+// page could otherwise exhaust memory/time before the loop re-checks; this
+// bounds a single page's item count before the expensive map/join.
+const MAX_PDF_PAGE_ITEMS = 500_000;
 
 export type MarkdownExtraction = {
   markdown: string;
@@ -149,6 +154,19 @@ async function extractPdfMarkdown(file: File): Promise<string> {
         let rawText = "";
         try {
           const content = await page.getTextContent();
+          // Guard a single dense page before the expensive materialization:
+          // the item-count and time budgets are otherwise only re-checked
+          // between pages.
+          if (content.items.length > MAX_PDF_PAGE_ITEMS) {
+            throw new UnsupportedNutrientFormatError(
+              "PDF 单页内容过于密集，请拆分或简化文件后重新上传。",
+            );
+          }
+          if (Date.now() - startedAt > MAX_PDF_EXTRACTION_MS) {
+            throw new UnsupportedNutrientFormatError(
+              "PDF 本地解析超过 20 秒，请拆分或简化文件后重新上传。",
+            );
+          }
           rawText = content.items
             .map((item) =>
               "str" in item && typeof item.str === "string"
@@ -232,14 +250,68 @@ async function htmlToMarkdown(html: string): Promise<string> {
   return normalizeMarkdown(service.turndown(markFirstTableRowsAsHeaders(html)));
 }
 
-function markFirstTableRowsAsHeaders(html: string): string {
-  return html.replace(/<table\b[\s\S]*?<\/table>/gi, (table) =>
-    table.replace(/<tr\b[\s\S]*?<\/tr>/i, (firstRow) =>
-      firstRow
-        .replace(/<td(\s[^>]*)?>/gi, "<th$1>")
-        .replace(/<\/td>/gi, "</th>"),
-    ),
+function rewriteFirstRowCells(tableBlock: string): string {
+  // Runs once on a single <table>…</table> slice, so its lazy scan is linear
+  // in that block; total work stays O(n) across all tables.
+  return tableBlock.replace(/<tr\b[\s\S]*?<\/tr>/i, (firstRow) =>
+    firstRow
+      .replace(/<td(\s[^>]*)?>/gi, "<th$1>")
+      .replace(/<\/td>/gi, "</th>"),
   );
+}
+
+function isWordCharCode(code: number): boolean {
+  return (
+    (code >= 97 && code <= 122) || // a-z (html is lower-cased for scanning)
+    (code >= 48 && code <= 57) || // 0-9
+    code === 95 // _
+  );
+}
+
+/**
+ * Promotes the first row of every table to header cells (<td> → <th>).
+ *
+ * Uses a linear indexOf scan rather than /<table\b[\s\S]*?<\/table>/g: the lazy
+ * regex is O(n²) on hostile HTML (many "<table" with no "</table>" each rescan
+ * to end of string), which would hang the tab on a crafted .html nutrient
+ * upload. Output is identical to the old regex for all well-formed and
+ * malformed inputs (verified by a differential test).
+ */
+export function markFirstTableRowsAsHeaders(html: string): string {
+  const lower = html.toLowerCase();
+  const CLOSE = "</table>";
+  let result = "";
+  let pos = 0;
+
+  while (pos < html.length) {
+    const tableStart = lower.indexOf("<table", pos);
+    if (tableStart === -1) {
+      result += html.slice(pos);
+      break;
+    }
+
+    // Enforce the \b in /<table\b/: reject "<tablex" but accept "<table>",
+    // "<table ", "<table\t". A "<table" at end-of-string has code NaN here,
+    // which is not a word char, matching the regex's boundary-at-EOS behavior.
+    if (isWordCharCode(lower.charCodeAt(tableStart + 6))) {
+      result += html.slice(pos, tableStart + 6);
+      pos = tableStart + 6;
+      continue;
+    }
+
+    const closeRel = lower.indexOf(CLOSE, tableStart);
+    if (closeRel === -1) {
+      // No closing tag ahead: the old regex would not match, so emit verbatim.
+      result += html.slice(pos);
+      break;
+    }
+
+    const closeEnd = closeRel + CLOSE.length;
+    result += html.slice(pos, tableStart) + rewriteFirstRowCells(html.slice(tableStart, closeEnd));
+    pos = closeEnd;
+  }
+
+  return result;
 }
 
 function textToMarkdown(text: string, extension: string): string {
