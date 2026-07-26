@@ -286,7 +286,9 @@ export type TreeState = {
   selectedLayer: number;
   is3DMode: boolean;
   toolMode: ToolMode;
+  /** Node armed for a cross-layer move (layerMove tool mode). */
   movingNodeId: string | null;
+  /** Move target: tracks the viewed layer while a move is armed. */
   pendingNodeLayer: number | null;
   /** First click of the two-click graft flow. */
   graftSourceId: string | null;
@@ -351,6 +353,9 @@ export type TreeAction =
   | { type: "GRAFT_START"; nodeId: string }
   | { type: "GRAFT_CONFIRM"; newParentId: string }
   | { type: "GRAFT_CANCEL" }
+  | { type: "LAYER_MOVE_START"; nodeId: string }
+  | { type: "LAYER_MOVE_CONFIRM" }
+  | { type: "LAYER_MOVE_CANCEL" }
   | { type: "PRUNE"; nodeId: string }
   | { type: "SUNLIGHT"; nodeId: string }
   | { type: "SELECT_NODE"; nodeId: string }

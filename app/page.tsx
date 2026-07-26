@@ -375,14 +375,17 @@ function App() {
 
   // ———— Node selection & layer move ————
 
+  // Arms (or re-arms) a cross-layer move: the wheel then picks the target
+  // layer (SET_LAYER mirrors it into pendingNodeLayer) and the node's ✓
+  // button commits via LAYER_MOVE_CONFIRM. Reducer guards root/leaf again.
   const handleStartLayerMove = useCallback((nodeId: string) => {
-    const n = nodesRef.current;
-    const s = stateRef.current;
-    const node = n[nodeId];
-    if (!node || node.id === "root") return;
-    if (node.layer !== s.selectedLayer) return;
-    dispatch({ type: "SELECT_NODE", nodeId });
-    dispatch({ type: "SET_NODE_OFFSET", nodeId, offsetX: node.offsetX ?? 0, offsetY: node.offsetY ?? 0 });
+    const node = nodesRef.current[nodeId];
+    if (!node || node.kind === "root" || node.kind === "leaf") return;
+    dispatch({ type: "LAYER_MOVE_START", nodeId });
+  }, [dispatch]);
+
+  const handleConfirmLayerMove = useCallback(() => {
+    dispatch({ type: "LAYER_MOVE_CONFIRM" });
   }, [dispatch]);
 
   const handleSelectNode = useCallback((id: string) => {
@@ -550,7 +553,7 @@ function App() {
               setRenameLayer(layer);
               setPlaneNameInput(state.planeNames[layer] ?? "");
             }}
-            onConfirmLayerMove={() => {}}
+            onConfirmLayerMove={handleConfirmLayerMove}
             onOpenNodeRings={(nodeId) => dispatch({ type: "OPEN_NODE_RINGS", nodeId })}
           />
 

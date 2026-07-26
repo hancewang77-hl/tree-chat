@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { GitBranch, StickyNote, Scissors, Trash2, Sun, Sparkles } from "lucide-react";
+import { GitBranch, StickyNote, Scissors, Layers, Trash2, Sun, Sparkles } from "lucide-react";
 import { useTreeState, useTreeDispatch } from "@/src/state/TreeContext";
 import { usePruneConfirm } from "@/src/components/overlays/ConfirmDialog";
 
@@ -98,6 +98,25 @@ export function TreeToolbar({
       },
     },
     {
+      id: "layerMove",
+      icon: <Layers size={17} />,
+      label: "移层",
+      title: "Layer — 将选中节点移动到其他图层",
+      active: state.toolMode === "layerMove",
+      disabled: isRoot || selectedNode?.kind === "leaf",
+      onClick: () => {
+        if (state.toolMode === "layerMove") {
+          dispatch({ type: "LAYER_MOVE_CANCEL" });
+          return;
+        }
+        if (isRoot || !selectedNode || selectedNode.kind === "leaf") return;
+        // Target layers are picked on the 3D glass stack, so the move
+        // flow always runs in 3D mode.
+        if (!state.is3DMode) dispatch({ type: "TOGGLE_3D" });
+        dispatch({ type: "LAYER_MOVE_START", nodeId: state.selectedNodeId });
+      },
+    },
+    {
       id: "prune",
       icon: <Trash2 size={17} />,
       label: "修剪",
@@ -162,6 +181,15 @@ export function TreeToolbar({
               style={{ background: "var(--accent-sage)", color: "#FBF7F0" }}
             >
               点击目标父节点
+            </div>
+          )}
+
+          {state.toolMode === "layerMove" && state.movingNodeId && (
+            <div
+              className="mt-0.5 rounded-lg px-2 py-1 text-center text-[10px] font-medium"
+              style={{ background: "var(--accent-sage)", color: "#FBF7F0" }}
+            >
+              滚轮选层，点 ✓ 确认
             </div>
           )}
         </div>

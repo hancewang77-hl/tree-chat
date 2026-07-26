@@ -293,6 +293,11 @@ function exitGraftMode(state: TreeState): TreeState {
   return { ...state, toolMode: "view", graftSourceId: null };
 }
 
+/** Leaves layer-move mode without touching the tree (used by every rejected move). */
+function exitLayerMoveMode(state: TreeState): TreeState {
+  return { ...state, toolMode: "view", movingNodeId: null, pendingNodeLayer: null };
+}
+
 // ---------------------------------------------------------------------------
 // Persistence
 // ---------------------------------------------------------------------------
@@ -1279,6 +1284,66 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
       return exitGraftMode(state);
     }
 
+    case "LAYER_MOVE_START": {
+      const nodes = getActiveNodes(state);
+      const node = nodes[action.nodeId];
+      // Roots anchor the tree and leaves hang from their parent's card, so
+      // neither can move across layers on its own.
+      if (!node || node.kind === "root" || node.kind === "leaf") return state;
+      return persist({
+        ...state,
+        toolMode: "layerMove",
+        movingNodeId: action.nodeId,
+        pendingNodeLayer: node.layer,
+        selectedNodeId: action.nodeId,
+        selectedLayer: node.layer,
+      });
+    }
+
+    case "LAYER_MOVE_CONFIRM": {
+      const movingId = state.movingNodeId;
+      const targetLayer = state.pendingNodeLayer;
+      if (!movingId || targetLayer === null) return exitLayerMoveMode(state);
+
+      const project = getActiveProject(state);
+      const nodes = getActiveNodes(state);
+      const before = nodes[movingId];
+      if (!project || !before || before.kind === "root" || before.kind === "leaf") {
+        return exitLayerMoveMode(state);
+      }
+      // Same rule as graft: never snapshot a streaming node into history.
+      if (before.status === "streaming") return exitLayerMoveMode(state);
+      // Moving onto the node's own layer is a no-op, not a Rings entry.
+      if (before.layer === targetLayer) return exitLayerMoveMode(state);
+
+      const after: MindNode = { ...before, layer: targetLayer };
+      const next: TreeState = {
+        ...exitLayerMoveMode(state),
+        projects: {
+          ...state.projects,
+          [state.activeProjectId]: {
+            ...project,
+            nodes: { ...nodes, [movingId]: after },
+            updatedAt: Date.now(),
+          },
+        },
+        selectedNodeId: movingId,
+        selectedLayer: targetLayer,
+      };
+      const entry = createHistoryEntry({
+        state,
+        label: `Layer · ${before.prompt.slice(0, 32)}`,
+        primaryNodeId: movingId,
+        affectedNodeIds: [movingId],
+        patch: { nodeChanges: [{ nodeId: movingId, before, after }] },
+      });
+      return persist(pushHistory(next, entry));
+    }
+
+    case "LAYER_MOVE_CANCEL": {
+      return exitLayerMoveMode(state);
+    }
+
     case "PRUNE": {
       const nodes = getActiveNodes(state);
       if (action.nodeId === "root" || action.nodeId === getActiveProject(state)?.rootNodeId) return state;
@@ -1318,6 +1383,11 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
         next = exitGraftMode(next);
       }
 
+      // Cancel active layer move if the moving node was pruned
+      if (next.movingNodeId && subtreeIds.has(next.movingNodeId)) {
+        next = exitLayerMoveMode(next);
+      }
+
       const nodeChanges = [
         parentBefore && parentAfter
           ? { nodeId: parentBefore.id, before: parentBefore, after: parentAfter }
@@ -1353,7 +1423,12 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
     }
 
     case "SET_LAYER": {
-      return persist({ ...state, selectedLayer: action.layer });
+      // While a layer move is armed, the viewed layer doubles as the move target.
+      const pendingNodeLayer =
+        state.toolMode === "layerMove" && state.movingNodeId !== null
+          ? action.layer
+          : state.pendingNodeLayer;
+      return persist({ ...state, selectedLayer: action.layer, pendingNodeLayer });
     }
 
     case "TOGGLE_3D": {

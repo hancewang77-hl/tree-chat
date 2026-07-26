@@ -1,15 +1,31 @@
+"use client";
+
 import { useEffect, useState } from "react";
 import { clamp } from "@/src/lib/utils";
 
-export function useResizableSidebar(initialWidth = 420) {
+/**
+ * Drag-to-resize state for a sidebar pinned to either window edge.
+ * Width is session-only (not persisted). `side` decides how the mouse
+ * position maps to a width: distance from the left edge for a left
+ * sidebar, from the right edge for a right sidebar.
+ */
+export function useResizableSidebar(
+  initialWidth = 420,
+  {
+    side = "right",
+    minWidth = 340,
+    maxWidth = 860,
+  }: { side?: "left" | "right"; minWidth?: number; maxWidth?: number } = {},
+) {
   const [sidebarWidth, setSidebarWidth] = useState(initialWidth);
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
 
   useEffect(() => {
     function handleResizeMove(e: MouseEvent) {
       if (!isResizingSidebar) return;
-      const newWidth = document.body.clientWidth - e.clientX;
-      setSidebarWidth(clamp(newWidth, 340, 860));
+      const newWidth =
+        side === "right" ? document.body.clientWidth - e.clientX : e.clientX;
+      setSidebarWidth(clamp(newWidth, minWidth, maxWidth));
     }
 
     function handleResizeUp() {
@@ -25,7 +41,7 @@ export function useResizableSidebar(initialWidth = 420) {
       window.removeEventListener("mousemove", handleResizeMove);
       window.removeEventListener("mouseup", handleResizeUp);
     };
-  }, [isResizingSidebar]);
+  }, [isResizingSidebar, side, minWidth, maxWidth]);
 
   return {
     sidebarWidth,

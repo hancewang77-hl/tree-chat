@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Trees, Plus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useTreeState, useTreeDispatch } from "@/src/state/TreeContext";
+import { useResizableSidebar } from "@/hooks/useResizableSidebar";
 import { SIDEBAR_LEAF_VEIN_PATTERN } from "@/src/lib/visualPatterns";
 
 export function ForestSidebar() {
@@ -10,6 +11,11 @@ export function ForestSidebar() {
   const dispatch = useTreeDispatch();
   const projectIds = Object.keys(state.projects);
   const [menuProjectId, setMenuProjectId] = useState<string | null>(null);
+  const { sidebarWidth, isResizingSidebar, startResizing } = useResizableSidebar(220, {
+    side: "left",
+    minWidth: 180,
+    maxWidth: 400,
+  });
 
   function handleSeed() {
     const name = prompt("为新项目命名（森林中的一棵新树）", `探索 ${projectIds.length + 1}`);
@@ -20,8 +26,9 @@ export function ForestSidebar() {
 
   return (
     <aside
-      className="z-20 flex w-[220px] shrink-0 flex-col border-r animate-fade-up stagger-2"
+      className="relative z-20 flex shrink-0 flex-col border-r animate-fade-up stagger-2"
       style={{
+        width: sidebarWidth,
         background: [SIDEBAR_LEAF_VEIN_PATTERN, "var(--bg-paper)"].join(", "),
         backgroundRepeat: "no-repeat, repeat",
         backgroundSize: "220px 720px, auto",
@@ -191,6 +198,26 @@ export function ForestSidebar() {
           Seed · 播种
         </button>
       </div>
+
+      {/* Drag-to-resize handle on the inner edge */}
+      <div
+        onMouseDown={(e) => {
+          e.preventDefault();
+          startResizing();
+        }}
+        className="absolute right-0 top-0 z-30 h-full w-1 cursor-col-resize transition-colors"
+        style={{
+          background: isResizingSidebar ? "var(--accent-sage)" : "transparent",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "var(--accent-olive-soft)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = isResizingSidebar
+            ? "var(--accent-sage)"
+            : "transparent";
+        }}
+      />
     </aside>
   );
 }

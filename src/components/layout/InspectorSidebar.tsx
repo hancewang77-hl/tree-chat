@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { GitBranch, MessageSquare, RefreshCw, StickyNote, Trash2, Sun, Sparkles } from "lucide-react";
 import type { MindNode, NodesMap, SemanticCard } from "@/src/types/tree";
 import { useTreeState, useTreeDispatch } from "@/src/state/TreeContext";
+import { useResizableSidebar } from "@/hooks/useResizableSidebar";
 import { renderMarkdownToHTML } from "@/src/lib/formatResponse";
 import { CARD_BOTTOM_LEAF_VEIN_PATTERN } from "@/src/lib/visualPatterns";
 import { usePruneConfirm } from "@/src/components/overlays/ConfirmDialog";
@@ -29,6 +30,11 @@ export function InspectorSidebar({
   const isAuxoTask = selectedNode?.nodeRole === "task" || selectedNode?.nodeRole === "task-group";
   const isStructuring = selectedNode ? structuringNodeIds.has(selectedNode.id) : false;
   const { requestPrune, pruneConfirmDialog } = usePruneConfirm({ selectedNode, isRoot });
+  const { sidebarWidth, isResizingSidebar, startResizing } = useResizableSidebar(340, {
+    side: "right",
+    minWidth: 300,
+    maxWidth: 640,
+  });
 
   useEffect(() => {
     const handleMode = (event: Event) => {
@@ -40,14 +46,35 @@ export function InspectorSidebar({
   }, []);
 
   return (
+    <>
     <aside
-      className="z-20 flex w-[340px] shrink-0 flex-col border-l animate-fade-up stagger-4"
+      className="relative z-20 flex shrink-0 flex-col border-l animate-fade-up stagger-4"
       style={{
+        width: sidebarWidth,
         background: "var(--bg-paper)",
         borderColor: "var(--border-warm)",
         boxShadow: "-2px 0 16px var(--shadow-warm)",
       }}
     >
+      {/* Drag-to-resize handle on the inner edge */}
+      <div
+        onMouseDown={(e) => {
+          e.preventDefault();
+          startResizing();
+        }}
+        className="absolute left-0 top-0 z-30 h-full w-1 cursor-col-resize transition-colors"
+        style={{
+          background: isResizingSidebar ? "var(--accent-sage)" : "transparent",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "var(--accent-olive-soft)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = isResizingSidebar
+            ? "var(--accent-sage)"
+            : "transparent";
+        }}
+      />
       {/* Header */}
       <div
         className="flex items-center justify-between px-5 py-3 border-b"
@@ -356,9 +383,11 @@ export function InspectorSidebar({
           </div>
         </div>
       )}
-
-      {pruneConfirmDialog}
     </aside>
+    {/* Rendered outside the (positioned) aside so the overlay still covers
+        the app, not just the sidebar column. */}
+    {pruneConfirmDialog}
+    </>
   );
 }
 

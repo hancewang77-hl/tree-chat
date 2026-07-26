@@ -541,6 +541,73 @@ describe("treeReducer product functions", () => {
     }
   });
 
+  test("Layer move 完整流程：起手预览、滚轮选层、确认写入一条可撤销历史", () => {
+    let state = treeReducer(graftState(), { type: "LAYER_MOVE_START", nodeId: "a" });
+
+    expect(state.toolMode).toBe("layerMove");
+    expect(state.movingNodeId).toBe("a");
+    expect(state.pendingNodeLayer).toBe(0);
+    expect(state.selectedNodeId).toBe("a");
+
+    // 滚轮切层时目标层跟随视图层
+    state = treeReducer(state, { type: "SET_LAYER", layer: 2 });
+    expect(state.selectedLayer).toBe(2);
+    expect(state.pendingNodeLayer).toBe(2);
+
+    state = treeReducer(state, { type: "LAYER_MOVE_CONFIRM" });
+    expect(projectNodes(state).a.layer).toBe(2);
+    expect(state.toolMode).toBe("view");
+    expect(state.movingNodeId).toBeNull();
+    expect(state.pendingNodeLayer).toBeNull();
+    expect(state.selectedLayer).toBe(2);
+    expect(state.history.past).toHaveLength(1);
+    expect(state.history.past[0].label).toContain("Layer");
+
+    // 全局 Undo 恢复原图层
+    state = treeReducer(state, { type: "UNDO" });
+    expect(projectNodes(state).a.layer).toBe(0);
+  });
+
+  test("Layer move 拒绝根、Leaf、流式节点与原层确认，不写入历史", () => {
+    // 根与 Leaf 不能起手
+    for (const nodeId of ["root", "leaf"]) {
+      const state = treeReducer(graftState(), { type: "LAYER_MOVE_START", nodeId });
+      expect(state.toolMode).toBe("view");
+      expect(state.movingNodeId).toBeNull();
+    }
+
+    // 未换层就确认 → 无操作退出，不产生 Rings 记录
+    let state = treeReducer(graftState(), { type: "LAYER_MOVE_START", nodeId: "a" });
+    state = treeReducer(state, { type: "LAYER_MOVE_CONFIRM" });
+    expect(projectNodes(state).a.layer).toBe(0);
+    expect(state.history.past).toHaveLength(0);
+    expect(state.toolMode).toBe("view");
+
+    // 流式节点确认时被拒绝
+    const streaming = graftState();
+    streaming.projects.project.nodes.a = {
+      ...streaming.projects.project.nodes.a,
+      status: "streaming",
+    };
+    let s2 = treeReducer(streaming, { type: "LAYER_MOVE_START", nodeId: "a" });
+    s2 = treeReducer(s2, { type: "SET_LAYER", layer: 1 });
+    s2 = treeReducer(s2, { type: "LAYER_MOVE_CONFIRM" });
+    expect(projectNodes(s2).a.layer).toBe(0);
+    expect(s2.history.past).toHaveLength(0);
+  });
+
+  test("Layer move 期间修剪移动节点会自动取消移层模式", () => {
+    let state = treeReducer(graftState(), { type: "LAYER_MOVE_START", nodeId: "b" });
+    // 修剪 b 所在的父分支 a（子树含 b）
+    state = treeReducer(state, { type: "PRUNE", nodeId: "a" });
+
+    expect(state.toolMode).toBe("view");
+    expect(state.movingNodeId).toBeNull();
+    expect(state.pendingNodeLayer).toBeNull();
+    expect(projectNodes(state).a).toBeUndefined();
+    expect(projectNodes(state).b).toBeUndefined();
+  });
+
   test("Auxo 原子写入有序任务树，并通过一次全局 Undo/Redo 撤销与恢复", () => {
     const initial = baseState();
     initial.projects.project.nodes.root.prompt = "1. Root";
