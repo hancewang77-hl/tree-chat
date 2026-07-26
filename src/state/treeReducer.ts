@@ -410,6 +410,9 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
     case "LEAF": {
       const project = getActiveProject(state);
       if (!project) return state;
+      const name = action.name.trim();
+      const content = action.content.trim();
+      if (!name || !content) return state;
       const parentId = resolveBranchParent(project.nodes, action.parentId);
       const parent = project.nodes[parentId];
       if (!parent) return state;
@@ -418,8 +421,8 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
       const newNode: MindNode = {
         id: newNodeId,
         kind: "leaf",
-        prompt: action.content,
-        response: "",
+        prompt: name,
+        response: content,
         children: [],
         parentId,
         timestamp: Date.now(),
@@ -442,7 +445,7 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
       next = { ...next, selectedNodeId: newNodeId };
       const entry = createHistoryEntry({
         state,
-        label: `Leaf · ${action.content.slice(0, 32)}`,
+        label: `Leaf · ${name.slice(0, 32)}`,
         primaryNodeId: newNodeId,
         affectedNodeIds: [parentId, newNodeId, action.parentId],
         patch: {

@@ -93,10 +93,16 @@ describe("treeReducer product functions", () => {
 
   test("leaf notes stay attached to their parent while later branches grow from that parent", () => {
     let state = baseState();
-    state = treeReducer(state, { type: "LEAF", content: "A local observation", parentId: "root" });
+    state = treeReducer(state, {
+      type: "LEAF",
+      name: "Observation",
+      content: "A local observation",
+      parentId: "root",
+    });
 
-    const leaf = findNodeByPrompt(state, "A local observation");
+    const leaf = findNodeByPrompt(state, "Observation");
     expect(leaf?.kind).toBe("leaf");
+    expect(leaf?.response).toBe("A local observation");
 
     state = treeReducer(
       { ...state, selectedNodeId: leaf!.id },

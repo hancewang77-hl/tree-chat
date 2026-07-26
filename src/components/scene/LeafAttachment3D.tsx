@@ -5,7 +5,7 @@ import { Line } from "@react-three/drei";
 import * as THREE from "three";
 import { LEAF_H, LEAF_W } from "@/hooks/useTreeLayout";
 import type { MindNode } from "@/src/types/tree";
-import { drawWrappedText, noRaycast, truncateText } from "@/src/lib/utils";
+import { noRaycast, truncateText } from "@/src/lib/utils";
 
 const LEAF_ACCENT = "#747A55";
 const LEAF_ACCENT_SOFT = "#9C9A70";
@@ -22,8 +22,8 @@ export function LeafAttachment3D({
   onSelect: () => void;
 }) {
   const texture = useMemo(
-    () => createLeafCardTexture(node.prompt, node.timestamp, selected),
-    [node.prompt, node.timestamp, selected],
+    () => createLeafNameTexture(node.prompt, selected),
+    [node.prompt, selected],
   );
 
   return (
@@ -53,9 +53,9 @@ export function LeafAttachment3D({
   );
 }
 
-function createLeafCardTexture(prompt: string, timestamp: number, selected: boolean) {
-  const width = 640;
-  const height = 260;
+function createLeafNameTexture(name: string, selected: boolean) {
+  const width = 480;
+  const height = 160;
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -66,8 +66,8 @@ function createLeafCardTexture(prompt: string, timestamp: number, selected: bool
 
   ctx.save();
   ctx.shadowColor = selected ? "rgba(61,46,28,0.22)" : "rgba(61,46,28,0.12)";
-  ctx.shadowBlur = selected ? 22 : 12;
-  ctx.shadowOffsetY = 7;
+  ctx.shadowBlur = selected ? 18 : 10;
+  ctx.shadowOffsetY = 5;
 
   const paper = ctx.createLinearGradient(0, 0, width, height);
   paper.addColorStop(0, selected ? "#F0E7D2" : "#EFE4CF");
@@ -75,70 +75,31 @@ function createLeafCardTexture(prompt: string, timestamp: number, selected: bool
   paper.addColorStop(1, "#D1C4A4");
 
   ctx.fillStyle = paper;
-  roundRect(ctx, 18, 16, width - 36, height - 32, 30, true, false);
+  roundRect(ctx, 16, 18, width - 32, height - 36, 22, true, false);
   ctx.restore();
 
   ctx.strokeStyle = selected ? LEAF_ACCENT : "#A79E76";
-  ctx.lineWidth = selected ? 6 : 3;
-  roundRect(ctx, 23, 21, width - 46, height - 42, 26, false, true);
+  ctx.lineWidth = selected ? 5 : 3;
+  roundRect(ctx, 20, 22, width - 40, height - 44, 18, false, true);
 
   ctx.fillStyle = selected ? "rgba(116,122,85,0.16)" : "rgba(116,122,85,0.10)";
-  roundRect(ctx, 44, 39, 156, 34, 17, true, false);
+  roundRect(ctx, 36, 36, 88, 28, 14, true, false);
   ctx.fillStyle = LEAF_ACCENT;
-  ctx.font = "700 18px Georgia, serif";
+  ctx.font = "700 16px Georgia, serif";
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.fillText(`${leafIntentLabel(prompt)} · LEAF`, 60, 56);
+  ctx.fillText("LEAF", 52, 50);
 
   ctx.fillStyle = "#2C2416";
-  ctx.font = "700 31px Georgia, serif";
+  ctx.font = "700 34px Georgia, serif";
   ctx.textAlign = "left";
-  ctx.textBaseline = "alphabetic";
-  drawWrappedText(ctx, truncateText(prompt, 96), 54, 122, width - 108, 38, 3);
-
-  ctx.fillStyle = "#5F5548";
-  ctx.font = "600 15px Inter, system-ui, sans-serif";
   ctx.textBaseline = "middle";
-  ctx.fillText(`LOCAL NOTE · ${formatLeafDate(timestamp)}`, 54, height - 48);
-
-  ctx.save();
-  ctx.strokeStyle = selected ? "rgba(116,122,85,0.24)" : "rgba(116,122,85,0.14)";
-  ctx.lineWidth = 2.2;
-  ctx.beginPath();
-  ctx.moveTo(width - 184, height - 46);
-  ctx.bezierCurveTo(width - 128, height - 82, width - 102, 98, width - 46, 45);
-  ctx.stroke();
-
-  for (let i = 0; i < 3; i++) {
-    const x = width - 154 + i * 40;
-    ctx.beginPath();
-    ctx.moveTo(x, height - 70 - i * 12);
-    ctx.quadraticCurveTo(x + 24, height - 88 - i * 20, x + 52, height - 118 - i * 16);
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  ctx.fillStyle = selected ? "rgba(116,122,85,0.14)" : "rgba(116,122,85,0.08)";
-  ctx.beginPath();
-  ctx.ellipse(width - 58, 56, 28, 17, -0.45, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.fillText(truncateText(name.trim() || "未命名叶片", 22), 36, height / 2 + 18);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.anisotropy = 8;
   texture.needsUpdate = true;
   return texture;
-}
-
-function leafIntentLabel(prompt: string) {
-  if (/[?？]$/.test(prompt.trim())) return "QUESTION";
-  if (/todo|待办|需要|记得|检查|完成/i.test(prompt)) return "TODO";
-  return "NOTE";
-}
-
-function formatLeafDate(timestamp: number) {
-  const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) return "saved";
-  return `${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")}`;
 }
 
 function roundRect(

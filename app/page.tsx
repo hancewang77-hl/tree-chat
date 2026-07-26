@@ -158,10 +158,15 @@ function App() {
     }
   }, [isAiTyping, activeProject, sendMessage, dispatch]);
 
-  const handleAddLeaf = useCallback((content: string) => {
-    if (!content.trim() || !activeProject) return;
+  const handleAddLeaf = useCallback((name: string, content: string) => {
+    if (!name.trim() || !content.trim() || !activeProject) return;
     const s = stateRef.current;
-    dispatch({ type: "LEAF", content: content.trim(), parentId: s.selectedNodeId });
+    dispatch({
+      type: "LEAF",
+      name: name.trim(),
+      content: content.trim(),
+      parentId: s.selectedNodeId,
+    });
   }, [activeProject, dispatch]);
 
   const handleStartLayerMove = useCallback((nodeId: string) => {

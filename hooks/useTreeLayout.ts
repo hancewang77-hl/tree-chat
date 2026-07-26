@@ -23,8 +23,8 @@ type SettledLink = HierarchyPointLink<HierarchyNodeData> & {
 
 export const NODE_W = 3.4;
 export const NODE_H = 1.75;
-export const LEAF_W = 1.9;
-export const LEAF_H = 0.78;
+export const LEAF_W = 1.55;
+export const LEAF_H = 0.48;
 export const LAYER_SPACING = 4.2;
 export const X_SPACING = 4.6;
 export const Y_SPACING = 2.4;

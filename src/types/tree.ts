@@ -92,7 +92,7 @@ export type TreeAction =
   | { type: "HYDRATE"; state: TreeState }
   | { type: "SEED"; name: string }
   | { type: "BRANCH"; prompt: string; response: string; parentId: string; nutrientRefs?: string[] }
-  | { type: "LEAF"; content: string; parentId: string }
+  | { type: "LEAF"; name: string; content: string; parentId: string }
   | { type: "GRAFT_START"; nodeId: string }
   | { type: "GRAFT_CONFIRM"; newParentId: string }
   | { type: "GRAFT_CANCEL" }

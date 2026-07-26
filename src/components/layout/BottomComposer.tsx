@@ -27,17 +27,20 @@ export function BottomComposer({
   onAddLeaf,
 }: {
   onSend: (prompt: string) => void;
-  onAddLeaf: (content: string) => void;
+  onAddLeaf: (name: string, content: string) => void;
 }) {
   const state = useTreeState();
   const dispatch = useTreeDispatch();
   const activeProject = state.projects[state.activeProjectId];
   const [mode, setMode] = useState<ComposerMode>("ai");
   const [text, setText] = useState("");
+  const [leafName, setLeafName] = useState("");
   const [burst, setBurst] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const leafNameRef = useRef<HTMLInputElement>(null);
+  const modeRef = useRef<ComposerMode>("ai");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const nutrients = Object.values(activeProject?.nutrients ?? {}).sort(
@@ -47,10 +50,20 @@ export function BottomComposer({
 
   // Listen for external mode-switch and focus events (from InspectorSidebar)
   useEffect(() => {
-    const handleMode = (e: Event) => setMode((e as CustomEvent).detail as ComposerMode);
+    const handleMode = (e: Event) => {
+      const nextMode = (e as CustomEvent).detail as ComposerMode;
+      modeRef.current = nextMode;
+      setMode(nextMode);
+    };
     const handleFocus = () => {
       // Delay to avoid the triggering button stealing focus back
-      setTimeout(() => textareaRef.current?.focus(), 50);
+      setTimeout(() => {
+        if (modeRef.current === "note") {
+          leafNameRef.current?.focus();
+        } else {
+          textareaRef.current?.focus();
+        }
+      }, 50);
     };
     window.addEventListener("composer-mode", handleMode);
     window.addEventListener("composer-focus", handleFocus);
@@ -61,20 +74,26 @@ export function BottomComposer({
   }, []);
 
   function emitComposerMode(nextMode: ComposerMode) {
+    modeRef.current = nextMode;
     window.dispatchEvent(new CustomEvent("composer-mode", { detail: nextMode }));
   }
 
+  const canSubmit =
+    mode === "ai" ? Boolean(text.trim()) : Boolean(leafName.trim() && text.trim());
+
   function handleSubmit() {
-    if (!text.trim()) return;
+    if (!canSubmit) return;
     // Seed burst animation
     setBurst(true);
     setTimeout(() => setBurst(false), 500);
     if (mode === "ai") {
       onSend(text);
+      setText("");
     } else {
-      onAddLeaf(text);
+      onAddLeaf(leafName, text);
+      setLeafName("");
+      setText("");
     }
-    setText("");
   }
 
   async function handleFiles(files: FileList | null) {
@@ -109,7 +128,7 @@ export function BottomComposer({
   const placeholder =
     mode === "ai"
       ? `在 z = ${state.selectedLayer} 层继续延伸你的思考... (Enter 发送)`
-      : "记录一个想法或笔记... (Enter 保存)";
+      : "填写叶片笔记内容... (Enter 保存)";
 
   return (
     <div
@@ -293,7 +312,7 @@ export function BottomComposer({
 
           {/* Input — rich soil with tree-ring radial gradient */}
           <div
-            className="flex flex-1 items-end rounded-2xl px-4 py-2.5 transition-all relative overflow-hidden composer-input"
+            className="flex flex-1 flex-col gap-2 rounded-2xl px-4 py-2.5 transition-all relative overflow-hidden composer-input"
             style={{
               background: [
                 "radial-gradient(ellipse at 15% 85%, rgba(107, 95, 79, 0.06) 0%, transparent 55%)",
@@ -305,6 +324,27 @@ export function BottomComposer({
               boxShadow: "inset 0 2px 8px var(--shadow-warm), 0 1px 0 rgba(224, 216, 200, 0.6)",
             }}
           >
+            {mode === "note" && (
+              <input
+                ref={leafNameRef}
+                type="text"
+                className="w-full bg-transparent text-[13px] font-medium outline-none placeholder:opacity-40 relative z-[1]"
+                placeholder="叶片名字（必填）"
+                value={leafName}
+                onChange={(e) => setLeafName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    textareaRef.current?.focus();
+                  }
+                }}
+                style={{
+                  color: "var(--text-charcoal)",
+                  borderBottom: "1px solid var(--border-warm)",
+                  paddingBottom: 6,
+                }}
+              />
+            )}
             <textarea
               ref={textareaRef}
               className="w-full resize-none bg-transparent text-[14px] leading-6 outline-none placeholder:opacity-40 relative z-[1]"
@@ -325,24 +365,24 @@ export function BottomComposer({
           {/* Send — seed-shaped button with burst effect */}
           <button
             onClick={handleSubmit}
-            disabled={!text.trim()}
+            disabled={!canSubmit}
             className="flex h-10 w-10 shrink-0 items-center justify-center transition-all relative"
             style={{
-              background: text.trim()
+              background: canSubmit
                 ? "var(--accent-sage)"
                 : "var(--accent-olive-soft)",
-              color: text.trim() ? "#FBF7F0" : "var(--accent-olive-deep)",
-              border: `1px solid ${text.trim() ? "rgba(86, 91, 61, 0.42)" : "rgba(116, 122, 85, 0.24)"}`,
+              color: canSubmit ? "#FBF7F0" : "var(--accent-olive-deep)",
+              border: `1px solid ${canSubmit ? "rgba(86, 91, 61, 0.42)" : "rgba(116, 122, 85, 0.24)"}`,
               borderRadius: "60% 40% 50% 50% / 55% 45% 55% 45%",
-              transform: text.trim() ? "scale(1.05)" : "scale(1)",
-              boxShadow: text.trim()
+              transform: canSubmit ? "scale(1.05)" : "scale(1)",
+              boxShadow: canSubmit
                 ? "0 2px 8px rgba(86, 91, 61, 0.28)"
                 : "none",
             }}
             title={mode === "ai" ? "播种 · Plant" : "保存 · Keep"}
           >
             <Send size={14} style={{ transform: "rotate(-8deg)" }} />
-            {text.trim() && (
+            {canSubmit && (
               <span
                 className="absolute -top-1.5 -right-1"
                 style={{ fontSize: 10, lineHeight: 1 }}
