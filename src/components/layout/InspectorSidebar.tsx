@@ -153,7 +153,7 @@ export function InspectorSidebar({
               >
                 <div className="mb-1.5 flex items-center justify-between gap-2">
                   <span className="text-[10px] font-semibold" style={{ color: "var(--accent-sage)" }}>
-                    待执行
+                    任务提要
                   </span>
                   {selectedNode.auxoSource && (
                     <span className="text-[9px]" style={{ color: "var(--text-muted)" }}>

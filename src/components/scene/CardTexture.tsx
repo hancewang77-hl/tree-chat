@@ -15,10 +15,10 @@ const CARD_PAPER_MID = "#D1CAA7";
 const CARD_PAPER_DARK = "#C0BA91";
 
 export function CardTexture({
-  prompt, response, kind, status, nodeRole, taskDescription, selected, inPath, layer,
+  prompt, response, kind, status, nodeRole, taskDescription, hasAuxoSource, selected, inPath, layer,
 }: {
   prompt: string; response: string; kind: "root" | "branch" | "leaf"; status?: string; selected: boolean;
-  nodeRole?: NodeRole; taskDescription?: string; inPath: boolean; layer: number;
+  nodeRole?: NodeRole; taskDescription?: string; hasAuxoSource?: boolean; inPath: boolean; layer: number;
   interactive: boolean; priority: boolean;
 }) {
   const texture = useMemo(() => {
@@ -33,6 +33,7 @@ export function CardTexture({
     const nodeStatus = status ?? "complete";
     const isNote = kind === "leaf";
     const isAuxoTask = nodeRole === "task" || nodeRole === "task-group";
+    const isSourcedTask = nodeRole === "task" && Boolean(hasAuxoSource);
     const promptLabel = isNote
       ? "LEAF / 记录"
       : nodeRole === "task-group"
@@ -40,9 +41,12 @@ export function CardTexture({
         : nodeRole === "task"
           ? "AUXO / 原子任务"
           : "SEED / 提问";
+    const titleText = isSourcedTask ? taskDescription?.trim() || prompt : prompt;
     const responseLabel = isNote
       ? "SOIL / 备注"
-      : isAuxoTask
+      : isSourcedTask
+        ? "SOURCE / 原文"
+        : isAuxoTask
         ? "STATUS / 待执行"
       : nodeStatus === "streaming"
         ? "GROWTH / 生成中"
@@ -53,6 +57,8 @@ export function CardTexture({
             : "CANOPY / 回答";
     const summary = isNote
       ? "这是一片手动记录的叶片，可继续生长出新的分支。"
+      : isSourcedTask
+        ? summarizeForCard(prompt, 150)
       : isAuxoTask
         ? taskDescription?.trim()
           ? summarizeForCard(taskDescription, 150)
@@ -78,7 +84,7 @@ export function CardTexture({
     ctx.font = "500 26px 'Lora','Georgia',serif";
     ctx.textAlign = "left";
     ctx.textBaseline = "alphabetic";
-    drawWrappedText(ctx, truncateText(prompt, 124), 104, 116, width - 176, 37, 4);
+    drawWrappedText(ctx, truncateText(titleText, 124), 104, 116, width - 176, 37, 4);
 
     drawBranchDivider(ctx, 104, 266, width - 76, selected, inPath);
 
@@ -93,7 +99,7 @@ export function CardTexture({
     tex.anisotropy = 8;
     tex.needsUpdate = true;
     return tex;
-  }, [prompt, response, kind, status, nodeRole, taskDescription, selected, inPath, layer]);
+  }, [prompt, response, kind, status, nodeRole, taskDescription, hasAuxoSource, selected, inPath, layer]);
 
   if (!texture) return null;
 

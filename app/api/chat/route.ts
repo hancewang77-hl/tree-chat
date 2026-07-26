@@ -7,29 +7,24 @@ import {
   DEEPSEEK_MODEL,
   DEEPSEEK_NON_THINKING,
 } from "@/src/lib/deepseek";
+import { createRateLimiter } from "@/src/lib/rateLimit";
 
-const rateMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT = 30;
 const RATE_WINDOW = 60_000;
+export const chatRateLimiter = createRateLimiter({
+  limit: RATE_LIMIT,
+  windowMs: RATE_WINDOW,
+});
 
 export async function POST(req: Request) {
   const ip =
     req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     req.headers.get("x-real-ip") ||
     "unknown";
-  const now = Date.now();
-  const entry = rateMap.get(ip);
-
-  if (entry && now < entry.resetAt) {
-    if (entry.count >= RATE_LIMIT) {
-      return Response.json({ error: "请求过于频繁，请稍后再试" }, { status: 429 });
-    }
-    entry.count++;
-  } else {
-    rateMap.set(ip, { count: 1, resetAt: now + RATE_WINDOW });
+  const rateLimit = chatRateLimiter.check(ip);
+  if (!rateLimit.allowed) {
+    return Response.json({ error: "请求过于频繁，请稍后再试" }, { status: 429 });
   }
-
-  if (rateMap.size > 10_000) rateMap.clear();
 
   try {
     const apiKey = process.env.DEEPSEEK_API_KEY;

@@ -594,10 +594,10 @@ describe("treeReducer product functions", () => {
     expect(group.response).toBe("");
     expect(tasks.map((task) => task.prompt)).toEqual(["1. Root", "列出交付物"]);
     expect(tasks.map((task) => task.nodeRole)).toEqual(["task", "task"]);
-    expect(group.taskDescription).toBe("Auxo 任务组 · 按顺序完成其子任务。");
+    expect(group.taskDescription).toBe("Auxo 任务组 · 共 2 项子任务，按顺序完成。");
     expect(tasks.map((task) => task.taskDescription)).toEqual([
-      "Auxo 原题任务 · 保持原文，独立完成并核验。",
-      "Auxo 原子任务 · 独立完成并核验。",
+      "读取根任务",
+      "Auxo 补充任务 · 由整体目标推导，不对应单一原文题目。",
     ]);
     expect(tasks.every((task) => task.auxoGenerationId === "auxo-run-1")).toBe(true);
     expect(root.auxoManifest).toMatchObject({

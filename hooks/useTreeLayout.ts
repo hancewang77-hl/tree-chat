@@ -70,6 +70,7 @@ type TreeLayoutInput = {
   is3DMode: boolean;
   movingNodeId: string | null;
   pendingNodeLayer: number | null;
+  rootNodeId?: string;
 };
 
 export type LeafAttachment = {
@@ -109,6 +110,7 @@ export function useTreeLayout({
   is3DMode,
   movingNodeId,
   pendingNodeLayer,
+  rootNodeId = "root",
 }: TreeLayoutInput) {
   const visibleIds = useMemo(
     () => (is3DMode ? null : new Set(Object.keys(nodes))),
@@ -125,7 +127,7 @@ export function useTreeLayout({
       return { ...node, children: hierarchyChildren } as HierarchyNodeData;
     }
 
-    const rootHierarchy = buildHierarchy("root");
+    const rootHierarchy = buildHierarchy(rootNodeId);
     if (!rootHierarchy) {
       return {
         descendants: [] as HierarchyPointNode<HierarchyNodeData>[],
@@ -142,7 +144,7 @@ export function useTreeLayout({
       descendants: rootD3.descendants() as SettledNode[],
       links: rootD3.links() as SettledLink[],
     };
-  }, [nodes]);
+  }, [nodes, rootNodeId]);
 
   const renderedNodes = useMemo(() => {
     return fullTreeLayout.descendants.filter((d) =>

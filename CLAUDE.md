@@ -18,9 +18,11 @@ npm ci           # Install the exact lockfile dependency set
 npm run dev      # Start dev server on port 3000
 npm run build    # Production build
 npm run start    # Start production server
-npm run lint     # Run ESLint
-npm test         # Run the Vitest regression suite
+npm run lint     # Run ESLint (Next.js flat config)
+npm test         # Run Vitest (node environment, tests in src/**/ and hooks/**/)
 ```
+
+Tests are colocated `*.test.ts` files. Vitest aliases `@/` to the project root (same as tsconfig paths).
 
 ## Architecture
 
@@ -33,26 +35,29 @@ This is a **tree-structured AI conversation tool** ("智构树语"). Users explo
 - **Tree layout**: `d3-hierarchy` (`d3.tree()`) computes positions; nodes are arranged with `nodeSize([Y_SPACING, X_SPACING])`
 - **Styling**: Tailwind CSS 4 (via `@tailwindcss/postcss`), inline styles using CSS custom properties
 - **AI**: DeepSeek API, called through the OpenAI SDK (base URL: `https://api.deepseek.com`)
+- **Math**: KaTeX for LaTeX rendering in the Inspector sidebar
 - **Icons**: `lucide-react`
 
 ### Design system — Organic Editorial
 
-The app avoids blue/purple AI-chatbot aesthetics. Instead it uses warm, tactile, natural tones:
+The app avoids blue/purple AI-chatbot aesthetics. Instead it uses warm, tactile, natural tones. The original design spec (`docs/superpowers/specs/2026-05-12-tree-chat-redesign.md`) defined a lighter palette; the actual implementation uses a richer, deeper set of tones:
 
-- **Base**: cream/paper (`#FBF7F0`), warm paper (`#F5F0E8`)
-- **Text**: charcoal (`#2C2416`), muted warm (`#6B5F4F`)
-- **Accents**: bark brown (`#3D2E1C`), sage green (`#7D9B6E`), amber gold (`#C4943A`)
-- **Borders**: warm beige (`#E0D8C8`)
+- **Base**: cream (`#E8DFD0`), paper (`#D8CCB8`)
+- **Text**: charcoal (`#2C2416`), muted warm (`#5F5548`)
+- **Accents**: bark brown (`#3D2E1C`), sage green (`#747A55`), olive deep (`#565B3D`), olive soft (`rgba(116,122,85,0.16)`), amber gold (`#C4943A`)
+- **Borders**: warm beige (`#C7B89D`), shadow (`rgba(61,46,28,0.13)`)
 - **Fonts**: Lora (serif, for headings/titles), Geist (sans, for UI chrome), Geist Mono (code)
-- **Texture**: CSS grain overlay on body (`::before` pseudo-element with SVG noise)
+- **Texture**: CSS grain overlay on body (`::before` pseudo-element with SVG fractal noise at 0.035 opacity)
+- **Dark theme**: `[data-theme="dark"]` selector inverts the palette (dark cream → `#1E1B15`, sage → `#8BAF7A`, amber → `#D4A84A`, etc.). Theme is persisted in localStorage and applied before first paint via inline `<script>` in `layout.tsx`.
 
 CSS custom properties are defined in `app/globals.css`:
 
 - `--bg-cream`, `--bg-paper`, `--text-charcoal`, `--text-muted`
-- `--accent-bark`, `--accent-sage`, `--accent-amber`
+- `--accent-bark`, `--accent-sage`, `--accent-olive-deep`, `--accent-olive-soft`, `--accent-amber`
 - `--border-warm`, `--shadow-warm`
+- `--font-geist-sans`, `--font-geist-mono`, `--font-lora` (fallback font stacks)
 
-Components use these via inline `style={{ color: "var(--accent-bark)" }}` etc.
+Components use these via inline `style={{ color: "var(--accent-bark)" }}` etc. SVG leaf vein patterns are defined in `src/lib/visualPatterns.ts` — used as CSS `background-image` on cards, sidebars, and empty states.
 
 ### File structure
 
@@ -78,9 +83,11 @@ src/
 │   ├── nutrientMarkdown.ts     # Browser-side DOCX/PDF/HTML/text → Markdown conversion
 │   ├── nutrients.ts            # Nutrient ingestion, structure-aware chunking, relevance selection
 │   ├── nutrientStorage.ts      # IndexedDB storage for original local attachments
-│   ├── storage.ts              # localStorage load/save helpers
-│   ├── utils.ts                # clamp, truncateText, roundRect, drawWrappedText
-│   └── formatResponse.ts       # Markdown conversion for cards and Inspector
+│   ├── storage.ts              # localStorage load/save helpers (schema v2)
+│   ├── streamText.ts           # ReadableStream→text helper for SSE responses
+│   ├── utils.ts                # clamp, truncateText, roundRect, drawWrappedText, noRaycast
+│   ├── visualPatterns.ts       # SVG leaf vein patterns as data URIs (cards, sidebars)
+│   └── formatResponse.ts       # Markdown→HTML (KaTeX math), Markdown→plaintext, card summaries
 ├── state/
 │   ├── TreeContext.tsx          # Context provider + useTree/useTreeState/useTreeDispatch hooks
 │   └── treeReducer.ts          # Tree actions, patch history, persistence, undo/redo
@@ -116,8 +123,6 @@ hooks/
 ├── useAuxo.ts                  # Cancelable plan request + client validation
 └── useResizableSidebar.ts      # Sidebar drag-to-resize behavior (kept, not used in current layout)
 ```
-
-Tests are colocated as `*.test.ts` files beside the reducer, storage, compiler, semantic-card, nutrient, and layout modules.
 
 ### Deleted files (post-redesign)
 
@@ -249,17 +254,33 @@ AI responses pass through two formatting layers:
 
 ### DeepSeek APIs
 
-- Runtime model selection is centralized in `src/lib/deepseek.ts`; chat, semantic structuring, and Auxo use `deepseek-v4-flash` with thinking explicitly disabled.
-- `POST /api/chat` accepts compiled messages and streams the answer used by the UI; a non-streaming mode remains available.
-- `POST /api/structure` accepts one prompt/response pair and returns a validated JSON semantic card.
-- `POST /api/auxo` accepts one bounded root task plus all enabled Markdown chunks and returns a validated plan; it never persists model-supplied IDs or bulk answers.
-- All routes read `DEEPSEEK_API_KEY` only from the server environment and apply independent request limits.
+- Runtime model selection is centralized in `src/lib/deepseek.ts`; chat, semantic structuring, and Auxo use `deepseek-v4-flash` with thinking explicitly disabled (`DEEPSEEK_NON_THINKING = { type: "disabled" }`).
+- `POST /api/chat` — per-IP rate limit 30/min. Accepts compiled messages, streams via SSE (`max_tokens: 2048`). Non-streaming mode available. Supports `AbortController` cancellation.
+- `POST /api/structure` — per-IP rate limit 30/min. Accepts one prompt/response pair (max 50K chars combined). Returns validated JSON semantic card via `response_format: { type: "json_object" }` with `temperature: 0.1`, `max_tokens: 1200`.
+- `POST /api/auxo` — per-IP rate limit 6/min (stricter). 45s server timeout (`AbortController`), 55s client timeout. Accepts bounded root task + all enabled Markdown chunks (max 700KB body). Returns validated plan via `response_format: { type: "json_object" }` with `temperature: 0.1`, `max_tokens: 8000`. Plan is validated both server-side and client-side before any nodes are created.
+- All routes read `DEEPSEEK_API_KEY` only from the server environment. Rate limit maps are cleared when exceeding 10,000 entries.
 
 ### Important constants (in `hooks/useTreeLayout.ts`)
 
-- `NODE_W = 3.4`, `NODE_H = 1.75` — card dimensions in 3D world units
+- `NODE_W = 3.4`, `NODE_H = 1.75` — branch/root card dimensions in 3D world units
+- `LEAF_W = 1.9`, `LEAF_H = 0.78` — leaf note card dimensions (smaller, lighter)
 - `LAYER_SPACING = 4.2` — z-distance between layers
 - `X_SPACING = 4.6`, `Y_SPACING = 2.4` — D3 tree layout spacing
+- `zoom2D` default 105 (range 10–260), `zoom3D` default 1 (range 0.1–4.0)
+
+### Nutrient file processing
+
+Nutrients are user-uploaded local files converted to Markdown entirely in the browser (no server upload). The pipeline:
+
+- **DOCX** → mammoth.js → HTML → Turndown (+ GFM plugin) → Markdown. ZIP bomb detection validates archive structure before extraction (max 2000 entries, 50MB uncompressed, 20MB per entry, 200× compression ratio).
+- **PDF** → unpdf (PDF.js) extracts text per page. Max 200 pages, 200K chars, 20s extraction timeout. No OCR — image-only PDFs are rejected.
+- **HTML** → Turndown (+ GFM plugin) → Markdown.
+- **Plain text / Markdown** → normalized directly.
+- **Images** → saved as blob in IndexedDB (`tree-chat-nutrients`); not converted to text.
+- **Legacy .doc** → rejected with guidance to save as .docx.
+- **File limits**: 10MB max per file, 200K chars max extracted Markdown.
+
+Nutrients are chunked (target 1600 chars/chunk), scored for relevance against the current query, and the top-N relevant chunks (max 8, budget 8000 chars) are included in compiled context.
 
 ### Known quirks
 
@@ -267,3 +288,6 @@ AI responses pass through two formatting layers:
 - Semantic-card extraction is a second DeepSeek request after each completed answer. Failure is non-fatal and can be retried from the Inspector.
 - `CameraModeRig.tsx` has an `eslint-disable` for `react-hooks/immutability` — Three.js requires direct camera property mutation.
 - `useResizableSidebar.ts` exists but is not wired into the current layout (sidebars use fixed widths).
+- Math rendering in the Inspector uses KaTeX (`katex` package). The CSS is imported in `layout.tsx`.
+- Layer transitions in `page.tsx` use `requestAnimationFrame` with exponential easing (factor 0.14) for smooth animated scrolling between layers.
+- Dark theme (`[data-theme="dark"]`) is applied via inline `<script>` in `layout.tsx` before first paint to avoid FOUC.

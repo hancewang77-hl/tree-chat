@@ -590,6 +590,14 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
         idByPlanId.set(planNode.planId, nodeId);
       }
 
+      const childCountByPlanId = new Map<string, number>();
+      for (const planNode of orderedPlan) {
+        childCountByPlanId.set(
+          planNode.parentPlanId,
+          (childCountByPlanId.get(planNode.parentPlanId) ?? 0) + 1,
+        );
+      }
+
       const generatedNodes: NodesMap = {};
       for (const planNode of orderedPlan) {
         const nodeId = idByPlanId.get(planNode.planId)!;
@@ -601,10 +609,10 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
         const prompt = planNode.source?.exactQuote ?? planNode.title;
         const taskDescription =
           planNode.nodeRole === "task-group"
-            ? "Auxo 任务组 · 按顺序完成其子任务。"
+            ? `Auxo 任务组 · 共 ${childCountByPlanId.get(planNode.planId) ?? 0} 项子任务，按顺序完成。`
             : planNode.source
-              ? "Auxo 原题任务 · 保持原文，独立完成并核验。"
-              : "Auxo 原子任务 · 独立完成并核验。";
+              ? planNode.title
+              : "Auxo 补充任务 · 由整体目标推导，不对应单一原文题目。";
         generatedNodes[nodeId] = {
           id: nodeId,
           kind: "branch",

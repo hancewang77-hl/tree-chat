@@ -47,6 +47,7 @@ export function Node3D({
         status={node.status}
         nodeRole={node.nodeRole}
         taskDescription={node.taskDescription}
+        hasAuxoSource={Boolean(node.auxoSource)}
         selected={selected}
         inPath={inPath}
         layer={node.layer}

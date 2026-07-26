@@ -5,7 +5,8 @@ import { getContextPath } from "@/hooks/useTreeLayout";
 import { useAIChat } from "@/hooks/useAIChat";
 import { useAuxo } from "@/hooks/useAuxo";
 import { compileContext } from "@/src/lib/contextCompiler";
-import { compileAuxoInput } from "@/src/lib/auxo";
+import { compileAuxoInput, type AuxoInputBundle } from "@/src/lib/auxo";
+import type { AuxoPlan } from "@/src/types/tree";
 import { DEEPSEEK_MODEL } from "@/src/lib/deepseek";
 import { clamp } from "@/src/lib/utils";
 import { TreeProvider, useTreeState, useTreeDispatch } from "@/src/state/TreeContext";
@@ -47,6 +48,12 @@ function App() {
   const [planeNameInput, setPlaneNameInput] = useState("");
   const [isAuxoOpen, setIsAuxoOpen] = useState(false);
   const [auxoError, setAuxoError] = useState<string | null>(null);
+  const [auxoPreview, setAuxoPreview] = useState<{
+    plan: AuxoPlan;
+    request: AuxoInputBundle;
+    rootNodeId: string;
+    projectId: string;
+  } | null>(null);
 
   // Refs for latest values used in callbacks — avoids stale closures
   const nodesRef = useRef(nodes);
@@ -338,13 +345,20 @@ function App() {
       return;
     }
     setAuxoError(null);
+    setAuxoPreview(null);
     setIsAuxoOpen(true);
   }, []);
 
   const handleCancelAuxo = useCallback(() => {
     if (isAuxoGeneratingRef.current) cancelAuxo();
     setIsAuxoOpen(false);
+    setAuxoPreview(null);
   }, [cancelAuxo, isAuxoGeneratingRef]);
+
+  const handleDiscardAuxoPreview = useCallback(() => {
+    setAuxoPreview(null);
+    setAuxoError(null);
+  }, []);
 
   const handleGenerateAuxo = useCallback(async () => {
     if (isAuxoGeneratingRef.current) return;
@@ -380,23 +394,51 @@ function App() {
         throw new Error("请求期间根任务或启用资料发生变化，请重新运行 Auxo。");
       }
 
-      dispatch({
-        type: "APPLY_AUXO_PLAN",
-        projectId: project.id,
-        rootNodeId: root.id,
-        generationId: `auxo-run-${crypto.randomUUID()}`,
-        inputFingerprint: input.inputFingerprint,
-        nutrientRefs: input.nutrientRefs,
-        plan,
-      });
-      setIsAuxoOpen(false);
+      setAuxoPreview({ plan, request: input, rootNodeId: root.id, projectId: project.id });
     } catch (auxoFailure) {
       const message = auxoFailure instanceof Error
         ? auxoFailure.message
         : "Auxo 生成失败，本次没有创建任何节点。";
       setAuxoError(message);
     }
-  }, [dispatch, generateAuxoPlan, isAuxoGeneratingRef]);
+  }, [generateAuxoPlan, isAuxoGeneratingRef]);
+
+  const handleConfirmAuxoPlan = useCallback(() => {
+    const preview = auxoPreview;
+    if (!preview) return;
+
+    const latestState = stateRef.current;
+    const latestProject = latestState.projects[preview.projectId];
+    const latestRoot = latestProject?.nodes[preview.rootNodeId];
+    if (!latestProject || !latestRoot || latestProject.rootNodeId !== preview.rootNodeId) {
+      setAuxoError("目标项目已被删除或根节点已变化，本次没有创建节点。");
+      setAuxoPreview(null);
+      return;
+    }
+    if (latestRoot.children.length > 0) {
+      setAuxoError("根节点已产生新内容，本次没有合并 Auxo 计划。");
+      setAuxoPreview(null);
+      return;
+    }
+    const latestInput = compileAuxoInput(latestProject);
+    if (latestInput.inputFingerprint !== preview.request.inputFingerprint) {
+      setAuxoError("根任务或启用资料发生变化，请重新运行 Auxo。");
+      setAuxoPreview(null);
+      return;
+    }
+
+    dispatch({
+      type: "APPLY_AUXO_PLAN",
+      projectId: preview.projectId,
+      rootNodeId: preview.rootNodeId,
+      generationId: `auxo-run-${crypto.randomUUID()}`,
+      inputFingerprint: preview.request.inputFingerprint,
+      nutrientRefs: preview.request.nutrientRefs,
+      plan: preview.plan,
+    });
+    setAuxoPreview(null);
+    setIsAuxoOpen(false);
+  }, [auxoPreview, dispatch]);
 
   const zoom = state.is3DMode ? state.zoom3D : state.zoom2D;
 
@@ -499,7 +541,10 @@ function App() {
           })}
           isGenerating={isAuxoGenerating}
           error={auxoError}
+          plan={auxoPreview?.plan}
           onGenerate={handleGenerateAuxo}
+          onConfirm={handleConfirmAuxoPlan}
+          onDiscard={handleDiscardAuxoPreview}
           onCancel={handleCancelAuxo}
         />
       )}
