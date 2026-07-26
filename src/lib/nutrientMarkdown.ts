@@ -99,6 +99,7 @@ async function extractDocxMarkdown(file: File): Promise<string> {
   try {
     const arrayBuffer = await file.arrayBuffer();
     assertSafeDocxArchive(arrayBuffer);
+    await assertDocxInflationSafe(arrayBuffer);
     const mammothModule = await import("mammoth");
     const mammoth = mammothModule.default;
     const input =
@@ -358,16 +359,20 @@ function hasReadableMarkdownContent(markdown: string): boolean {
 }
 
 /**
- * ZIP-bomb guard: walks the ZIP central directory BEFORE any byte is
- * decompressed (mammoth only runs after this passes). Enforced here:
+ * ZIP-bomb guard (metadata pre-screen): walks the ZIP central directory BEFORE
+ * any byte is decompressed. Enforced here:
  * - single-disk, non-ZIP64 archives only (0xffff / 0xffffffff sentinels and
  *   disk-split fields are rejected);
  * - at most MAX_DOCX_ARCHIVE_ENTRIES entries, each with a valid signature and
  *   in-bounds record;
  * - declared uncompressed sizes: per entry ≤ MAX_DOCX_ENTRY_BYTES, summed
  *   ≤ MAX_DOCX_UNCOMPRESSED_BYTES, per-entry ratio ≤ MAX_DOCX_COMPRESSION_RATIO.
- * Sizes come from the central directory, so an inflating bomb is rejected
- * from metadata alone.
+ *
+ * These sizes are the archive's OWN declarations, so this pass only catches an
+ * honest bomb. A crafted DOCX can declare small sizes while its DEFLATE stream
+ * inflates to gigabytes — jszip/pako (mammoth's unzip) inflate the real stream
+ * and ignore the declared size. assertDocxInflationSafe verifies the actual
+ * inflated size against the same caps before mammoth runs.
  */
 function assertSafeDocxArchive(arrayBuffer: ArrayBuffer): void {
   const view = new DataView(arrayBuffer);
@@ -443,6 +448,148 @@ function assertSafeDocxArchive(arrayBuffer: ArrayBuffer): void {
 
     offset += 46 + filenameLength + extraLength + commentLength;
   }
+}
+
+/**
+ * Verifies the ACTUAL inflated size of each ZIP entry against the same caps the
+ * metadata pre-screen uses, catching a bomb that lies about its declared sizes.
+ * Streams each entry's DEFLATE data through the platform's DecompressionStream,
+ * counting output and aborting the instant the per-entry or archive total cap is
+ * exceeded — so memory stays bounded to the cap even for a multi-gigabyte bomb.
+ *
+ * Behavior-preserving for legitimate DOCX files: their real inflated size equals
+ * their declared size (already under the caps), so they always pass. Best-effort
+ * on structural quirks — a per-entry inflation ERROR (corrupt stream, odd local
+ * header) is swallowed so mammoth's own error path still owns those cases; only
+ * a genuine cap violation rejects the file here. Skipped entirely if the runtime
+ * lacks DecompressionStream (falls back to the metadata pre-screen only).
+ */
+export async function assertDocxInflationSafe(arrayBuffer: ArrayBuffer): Promise<void> {
+  if (typeof DecompressionStream === "undefined") return;
+
+  const view = new DataView(arrayBuffer);
+  const bytes = new Uint8Array(arrayBuffer);
+  const eocdOffset = findZipEndOfCentralDirectory(view);
+  if (eocdOffset < 0) return;
+
+  const totalEntries = view.getUint16(eocdOffset + 10, true);
+  const centralDirectoryOffset = view.getUint32(eocdOffset + 16, true);
+
+  let offset = centralDirectoryOffset;
+  let totalOutput = 0;
+
+  for (let index = 0; index < totalEntries; index += 1) {
+    if (offset + 46 > view.byteLength || view.getUint32(offset, true) !== 0x02014b50) {
+      return;
+    }
+
+    const method = view.getUint16(offset + 10, true);
+    const compressedBytes = view.getUint32(offset + 20, true);
+    const filenameLength = view.getUint16(offset + 28, true);
+    const extraLength = view.getUint16(offset + 30, true);
+    const commentLength = view.getUint16(offset + 32, true);
+    const localHeaderOffset = view.getUint32(offset + 42, true);
+    const nextOffset = offset + 46 + filenameLength + extraLength + commentLength;
+
+    const remainingBudget = MAX_DOCX_UNCOMPRESSED_BYTES - totalOutput;
+    // A cap violation must reject; any other (structural/decode) error is
+    // swallowed so mammoth's existing error handling owns that case.
+    let entryOutput: number;
+    try {
+      entryOutput = await inflateEntryBoundedSize(
+        view,
+        bytes,
+        localHeaderOffset,
+        method,
+        compressedBytes,
+        Math.max(0, remainingBudget),
+      );
+    } catch (error) {
+      if (error instanceof UnsupportedNutrientFormatError) throw error;
+      offset = nextOffset;
+      continue;
+    }
+
+    totalOutput += entryOutput;
+    offset = nextOffset;
+  }
+}
+
+/**
+ * Inflates one entry, returning its output byte count, throwing an
+ * UnsupportedNutrientFormatError the moment output exceeds MAX_DOCX_ENTRY_BYTES
+ * or the archive's remaining total budget. Throws a plain Error for structural
+ * problems (out-of-bounds data, bad local header, unsupported method) so the
+ * caller can distinguish and swallow those.
+ */
+async function inflateEntryBoundedSize(
+  view: DataView,
+  bytes: Uint8Array<ArrayBuffer>,
+  localHeaderOffset: number,
+  method: number,
+  compressedBytes: number,
+  remainingTotalBudget: number,
+): Promise<number> {
+  if (
+    localHeaderOffset + 30 > view.byteLength ||
+    view.getUint32(localHeaderOffset, true) !== 0x04034b50
+  ) {
+    throw new Error("DOCX local header is invalid");
+  }
+  // Local header filename/extra lengths can differ from the central directory's.
+  const localFilenameLength = view.getUint16(localHeaderOffset + 26, true);
+  const localExtraLength = view.getUint16(localHeaderOffset + 28, true);
+  const dataStart = localHeaderOffset + 30 + localFilenameLength + localExtraLength;
+  const dataEnd = dataStart + compressedBytes;
+  if (dataEnd > view.byteLength) {
+    throw new Error("DOCX entry data is out of bounds");
+  }
+
+  const perEntryCap = MAX_DOCX_ENTRY_BYTES;
+  const cap = Math.min(perEntryCap, remainingTotalBudget);
+  const rejectTooLarge = () => {
+    throw new UnsupportedNutrientFormatError(
+      "DOCX 解压后超过安全上限，请拆分文档后重试。",
+    );
+  };
+
+  // Stored (method 0): output equals the raw entry size, no inflation needed.
+  if (method === 0) {
+    if (compressedBytes > cap) rejectTooLarge();
+    return compressedBytes;
+  }
+  if (method !== 8) {
+    throw new Error(`Unsupported ZIP compression method ${method}`);
+  }
+
+  const compressed = bytes.subarray(dataStart, dataEnd);
+  const stream = new DecompressionStream("deflate-raw");
+  const reader = stream.readable.getReader();
+  // Feed the compressed bytes in the background; read concurrently so large
+  // inputs never deadlock on backpressure.
+  const pump = (async () => {
+    const writer = stream.writable.getWriter();
+    try {
+      await writer.write(compressed);
+      await writer.close();
+    } catch {
+      // Reader may have been cancelled after a cap hit; ignore.
+    }
+  })();
+
+  let output = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      output += value.byteLength;
+      if (output > cap) rejectTooLarge();
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+    await pump.catch(() => {});
+  }
+  return output;
 }
 
 /**

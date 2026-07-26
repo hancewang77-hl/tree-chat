@@ -1,11 +1,31 @@
 import { strToU8, zipSync } from "fflate";
 import { describe, expect, test } from "vitest";
 import {
+  assertDocxInflationSafe,
   extractFileAsMarkdown,
   markFirstTableRowsAsHeaders,
   MAX_NUTRIENT_FILE_BYTES,
   UnsupportedNutrientFormatError,
 } from "./nutrientMarkdown";
+
+/**
+ * Overwrites the declared uncompressed size of the first central-directory
+ * entry, simulating a bomb that lies to the metadata pre-screen (small declared
+ * size) while its DEFLATE stream still inflates hugely. Returns a new buffer.
+ */
+function forgeDeclaredUncompressedSize(archive: Uint8Array, lie: number): Uint8Array<ArrayBuffer> {
+  const buffer = new ArrayBuffer(archive.byteLength);
+  const copy = new Uint8Array(buffer);
+  copy.set(archive);
+  const view = new DataView(buffer);
+  // Locate the end-of-central-directory record (no trailing comment here).
+  let eocd = copy.byteLength - 22;
+  while (eocd >= 0 && view.getUint32(eocd, true) !== 0x06054b50) eocd -= 1;
+  const centralDirOffset = view.getUint32(eocd + 16, true);
+  // First central-directory entry: uncompressedSize is at +24.
+  view.setUint32(centralDirOffset + 24, lie, true);
+  return copy;
+}
 
 // Reference implementation: the original regex-based version this function
 // replaced. The linear rewrite must produce byte-identical output for every
@@ -88,6 +108,55 @@ describe("nutrient Markdown safety budgets", () => {
       expect.objectContaining<Partial<UnsupportedNutrientFormatError>>({
         name: "UnsupportedNutrientFormatError",
         message: expect.stringContaining("解压比例异常"),
+      }),
+    );
+  });
+});
+
+describe("DOCX real-inflation guard (assertDocxInflationSafe)", () => {
+  test("a normal small archive passes the inflation check", async () => {
+    const archive = zipSync({
+      "word/document.xml": strToU8("<w:document>hello world</w:document>"),
+    });
+    await expect(
+      assertDocxInflationSafe(archive.buffer as ArrayBuffer),
+    ).resolves.toBeUndefined();
+  });
+
+  test("actual inflation exceeding the per-entry cap is rejected", async () => {
+    // ~21MB of 'A' compresses to a few KB, but really inflates past the 20MB
+    // per-entry cap. The check streams and aborts at the cap.
+    const archive = zipSync(
+      { "word/document.xml": strToU8("A".repeat(21_000_000)) },
+      { level: 9 },
+    );
+    await expect(
+      assertDocxInflationSafe(archive.buffer as ArrayBuffer),
+    ).rejects.toEqual(
+      expect.objectContaining<Partial<UnsupportedNutrientFormatError>>({
+        name: "UnsupportedNutrientFormatError",
+        message: expect.stringContaining("安全上限"),
+      }),
+    );
+  });
+
+  test("a bomb that lies about its declared size still gets caught by real inflation", async () => {
+    // Honest zip, then forge the declared uncompressed size down to 1KB so it
+    // sails past the metadata pre-screen (size + ratio checks). The real stream
+    // inflates to 21MB, which the inflation guard rejects.
+    const honest = zipSync(
+      { "word/document.xml": strToU8("A".repeat(21_000_000)) },
+      { level: 9 },
+    );
+    const forged = forgeDeclaredUncompressedSize(honest, 1_000);
+    const file = new File([forged], "lying-bomb.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+
+    await expect(extractFileAsMarkdown(file)).rejects.toEqual(
+      expect.objectContaining<Partial<UnsupportedNutrientFormatError>>({
+        name: "UnsupportedNutrientFormatError",
+        message: expect.stringContaining("安全上限"),
       }),
     );
   });
