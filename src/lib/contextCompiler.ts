@@ -133,7 +133,7 @@ export function compileContext(input: CompileContextInput): CompiledContext {
         addExcluded(child.id, "leaf", excluded, excludedNodeIds);
         continue;
       }
-      const leafText = child.prompt.trim();
+      const leafText = formatLeafContextText(child);
       if (!leafText) continue;
       const section = `[用户显式纳入的 Leaf ${child.id}]\n${leafText}`;
       if (section.length > leafRemaining) {
@@ -274,4 +274,11 @@ function clipWithWarning(
   if (trimmed.length <= maxLength) return trimmed;
   warnings.push(warning);
   return `${trimmed.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
+
+function formatLeafContextText(node: MindNode): string {
+  const name = node.prompt.trim();
+  const content = node.response.trim();
+  if (name && content) return `${name}\n${content}`;
+  return content || name;
 }

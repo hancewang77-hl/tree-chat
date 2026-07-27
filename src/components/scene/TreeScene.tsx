@@ -18,6 +18,7 @@ import {
   NODE_H,
   NODE_W,
   LAYER_SPACING,
+  computeLeafWorldPosition,
   useTreeLayout,
 } from "@/hooks/useTreeLayout";
 import { noRaycast } from "@/src/lib/utils";
@@ -142,11 +143,15 @@ export function TreeScene({
         leaf.parentPoint.y + (parentData.offsetX ?? 0) / 100;
       const parentY =
         -leaf.parentPoint.x - (parentData.offsetY ?? 0) / 100;
-      const offsetX =
-        (leaf.index - (leaf.total - 1) / 2) * (LEAF_W + 0.18);
+      const { x, y } = computeLeafWorldPosition(
+        parentX,
+        parentY,
+        leaf.index,
+        leaf.total,
+      );
       return {
-        x: parentX + offsetX,
-        y: parentY - NODE_H / 2 - LEAF_H / 2 - 0.42,
+        x,
+        y,
         layer: is3DMode ? effectiveLayer(parentData) : selectedLayer,
       };
     }
@@ -346,13 +351,16 @@ export function TreeScene({
           const leafLayer = is3DMode ? parentLayer : selectedLayer;
           const parentX = parent.y + (parentData.offsetX ?? 0) / 100;
           const parentY = -parent.x - (parentData.offsetY ?? 0) / 100;
-          const offsetX = (attachment.index - (attachment.total - 1) / 2) * (LEAF_W + 0.18);
-          const leafX = parentX + offsetX;
-          const leafY = parentY - NODE_H / 2 - LEAF_H / 2 - 0.42;
-          const leafZ = leafLayer * LAYER_SPACING + (is3DMode ? 0.04 : 0.2);
+          const { x: leafX, y: leafY } = computeLeafWorldPosition(
+            parentX,
+            parentY,
+            attachment.index,
+            attachment.total,
+          );
+          const leafZ = leafLayer * LAYER_SPACING + (is3DMode ? 0.12 : 0.42);
           const stemPoints: [number, number, number][] = [
-            [parentX + offsetX * 0.18, parentY - NODE_H / 2 + 0.05, leafZ - 0.02],
-            [leafX, leafY + LEAF_H / 2 - 0.02, leafZ],
+            [parentX, parentY + NODE_H / 2 - 0.03, leafZ - 0.02],
+            [leafX, leafY - LEAF_H / 2 + 0.02, leafZ],
           ];
 
           return (

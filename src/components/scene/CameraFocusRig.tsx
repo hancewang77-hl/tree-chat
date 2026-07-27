@@ -6,10 +6,8 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import * as THREE from "three";
 import type { MindNode, NodesMap } from "@/src/types/tree";
 import {
-  LEAF_H,
-  LEAF_W,
-  NODE_H,
   LAYER_SPACING,
+  computeLeafWorldPosition,
   type PositionedLeafAttachment,
 } from "@/hooks/useTreeLayout";
 import type { HierarchyPointNode } from "d3-hierarchy";
@@ -57,10 +55,12 @@ function getFocusTarget(
     const parentData = parent.data;
     const parentX = parent.y + (parentData.offsetX ?? 0) / 100;
     const parentY = -parent.x - (parentData.offsetY ?? 0) / 100;
-    const offsetX =
-      (leafAttachment.index - (leafAttachment.total - 1) / 2) * (LEAF_W + 0.18);
-    const x = parentX + offsetX;
-    const y = parentY - NODE_H / 2 - LEAF_H / 2 - 0.42;
+    const { x, y } = computeLeafWorldPosition(
+      parentX,
+      parentY,
+      leafAttachment.index,
+      leafAttachment.total,
+    );
     const z = is3DMode ? parentData.layer * LAYER_SPACING : lookAtZ;
     return new THREE.Vector3(x, y, z);
   }

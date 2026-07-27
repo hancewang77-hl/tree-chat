@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getContextPath } from "@/hooks/useTreeLayout";
+import { getContextPath, canAttachLeaf } from "@/hooks/useTreeLayout";
 import { useAIChat } from "@/hooks/useAIChat";
 import { compileContext } from "@/src/lib/contextCompiler";
 import { clamp } from "@/src/lib/utils";
@@ -18,6 +18,7 @@ import { SearchPalette } from "@/src/components/overlays/SearchPalette";
 import { CanopyMinimap } from "@/src/components/overlays/CanopyMinimap";
 import { RingsPanel } from "@/src/components/overlays/RingsPanel";
 import { LayerNameDialog } from "@/src/components/LayerNameDialog";
+import { LeafNameDialog } from "@/src/components/overlays/LeafNameDialog";
 
 const CHAT_MODEL = "deepseek-chat";
 
@@ -35,6 +36,9 @@ function App() {
   const structuringNodeIdsRef = useRef<Set<string>>(new Set());
   const [renameLayer, setRenameLayer] = useState<number | null>(null);
   const [planeNameInput, setPlaneNameInput] = useState("");
+  const [leafNameDialogOpen, setLeafNameDialogOpen] = useState(false);
+  const [leafNameInput, setLeafNameInput] = useState("");
+  const [pendingLeafName, setPendingLeafName] = useState<string | null>(null);
 
   // Refs for latest values used in callbacks — avoids stale closures
   const nodesRef = useRef(nodes);
@@ -291,11 +295,46 @@ function App() {
     }
   }, [activeProject, dispatch, finalizeSemanticCard, isTypingRef, sendMessage]);
 
-  const handleAddLeaf = useCallback((content: string) => {
-    if (!content.trim() || !activeProject) return;
+  const handleAddLeaf = useCallback((name: string, content: string) => {
+    const leafName = name.trim();
+    const leafContent = content.trim();
+    if (!leafName || !leafContent || !activeProject) return;
     const s = stateRef.current;
-    dispatch({ type: "LEAF", content: content.trim(), parentId: s.selectedNodeId });
+    dispatch({
+      type: "LEAF",
+      name: leafName,
+      content: leafContent,
+      parentId: s.selectedNodeId,
+    });
+    setPendingLeafName(null);
   }, [activeProject, dispatch]);
+
+  const handleRequestLeafName = useCallback(() => {
+    const s = stateRef.current;
+    const project = s.projects[s.activeProjectId];
+    if (!project) return;
+    if (!canAttachLeaf(project.nodes, s.selectedNodeId)) {
+      setError("每个节点最多只能挂载 3 片叶子");
+      return;
+    }
+    setLeafNameInput("");
+    setLeafNameDialogOpen(true);
+  }, []);
+
+  const handleConfirmLeafName = useCallback(() => {
+    const nextName = leafNameInput.trim();
+    if (!nextName) return;
+    setPendingLeafName(nextName);
+    setLeafNameDialogOpen(false);
+    window.dispatchEvent(new CustomEvent("composer-mode", { detail: "note" }));
+    window.dispatchEvent(new CustomEvent("composer-focus"));
+  }, [leafNameInput]);
+
+  useEffect(() => {
+    const handleLeafNameRequest = () => handleRequestLeafName();
+    window.addEventListener("leaf-name-request", handleLeafNameRequest);
+    return () => window.removeEventListener("leaf-name-request", handleLeafNameRequest);
+  }, [handleRequestLeafName]);
 
   const handleStartLayerMove = useCallback((nodeId: string) => {
     const n = nodesRef.current;
@@ -315,6 +354,10 @@ function App() {
       dispatch({ type: "SELECT_NODE", nodeId: id });
     }
   }, [dispatch]);
+
+  const canCreateLeaf = activeProject
+    ? canAttachLeaf(nodes, state.selectedNodeId)
+    : false;
 
   const zoom = state.is3DMode ? state.zoom3D : state.zoom2D;
 
@@ -385,6 +428,10 @@ function App() {
           key="composer"
           onSend={handleSendMessage}
           onAddLeaf={handleAddLeaf}
+          pendingLeafName={pendingLeafName}
+          onRequestLeafName={handleRequestLeafName}
+          onCancelLeafDraft={() => setPendingLeafName(null)}
+          canCreateLeaf={canCreateLeaf}
           isAiTyping={isAiTyping}
           isContextPreparing={isSelectedContextStructuring}
           onStop={stopStreaming}
@@ -412,6 +459,13 @@ function App() {
           onCancel={() => setRenameLayer(null)}
         />
       )}
+      <LeafNameDialog
+        isOpen={leafNameDialogOpen}
+        name={leafNameInput}
+        onNameChange={setLeafNameInput}
+        onConfirm={handleConfirmLeafName}
+        onCancel={() => setLeafNameDialogOpen(false)}
+      />
     </div>
   );
 }

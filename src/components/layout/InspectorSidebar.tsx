@@ -136,14 +136,14 @@ export function InspectorSidebar({
               </div>
             ) : selectedNode.kind === "leaf" ? (
               <div
-                className="rounded-lg border px-3 py-2.5 text-[13px] leading-relaxed"
+                className="rounded-lg border px-3 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap"
                 style={{
                   background: "rgba(116, 122, 85, 0.08)",
                   borderColor: "rgba(116, 122, 85, 0.22)",
                   color: "var(--text-charcoal)",
                 }}
               >
-                {selectedNode.prompt}
+                {selectedNode.response.trim() || selectedNode.prompt}
               </div>
             ) : selectedNode.response ? (
               <>

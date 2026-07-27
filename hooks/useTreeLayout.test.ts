@@ -1,5 +1,12 @@
 import { describe, expect, test } from "vitest";
-import { getLeafAttachments, getTrunkChildIds } from "./useTreeLayout";
+import {
+  MAX_LEAVES_PER_NODE,
+  canAttachLeaf,
+  computeLeafWorldPosition,
+  countLeafChildren,
+  getLeafAttachments,
+  getTrunkChildIds,
+} from "./useTreeLayout";
 import type { NodesMap } from "@/src/types/tree";
 
 const nodes: NodesMap = {
@@ -52,5 +59,25 @@ describe("tree layout leaf treatment", () => {
         total: 1,
       },
     ]);
+  });
+
+  test("leaf slots share one row below the parent", () => {
+    const parentX = 10;
+    const parentY = 4;
+    const first = computeLeafWorldPosition(parentX, parentY, 0, 3);
+    const second = computeLeafWorldPosition(parentX, parentY, 1, 3);
+    const third = computeLeafWorldPosition(parentX, parentY, 2, 3);
+
+    expect(first.y).toBe(second.y);
+    expect(second.y).toBe(third.y);
+    expect(first.x).toBeLessThan(second.x);
+    expect(second.x).toBeLessThan(third.x);
+    expect(first.y).toBeGreaterThan(parentY);
+  });
+
+  test("leaf count respects the per-node maximum", () => {
+    expect(countLeafChildren(nodes, "root")).toBe(1);
+    expect(canAttachLeaf(nodes, "root")).toBe(true);
+    expect(MAX_LEAVES_PER_NODE).toBe(3);
   });
 });

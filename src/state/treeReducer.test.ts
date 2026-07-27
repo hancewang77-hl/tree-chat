@@ -170,7 +170,12 @@ describe("treeReducer product functions", () => {
 
   test("leaf notes stay attached to their parent while later branches grow from that parent", () => {
     let state = baseState();
-    state = treeReducer(state, { type: "LEAF", content: "A local observation", parentId: "root" });
+    state = treeReducer(state, {
+      type: "LEAF",
+      name: "A local observation",
+      content: "Detailed observation body",
+      parentId: "root",
+    });
 
     const leaf = findNodeByPrompt(state, "A local observation");
     expect(leaf?.kind).toBe("leaf");
@@ -190,6 +195,32 @@ describe("treeReducer product functions", () => {
     expect(branch?.parentId).toBe("root");
     expect(projectNodes(state).root.children).toContain(leaf!.id);
     expect(projectNodes(state).root.children).toContain(branch!.id);
+  });
+
+  test("each node accepts at most three leaf notes", () => {
+    let state = baseState();
+    for (let i = 0; i < 3; i += 1) {
+      state = treeReducer(state, {
+        type: "LEAF",
+        name: `Leaf ${i + 1}`,
+        content: `Body ${i + 1}`,
+        parentId: "root",
+      });
+    }
+
+    const rootChildren = projectNodes(state).root.children;
+    expect(rootChildren.filter((id) => projectNodes(state)[id]?.kind === "leaf")).toHaveLength(3);
+
+    state = treeReducer(state, {
+      type: "LEAF",
+      name: "Leaf 4",
+      content: "Should not attach",
+      parentId: "root",
+    });
+    expect(
+      rootChildren.filter((id) => projectNodes(state)[id]?.kind === "leaf"),
+    ).toHaveLength(3);
+    expect(findNodeByPrompt(state, "Leaf 4")).toBeUndefined();
   });
 
   test("project nutrients become active context and new branches record their nutrient refs", () => {
@@ -405,7 +436,8 @@ describe("treeReducer product functions", () => {
   test("Leaf 上下文开关在节点 Undo/Redo 后仍保持", () => {
     let state = treeReducer(baseState(), {
       type: "LEAF",
-      content: "显式上下文笔记",
+      name: "显式上下文笔记",
+      content: "笔记正文",
       parentId: "root",
     });
     const leaf = findNodeByPrompt(state, "显式上下文笔记")!;

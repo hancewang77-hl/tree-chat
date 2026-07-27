@@ -23,8 +23,42 @@ type SettledLink = HierarchyPointLink<HierarchyNodeData> & {
 
 export const NODE_W = 3.4;
 export const NODE_H = 1.75;
-export const LEAF_W = 1.9;
-export const LEAF_H = 0.78;
+export const LEAF_W = 1.22;
+export const LEAF_H = 0.44;
+export const LEAF_ATTACH_GAP = 0.32;
+export const LEAF_BELOW_PAD = 0.24;
+export const MAX_LEAVES_PER_NODE = 3;
+
+export function resolveLeafParentId(nodes: NodesMap, nodeId: string): string {
+  const node = nodes[nodeId];
+  if (!node) return nodeId;
+  if (node.kind === "leaf" && node.parentId) return node.parentId;
+  return nodeId;
+}
+
+export function countLeafChildren(nodes: NodesMap, parentId: string): number {
+  return (nodes[parentId]?.children ?? []).filter(
+    (childId) => nodes[childId]?.kind === "leaf",
+  ).length;
+}
+
+export function canAttachLeaf(nodes: NodesMap, anchorNodeId: string): boolean {
+  const parentId = resolveLeafParentId(nodes, anchorNodeId);
+  return countLeafChildren(nodes, parentId) < MAX_LEAVES_PER_NODE;
+}
+
+/** Place up to 3 leaves in one row directly below the parent node. */
+export function computeLeafWorldPosition(
+  parentX: number,
+  parentY: number,
+  index: number,
+  total: number,
+) {
+  const slotWidth = LEAF_W + LEAF_ATTACH_GAP;
+  const x = parentX + (index - (total - 1) / 2) * slotWidth;
+  const y = parentY + NODE_H / 2 + LEAF_H / 2 + LEAF_BELOW_PAD;
+  return { x, y };
+}
 export const LAYER_SPACING = 4.2;
 export const X_SPACING = 4.6;
 export const Y_SPACING = 2.4;

@@ -12,6 +12,7 @@ import {
   createRootSemanticCard,
   isUsableSemanticCard,
 } from "@/src/lib/semanticCard";
+import { MAX_LEAVES_PER_NODE, countLeafChildren } from "@/hooks/useTreeLayout";
 
 const MAX_HISTORY = 50;
 
@@ -781,13 +782,18 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
       const parentId = resolveBranchParent(project.nodes, action.parentId);
       const parent = project.nodes[parentId];
       if (!parent) return state;
+      if (countLeafChildren(project.nodes, parentId) >= MAX_LEAVES_PER_NODE) {
+        return state;
+      }
 
       const newNodeId = `note-${crypto.randomUUID()}`;
+      const leafName = action.name.trim();
+      const leafContent = action.content.trim();
       const newNode: MindNode = {
         id: newNodeId,
         kind: "leaf",
-        prompt: action.content,
-        response: "",
+        prompt: leafName,
+        response: leafContent,
         children: [],
         parentId,
         timestamp: Date.now(),
@@ -813,7 +819,7 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
       next = { ...next, selectedNodeId: newNodeId };
       const entry = createHistoryEntry({
         state,
-        label: `Leaf · ${action.content.slice(0, 32)}`,
+        label: `Leaf · ${leafName.slice(0, 32)}`,
         primaryNodeId: newNodeId,
         affectedNodeIds: [parentId, newNodeId, action.parentId],
         patch: {

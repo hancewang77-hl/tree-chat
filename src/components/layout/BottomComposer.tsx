@@ -25,12 +25,20 @@ const SEED_PARTICLES = [
 export function BottomComposer({
   onSend,
   onAddLeaf,
+  pendingLeafName,
+  onRequestLeafName,
+  onCancelLeafDraft,
+  canCreateLeaf,
   isAiTyping,
   isContextPreparing,
   onStop,
 }: {
   onSend: (prompt: string) => void;
-  onAddLeaf: (content: string) => void;
+  onAddLeaf: (name: string, content: string) => void;
+  pendingLeafName: string | null;
+  onRequestLeafName: () => void;
+  onCancelLeafDraft: () => void;
+  canCreateLeaf: boolean;
   isAiTyping: boolean;
   isContextPreparing: boolean;
   onStop: () => void;
@@ -67,19 +75,23 @@ export function BottomComposer({
   }, []);
 
   function emitComposerMode(nextMode: ComposerMode) {
+    if (nextMode === "ai" && pendingLeafName) {
+      onCancelLeafDraft();
+    }
     window.dispatchEvent(new CustomEvent("composer-mode", { detail: nextMode }));
   }
 
   function handleSubmit() {
-    if (!text.trim()) return;
     if (mode === "ai" && (isAiTyping || isContextPreparing)) return;
+    if (mode === "note" && !pendingLeafName) return;
+    if (!text.trim()) return;
     // Seed burst animation
     setBurst(true);
     setTimeout(() => setBurst(false), 500);
     if (mode === "ai") {
       onSend(text);
-    } else {
-      onAddLeaf(text);
+    } else if (pendingLeafName) {
+      onAddLeaf(pendingLeafName, text);
     }
     setText("");
   }
@@ -119,8 +131,12 @@ export function BottomComposer({
       : mode === "ai" && isContextPreparing
         ? "正在整理当前节点的模型上下文，请稍候..."
       : mode === "ai"
-      ? `在 z = ${state.selectedLayer} 层继续延伸你的思考... (Enter 发送)`
-      : "记录一个想法或笔记... (Enter 保存)";
+        ? `在 z = ${state.selectedLayer} 层继续延伸你的思考... (Enter 发送)`
+      : mode === "note" && pendingLeafName
+        ? `为「${pendingLeafName}」写入笔记内容... (Enter 保存)`
+      : mode === "note"
+        ? "请先点击「创建叶片」并完成命名..."
+        : "记录一个想法或笔记... (Enter 保存)";
 
   return (
     <div
@@ -194,6 +210,44 @@ export function BottomComposer({
 
       {/* Main composer body */}
       <div className="px-4 pb-3 pt-0.5">
+        {mode === "note" && !pendingLeafName && (
+          <div className="mb-2 flex items-center justify-between gap-3 rounded-xl px-3 py-2.5"
+            style={{ background: "var(--accent-olive-soft)", border: "1px solid rgba(116,122,85,0.22)" }}
+          >
+            <span className="text-[12px]" style={{ color: "var(--text-muted)" }}>
+              {canCreateLeaf
+                ? "创建叶片需先命名，再写入内容（每节点最多 3 片）"
+                : "当前节点叶片已满（3/3）"}
+            </span>
+            <button
+              type="button"
+              onClick={onRequestLeafName}
+              disabled={!canCreateLeaf}
+              className="shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
+              style={{ background: "var(--accent-sage)", color: "#FBF7F0" }}
+            >
+              创建叶片
+            </button>
+          </div>
+        )}
+        {pendingLeafName && mode === "note" && (
+          <div className="mb-2 flex items-center gap-2 text-[11px]" style={{ color: "var(--text-muted)" }}>
+            <span
+              className="rounded-full px-2.5 py-1"
+              style={{ background: "var(--accent-olive-soft)", color: "var(--accent-bark)" }}
+            >
+              正在创建：{pendingLeafName}
+            </span>
+            <button
+              type="button"
+              onClick={onCancelLeafDraft}
+              className="rounded-full px-2 py-1 hover:opacity-80"
+              style={{ border: "1px solid var(--border-warm)" }}
+            >
+              取消
+            </button>
+          </div>
+        )}
         {(nutrients.length > 0 || uploadError) && (
           <div className="mb-2 flex flex-wrap items-center gap-1.5">
             {nutrients.map((nutrient) => {
@@ -274,7 +328,7 @@ export function BottomComposer({
               }}
             >
               <StickyNote size={13} />
-              <span className="hidden sm:inline">笔记</span>
+              <span className="hidden sm:inline">{pendingLeafName ? "笔记内容" : "笔记"}</span>
             </button>
           </div>
 
@@ -322,6 +376,7 @@ export function BottomComposer({
               rows={2}
               placeholder={placeholder}
               value={text}
+              disabled={mode === "note" && !pendingLeafName}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
@@ -336,23 +391,31 @@ export function BottomComposer({
           {/* Send — seed-shaped button with burst effect */}
           <button
             onClick={mode === "ai" && isAiTyping ? onStop : handleSubmit}
-            disabled={mode === "ai" && isContextPreparing || (!(mode === "ai" && isAiTyping) && !text.trim())}
+            disabled={
+              (mode === "ai" && isContextPreparing) ||
+              (mode === "ai" && !isAiTyping && !text.trim()) ||
+              (mode === "note" && (!pendingLeafName || !text.trim()))
+            }
             className="flex h-10 w-10 shrink-0 items-center justify-center transition-all relative"
             style={{
               background: mode === "ai" && isAiTyping
                 ? "var(--accent-bark)"
-                : text.trim()
+                : text.trim() && (mode === "ai" || pendingLeafName)
                 ? "var(--accent-sage)"
                 : "var(--accent-olive-soft)",
-              color: mode === "ai" && isAiTyping || text.trim() ? "#FBF7F0" : "var(--accent-olive-deep)",
+              color: mode === "ai" && isAiTyping || (text.trim() && (mode === "ai" || pendingLeafName))
+                ? "#FBF7F0"
+                : "var(--accent-olive-deep)",
               border: `1px solid ${
-                mode === "ai" && isAiTyping || text.trim()
+                mode === "ai" && isAiTyping || (text.trim() && (mode === "ai" || pendingLeafName))
                   ? "rgba(86, 91, 61, 0.42)"
                   : "rgba(116, 122, 85, 0.24)"
               }`,
               borderRadius: "60% 40% 50% 50% / 55% 45% 55% 45%",
-              transform: mode === "ai" && isAiTyping || text.trim() ? "scale(1.05)" : "scale(1)",
-              boxShadow: mode === "ai" && isAiTyping || text.trim()
+              transform: mode === "ai" && isAiTyping || (text.trim() && (mode === "ai" || pendingLeafName))
+                ? "scale(1.05)"
+                : "scale(1)",
+              boxShadow: mode === "ai" && isAiTyping || (text.trim() && (mode === "ai" || pendingLeafName))
                 ? "0 2px 8px rgba(86, 91, 61, 0.28)"
                 : "none",
             }}

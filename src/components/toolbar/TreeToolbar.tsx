@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { GitBranch, StickyNote, Scissors, Trash2, Sun } from "lucide-react";
 import { useTreeState, useTreeDispatch } from "@/src/state/TreeContext";
 import { ConfirmDialog } from "@/src/components/overlays/ConfirmDialog";
+import { canAttachLeaf } from "@/hooks/useTreeLayout";
 
 type ToolButton = {
   id: string;
@@ -26,6 +27,9 @@ export function TreeToolbar() {
   const activeProject = state.projects[state.activeProjectId];
   const selectedNode = activeProject?.nodes[state.selectedNodeId];
   const isRoot = selectedNode?.id === activeProject?.rootNodeId;
+  const canCreateLeaf = activeProject
+    ? canAttachLeaf(activeProject.nodes, state.selectedNodeId)
+    : false;
 
   function handlePruneClick() {
     if (isRoot || !selectedNode) return;
@@ -62,11 +66,14 @@ export function TreeToolbar() {
       id: "leaf",
       icon: <StickyNote size={17} />,
       label: "叶片",
-      title: "Leaf — 手动添加笔记",
+      title: canCreateLeaf
+        ? "Leaf — 手动添加笔记（每节点最多 3 片）"
+        : "Leaf — 当前节点叶片已满（3/3）",
       active: composerMode === "note",
+      disabled: !canCreateLeaf,
       onClick: () => {
-        window.dispatchEvent(new CustomEvent("composer-mode", { detail: "note" }));
-        window.dispatchEvent(new CustomEvent("composer-focus"));
+        if (!canCreateLeaf) return;
+        window.dispatchEvent(new CustomEvent("leaf-name-request"));
       },
     },
     {

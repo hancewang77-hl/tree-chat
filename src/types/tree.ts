@@ -172,7 +172,7 @@ export type TreeAction =
       expectedParentId: string;
       semanticCard: SemanticCard;
     }
-  | { type: "LEAF"; content: string; parentId: string }
+  | { type: "LEAF"; name: string; content: string; parentId: string }
   | { type: "TOGGLE_LEAF_CONTEXT"; nodeId: string }
   | { type: "GRAFT_START"; nodeId: string }
   | { type: "GRAFT_CONFIRM"; newParentId: string }
