@@ -105,7 +105,7 @@ export function createZipBlob(entries: ZipEntry[]): Blob {
   ]);
 
   const zipBytes = concat([localData, centralDirectory, endRecord]);
-  return new Blob([zipBytes], { type: "application/zip" });
+  return new Blob([new Uint8Array(zipBytes)], { type: "application/zip" });
 }
 
 export function downloadBlob(filename: string, blob: Blob) {
