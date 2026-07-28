@@ -13,6 +13,7 @@ import {
   isUsableSemanticCard,
 } from "@/src/lib/semanticCard";
 import { MAX_LEAVES_PER_NODE, countLeafChildren } from "@/hooks/useTreeLayout";
+import { ROOT_ONBOARDING_RESPONSE } from "@/src/lib/rootNodeContent";
 
 const MAX_HISTORY = 50;
 
@@ -22,7 +23,7 @@ function makeRootNode(prompt: string): MindNode {
     id: "root",
     kind: "root",
     prompt,
-    response: "这是你思维之树的根。从这里开始，提出一个问题，AI 会帮助你展开枝叶。每一个节点都可以继续生长出新的分支。试着在下方输入你的第一个问题，让这棵树开始生长吧。",
+    response: ROOT_ONBOARDING_RESPONSE,
     children: [],
     parentId: null,
     timestamp,

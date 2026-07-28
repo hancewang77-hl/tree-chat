@@ -1,7 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useTreeState } from "@/src/state/TreeContext";
 import { ModalPortal } from "@/src/components/overlays/ModalPortal";
+import { downloadObsidianVaultZip } from "@/src/lib/downloadObsidianVault";
+import { downloadBlob } from "@/src/lib/downloadZip";
+import { getExportableNodeBody } from "@/src/lib/rootNodeContent";
 
 export function HarvestDialog({
   isOpen,
@@ -12,6 +16,7 @@ export function HarvestDialog({
 }) {
   const state = useTreeState();
   const activeProject = state.projects[state.activeProjectId];
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
 
   if (!isOpen || !activeProject) return null;
 
@@ -26,8 +31,9 @@ export function HarvestDialog({
 
       const prefix = "  ".repeat(depth);
       lines.push(`${prefix}- **${node.prompt}**`);
-      if (node.response) {
-        lines.push(`${prefix}  ${node.response.replace(/\n/g, `\n${prefix}  `)}`);
+      const body = getExportableNodeBody(node);
+      if (body) {
+        lines.push(`${prefix}  ${body.replace(/\n/g, `\n${prefix}  `)}`);
       }
       lines.push("");
 
@@ -51,6 +57,20 @@ export function HarvestDialog({
     onClose();
   }
 
+  function exportObsidianVault() {
+    if (!activeProject) return;
+    try {
+      const notes = downloadObsidianVaultZip(activeProject);
+      if (notes.length > 0) {
+        setExportNotice(`已导出 Obsidian 笔记包。注意：\n${notes.join("\n")}`);
+        return;
+      }
+      onClose();
+    } catch (error) {
+      setExportNotice(error instanceof Error ? error.message : "导出失败，请稍后重试");
+    }
+  }
+
   return (
     <ModalPortal>
       <div
@@ -72,6 +92,18 @@ export function HarvestDialog({
           <p className="mb-5 text-[13px]" style={{ color: "var(--text-muted)" }}>
             导出当前项目 &ldquo;{activeProject.name}&rdquo;
           </p>
+          {exportNotice ? (
+            <p
+              className="mb-4 whitespace-pre-wrap rounded-lg px-3 py-2 text-[12px] leading-relaxed"
+              style={{
+                background: "rgba(196, 148, 58, 0.12)",
+                color: "var(--accent-bark)",
+                border: "1px solid var(--border-warm)",
+              }}
+            >
+              {exportNotice}
+            </p>
+          ) : null}
           <div className="flex flex-col gap-3">
             <button
               onClick={exportMarkdown}
@@ -86,6 +118,13 @@ export function HarvestDialog({
               style={{ background: "var(--accent-sage)", color: "#FBF7F0" }}
             >
               导出 JSON
+            </button>
+            <button
+              onClick={exportObsidianVault}
+              className="rounded-lg px-4 py-2.5 text-[14px] font-medium transition-all hover:opacity-90"
+              style={{ background: "var(--accent-amber)", color: "#FBF7F0" }}
+            >
+              导出 Obsidian 笔记包
             </button>
             <button
               onClick={onClose}
@@ -103,10 +142,5 @@ export function HarvestDialog({
 
 function downloadFile(filename: string, content: string, mime: string) {
   const blob = new Blob([content], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadBlob(filename, blob);
 }
