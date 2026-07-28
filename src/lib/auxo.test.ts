@@ -192,6 +192,143 @@ describe("Auxo input compiler", () => {
     ]);
   });
 
+  test("detects Turndown-escaped bold numbered questions (docx pipeline output)", () => {
+    // mammoth+turndown render "1. 题目" as "**1\. 题目**" — the escaped dot and
+    // bold wrapper must not hide the question from source-unit extraction.
+    const source = [
+      "# 一、填空题",
+      "",
+      "**1\\. 在定点数和浮点数中，（）表示范围更大。**",
+      "",
+      "|  |",
+      "| --- |",
+      "",
+      "**2\\. 将100100右移1位，结果是（）。**",
+    ].join("\n");
+    const units = extractAuxoSourceUnits(source, { kind: "root" });
+
+    expect(units.map((unit) => unit.text.split("\n")[0])).toEqual([
+      "**1\\. 在定点数和浮点数中，（）表示范围更大。**",
+      "**2\\. 将100100右移1位，结果是（）。**",
+    ]);
+  });
+
+  test("treats 名词解释/设计题 section headings as boundaries, not whole-section questions", () => {
+    const source = [
+      "# 二、名词解释",
+      "",
+      "**1\\. I/O端口**",
+      "",
+      "**2\\. 存储周期**",
+      "",
+      "# 五、设计题",
+      "",
+      "**1\\. 分析指令JMP @A，写出全部微操作。**",
+    ].join("\n");
+    const units = extractAuxoSourceUnits(source, { kind: "root" });
+
+    expect(units.map((unit) => unit.text)).toEqual([
+      "**1\\. I/O端口**",
+      "**2\\. 存储周期**",
+      "**1\\. 分析指令JMP @A，写出全部微操作。**",
+    ]);
+  });
+
+  test("escaped numbered headings and bullets stay document structure, not questions", () => {
+    // Turndown output for docx chapter headings and notes: "# 1\. 概述",
+    // "- 1\. 备注". These must not become source units (lecture notes would
+    // otherwise be swallowed whole and hard-fail budgets).
+    const source = [
+      "# 1\\. 概述",
+      "",
+      "这里是讲义正文，不是题目。",
+      "",
+      "- 1\\. 备注一",
+      "- 2\\. 备注二",
+      "",
+      "# 2\\. 方法",
+      "",
+      "更多正文。",
+    ].join("\n");
+    expect(extractAuxoSourceUnits(source, { kind: "root" })).toEqual([]);
+  });
+
+  test("line-leading LaTeX inline math \\(1\\) is not a parenthetical question marker", () => {
+    const source = "\\(1\\)式代入\\(2\\)式得 x=3。\n\n\\(2\\) \\(y=2x\\)";
+    expect(extractAuxoSourceUnits(source, { kind: "root" })).toEqual([]);
+  });
+
+  test("bare section words after Arabic markers remain real tasks", () => {
+    // "2. 作文" / "3. 翻译（第五课）" are tasks in a homework list; only
+    // Chinese-numeral or heading markers ("二、作文") demote bare labels.
+    const source = "1\\. 完成练习册第 3 题。\n\n2\\. 作文\n\n（1）不少于 600 字\n\n（2）题目自拟";
+    const units = extractAuxoSourceUnits(source, { kind: "root" });
+    expect(units.map((unit) => unit.text.split("\n")[0])).toEqual([
+      "1\\. 完成练习册第 3 题。",
+      "2\\. 作文",
+    ]);
+
+    const homework = extractAuxoSourceUnits(
+      "1. 判断（2＋3＝6）\n2. 判断（地球是行星）\n3. 翻译（第五课）",
+      { kind: "root" },
+    );
+    expect(homework.map((unit) => unit.text)).toEqual([
+      "1. 判断（2＋3＝6）",
+      "2. 判断（地球是行星）",
+      "3. 翻译（第五课）",
+    ]);
+
+    const sections = extractAuxoSourceUnits(
+      "一、作文\n\n1. 以《春》为题写一篇作文。\n\n二、翻译\n\n2. 翻译第五课全文。",
+      { kind: "root" },
+    );
+    expect(sections.map((unit) => unit.text)).toEqual([
+      "1. 以《春》为题写一篇作文。",
+      "2. 翻译第五课全文。",
+    ]);
+  });
+
+  test("numbered lines inside an answer-key section are not questions", () => {
+    const source = [
+      "# 一、选择题",
+      "",
+      "**1\\. 下列哪个是寄存器？**",
+      "",
+      "**2\\. 下列哪个是总线？**",
+      "",
+      "# 参考答案",
+      "",
+      "1\\. B",
+      "",
+      "2\\. A",
+    ].join("\n");
+    const units = extractAuxoSourceUnits(source, { kind: "root" });
+    expect(units.map((unit) => unit.text)).toEqual([
+      "**1\\. 下列哪个是寄存器？**",
+      "**2\\. 下列哪个是总线？**",
+    ]);
+
+    const inline = extractAuxoSourceUnits(
+      "1. 真题一。\n\n六、参考答案\n\n1. 答案甲。\n2. 答案乙。",
+      { kind: "root" },
+    );
+    expect(inline.map((unit) => unit.text)).toEqual(["1. 真题一。"]);
+  });
+
+  test("trailing blank answer-space table rows are trimmed from unit text", () => {
+    const blankRows = Array.from({ length: 900 }, () => "|  |\n| --- |").join("\n");
+    const source = `**1\\. 设计一个 8 位加法器。**\n\n${blankRows}`;
+    const units = extractAuxoSourceUnits(source, { kind: "root" });
+    expect(units).toHaveLength(1);
+    expect(units[0].text).toBe("**1\\. 设计一个 8 位加法器。**");
+
+    const withData = extractAuxoSourceUnits(
+      "1. 读下表回答。\n\n| A | 0 0 0 1 |\n| --- | --- |\n|  |  |",
+      { kind: "root" },
+    );
+    expect(withData[0].text).toBe("1. 读下表回答。\n\n| A | 0 0 0 1 |");
+  });
+
   test("uses parenthetical numbering only when no top-level numbering is present", () => {
     const standalone = extractAuxoSourceUnits(
       "（一）完成甲。\n\n（二）完成乙。",

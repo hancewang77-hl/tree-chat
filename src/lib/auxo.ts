@@ -49,10 +49,26 @@ const PRIMARY_TASK_PATTERN = new RegExp(
 const PARENTHETICAL_TASK_PATTERN = new RegExp(
   `^[（(]\\s*(?:\\d{1,3}|[${CHINESE_NUMERALS}]+)\\s*[)）](?!\\d)`,
 );
+// Unambiguous section-type labels: demote a numbered line to a section
+// boundary regardless of marker style ("一、填空题" and "1. 填空题" alike).
 const GENERIC_SECTION_PATTERN = new RegExp(
-  "^(?:单项选择题|多项选择题|选择题|填空题|判断题|简答题|计算题|证明题|问答题|材料题|综合题|应用题|作图题|论述题|阅读理解|写作|听力|选择|填空)(?:\\s*[（(][^）)]*[)）])?[：:]?$",
+  "^(?:单项选择题|多项选择题|不定项选择题|选择题|填空题|判断题|简答题|名词解释题?|设计题|分析题|解答题|计算题|证明题|问答题|材料题|综合题|应用题|作图题|论述题|操作题|实验题|编程题|程序设计题|改错题|连线题|翻译题|完形填空|阅读理解)(?:\\s*[（(][^）)]*[)）])?[：:]?$",
   "i",
 );
+// Bare labels are ambiguous: "二、作文" is a section, but "2. 作文" is usually a
+// real task. They demote only under section-style markers (Chinese numerals or
+// Markdown headings).
+const GENERIC_SECTION_BARE_PATTERN = new RegExp(
+  "^(?:选择|填空|判断|简答|计算|问答|写作|听力|默写|作文|翻译)(?:\\s*[（(][^）)]*[)）])?[：:]?$",
+  "i",
+);
+// Answer-key sections ("参考答案", "六、答案与解析"): numbered lines inside them
+// are answers, not questions, and must not become source units.
+const ANSWER_SECTION_PATTERN = /^(?:参考|标准)?答案(?:与解析|及解析|解析)?[：:]?$/;
+const CHINESE_NUMERAL_PATTERN = new RegExp(`[${CHINESE_NUMERALS}]`);
+// Lines with no characters beyond table/rule punctuation — docx answer-writing
+// areas render as runs of blank table rows that would otherwise bloat units.
+const CONTENT_FREE_LINE_PATTERN = /^[ \t|:-]*$/;
 // Characters rejected in verbatim source text (and replaced with spaces in
 // display text): C0 controls except \t \n \r, plus DEL. The non-global form is
 // for .test(); the global form is only safe with .replace().
@@ -252,20 +268,39 @@ export function extractAuxoSourceUnits(
   }
 
   const lines = splitSourceLines(normalized);
-  const candidates = lines
-    .map((line) => {
-      if (line.inFence) return null;
-      const kind = detectTaskMarker(line.text);
-      return kind ? { start: line.start, kind } satisfies TaskMarker : null;
-    })
-    .filter((marker): marker is TaskMarker => marker !== null);
   const sectionBoundaries = lines
     .filter(
       (line) =>
         !line.inFence &&
-        (isMarkdownHeading(line.text) || isGenericSectionLine(line.text)),
+        (isMarkdownHeading(line.text) ||
+          isGenericSectionLine(line.text) ||
+          isAnswerSectionLine(line.text)),
     )
     .map((line) => line.start);
+  // Numbered lines inside an answer-key section ("参考答案" → "1\. B") are
+  // answers, not questions. Suppress markers from each answer heading to the
+  // next non-answer section boundary (or end of document).
+  const answerStarts = new Set(
+    lines
+      .filter((line) => !line.inFence && isAnswerSectionLine(line.text))
+      .map((line) => line.start),
+  );
+  const answerZones = [...answerStarts].map((zoneStart) => ({
+    start: zoneStart,
+    end:
+      sectionBoundaries.find(
+        (offset) => offset > zoneStart && !answerStarts.has(offset),
+      ) ?? normalized.length,
+  }));
+  const inAnswerZone = (offset: number) =>
+    answerZones.some((zone) => offset >= zone.start && offset < zone.end);
+  const candidates = lines
+    .map((line) => {
+      if (line.inFence || inAnswerZone(line.start)) return null;
+      const kind = detectTaskMarker(line.text);
+      return kind ? { start: line.start, kind } satisfies TaskMarker : null;
+    })
+    .filter((marker): marker is TaskMarker => marker !== null);
   const primaryStarts = candidates
     .filter((candidate) => candidate.kind === "primary")
     .map((candidate) => candidate.start);
@@ -320,15 +355,16 @@ export function extractAuxoSourceUnits(
 
 function detectTaskMarker(line: string): TaskMarker["kind"] | null {
   const candidate = normalizeMarkerCandidate(line);
+  const isHeadingLine = isMarkdownHeading(line);
 
   const primary = candidate.match(PRIMARY_TASK_PATTERN);
   if (primary) {
-    if (isGenericSectionLabel(candidate, primary[0])) return null;
+    if (isGenericSectionLabel(candidate, primary[0], isHeadingLine)) return null;
     return "primary";
   }
   const parenthetical = candidate.match(PARENTHETICAL_TASK_PATTERN);
   if (parenthetical) {
-    if (isGenericSectionLabel(candidate, parenthetical[0])) return null;
+    if (isGenericSectionLabel(candidate, parenthetical[0], isHeadingLine)) return null;
     return "parenthetical";
   }
   return null;
@@ -337,26 +373,53 @@ function detectTaskMarker(line: string): TaskMarker["kind"] | null {
 function isGenericSectionLine(line: string): boolean {
   const candidate = normalizeMarkerCandidate(line);
   const marker = candidate.match(PRIMARY_TASK_PATTERN) ?? candidate.match(PARENTHETICAL_TASK_PATTERN);
-  return Boolean(marker && isGenericSectionLabel(candidate, marker[0]));
+  return Boolean(marker && isGenericSectionLabel(candidate, marker[0], isMarkdownHeading(line)));
+}
+
+function isAnswerSectionLine(line: string): boolean {
+  const candidate = normalizeMarkerCandidate(line);
+  if (ANSWER_SECTION_PATTERN.test(stripLabelDecorations(candidate))) return true;
+  const marker = candidate.match(PRIMARY_TASK_PATTERN) ?? candidate.match(PARENTHETICAL_TASK_PATTERN);
+  return Boolean(
+    marker &&
+      ANSWER_SECTION_PATTERN.test(stripLabelDecorations(candidate.slice(marker[0].length))),
+  );
 }
 
 function normalizeMarkerCandidate(line: string): string {
-  return line
-    .trimStart()
+  const trimmed = line.trimStart();
+  // Headings and bullet items are document structure: "# 1\. 概述" is a chapter
+  // heading and "- 1\. 备注" a note, so their escaped leaders stay escaped.
+  const structural = /^#{1,6}[ \t]/.test(trimmed) || /^[-+*][ \t]/.test(trimmed);
+  const candidate = trimmed
     .replace(/^#{1,6}[ \t]+/, "")
     .replace(/^(?:>\s*)+/, "")
     .replace(/^(?:\*\*|__)/, "")
     .replace(/^[-+*][ \t]+/, "");
+  if (structural) return candidate;
+  // Turndown escapes list-like leaders ("1\." / "1\)") so docx questions do
+  // not re-parse as ordered lists; undo exactly that digit-led escape for
+  // marker matching. Detection only — unit spans still slice the raw source.
+  return candidate.replace(/(\d)\\([.)])/g, "$1$2");
 }
 
-function isGenericSectionLabel(candidate: string, marker: string): boolean {
-  const remainder = candidate
-    .slice(marker.length)
+function isGenericSectionLabel(
+  candidate: string,
+  marker: string,
+  isHeadingLine: boolean,
+): boolean {
+  const remainder = stripLabelDecorations(candidate.slice(marker.length));
+  if (GENERIC_SECTION_PATTERN.test(remainder)) return true;
+  const sectionStyleMarker = isHeadingLine || CHINESE_NUMERAL_PATTERN.test(marker);
+  return sectionStyleMarker && GENERIC_SECTION_BARE_PATTERN.test(remainder);
+}
+
+function stripLabelDecorations(text: string): string {
+  return text
     .replace(/^(?:\*\*|__)/, "")
     .replace(/(?:\*\*|__)$/, "")
     .replace(/^[\s:：—-]+/, "")
     .trim();
-  return GENERIC_SECTION_PATTERN.test(remainder);
 }
 
 function splitSourceLines(source: string): SourceLine[] {
@@ -402,13 +465,18 @@ function isMarkdownHeading(line: string): boolean {
 /**
  * Trims surrounding whitespace while keeping the offset pointing at the first
  * kept character, so the span still verifies verbatim against the source.
+ * Trailing content-free lines (blank docx answer-space table rows) are dropped
+ * first — they carry no question text but can push a unit past the size cap.
  */
 function trimSourceSpan(
   source: string,
   start: number,
   end: number,
 ): { text: string; offset: number } {
-  const raw = source.slice(start, end);
+  const spanLines = source.slice(start, end).split("\n");
+  let keep = spanLines.length;
+  while (keep > 1 && CONTENT_FREE_LINE_PATTERN.test(spanLines[keep - 1])) keep -= 1;
+  const raw = spanLines.slice(0, keep).join("\n");
   const leading = raw.match(/^\s*/)?.[0].length ?? 0;
   const trailing = raw.match(/\s*$/)?.[0].length ?? 0;
   const contentEnd = Math.max(leading, raw.length - trailing);

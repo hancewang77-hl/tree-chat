@@ -155,10 +155,11 @@ export async function POST(req: Request) {
     return json({ plan }, 200);
   } catch (error) {
     console.error("DeepSeek Auxo plan validation error:", error);
+    const code = error instanceof AuxoValidationError ? error.code : "INVALID_PLAN";
     return json(
       {
-        error: "Auxo 返回的任务计划未通过完整性校验，本次没有创建任何节点",
-        code: error instanceof AuxoValidationError ? error.code : "INVALID_PLAN",
+        error: `Auxo 返回的任务计划未通过完整性校验（${code}），本次没有创建任何节点`,
+        code,
       },
       502,
     );
