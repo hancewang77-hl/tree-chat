@@ -239,7 +239,7 @@ All state is managed by `treeReducer` via `TreeContext`. No useState for tree da
 | Sunlight | `SUNLIGHT`                       | Select node, jump to its layer, highlight path      |
 | Canopy   | `TOGGLE_CANOPY`                  | Toggle SVG minimap overlay                          |
 | Rings    | `TOGGLE_RINGS` / `UNDO` / `REDO` | Global and node-specific patch undo/redo            |
-| Harvest  | (HarvestDialog)                  | Export as Markdown or JSON                          |
+| Harvest  | (HarvestDialog)                  | Export as Markdown (FORMAT.md node markers + global name dedup via `harvestMarkdown.ts`) or JSON |
 | Forest   | `SWITCH_PROJECT`                 | Change active project                               |
 | Nutrient | nutrient actions                 | Convert, add, remove, and enable local references   |
 

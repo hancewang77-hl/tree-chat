@@ -7,6 +7,7 @@ import type {
   Project,
 } from "@/src/types/tree";
 import { DEEPSEEK_MODEL } from "@/src/lib/deepseek";
+import { normalizeDuplicateKey } from "@/src/lib/utils";
 
 /**
  * Auxo full-input compilation and validation.
@@ -1345,8 +1346,4 @@ function readFiniteNumber(value: unknown, field: string): number {
 
 function isBoundedText(value: unknown, maxLength: number): value is string {
   return typeof value === "string" && Boolean(value.trim()) && value.length <= maxLength;
-}
-
-function normalizeDuplicateKey(value: string): string {
-  return value.normalize("NFKC").replace(/\s+/g, " ").trim().toLocaleLowerCase();
 }

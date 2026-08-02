@@ -1,5 +1,11 @@
 import { describe, expect, test, vi } from "vitest";
-import { clamp, drawWrappedText, roundRect, truncateText } from "./utils";
+import {
+  clamp,
+  drawWrappedText,
+  normalizeDuplicateKey,
+  roundRect,
+  truncateText,
+} from "./utils";
 
 describe("canvas and numeric utilities", () => {
   test("clamps values into the inclusive range", () => {
@@ -11,6 +17,13 @@ describe("canvas and numeric utilities", () => {
   test("truncates only text over the limit", () => {
     expect(truncateText("abc", 3)).toBe("abc");
     expect(truncateText("abcd", 3)).toBe("abc…");
+  });
+
+  test("normalizeDuplicateKey folds NFKC, whitespace, and case", () => {
+    // Fullwidth letters fold via NFKC; the newline/tab between C and D collapses to one space.
+    expect(normalizeDuplicateKey("  ＡｂＣ\n\tＤ  ")).toBe("abc d");
+    expect(normalizeDuplicateKey("Foo  Bar")).toBe("foo bar");
+    expect(normalizeDuplicateKey("FOO BAR")).toBe(normalizeDuplicateKey("foo   bar"));
   });
 
   test("roundRect follows the expected canvas path and fill/stroke flags", () => {

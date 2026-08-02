@@ -1,5 +1,6 @@
 "use client";
 
+import { buildHarvestMarkdown } from "@/src/lib/harvestMarkdown";
 import { useTreeState } from "@/src/state/TreeContext";
 
 export function HarvestDialog({
@@ -16,30 +17,11 @@ export function HarvestDialog({
 
   function exportMarkdown() {
     if (!activeProject) return;
-
-    const lines: string[] = [`# ${activeProject.name}\n`];
-
-    function walk(nodeId: string, depth: number) {
-      const node = activeProject.nodes[nodeId];
-      if (!node) return;
-
-      const prefix = "  ".repeat(depth);
-      lines.push(`${prefix}- **${node.prompt}**`);
-      if (node.taskDescription) {
-        lines.push(`${prefix}  > Auxo 规划：${node.taskDescription.replace(/\n/g, `\n${prefix}  > `)}`);
-      }
-      if (node.response) {
-        lines.push(`${prefix}  ${node.response.replace(/\n/g, `\n${prefix}  `)}`);
-      }
-      lines.push("");
-
-      for (const childId of node.children) {
-        walk(childId, depth + 1);
-      }
-    }
-
-    walk(activeProject.rootNodeId, 0);
-    downloadFile(`${activeProject.name}.md`, lines.join("\n"), "text/markdown");
+    downloadFile(
+      `${activeProject.name}.md`,
+      buildHarvestMarkdown(activeProject),
+      "text/markdown",
+    );
     onClose();
   }
 
