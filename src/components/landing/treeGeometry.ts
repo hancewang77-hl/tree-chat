@@ -77,6 +77,7 @@ function makeRadialBranch(
   rise: number,
   bend: number,
   random: () => number,
+  droop = 0,
 ): Point3[] {
   const radial: Point3 = [Math.cos(azimuth), 0, Math.sin(azimuth)];
   const tangent: Point3 = [-Math.sin(azimuth), 0, Math.cos(azimuth)];
@@ -88,7 +89,11 @@ function makeRadialBranch(
     const lateral = Math.sin(amount * Math.PI) * bend;
     points.push([
       start[0] + radial[0] * length * amount + tangent[0] * lateral,
-      start[1] + rise * amount + Math.sin(amount * Math.PI * 1.4) * range(random, -0.16, 0.16),
+      // A mature branch lifts away from the bole before settling toward the
+      // broad, low crown. The terminal droop keeps the silhouette umbrella-
+      // shaped instead of turning it into a narrow, conifer-like spike.
+      start[1] + rise * amount - droop * Math.pow(amount, 1.7)
+        + Math.sin(amount * Math.PI * 1.4) * range(random, -0.16, 0.16),
       start[2] + radial[2] * length * amount + tangent[2] * lateral,
     ]);
   }
@@ -102,10 +107,12 @@ function createTreeSegments() {
 
   const trunkPoints: Point3[] = [
     [0, 0, 0],
-    [0.08, 1.35, 0.05],
-    [-0.1, 2.7, -0.08],
-    [0.12, 4.05, 0.08],
-    [0, 5.25, 0],
+    [0.14, 0.74, 0.05],
+    [0.08, 1.62, 0.12],
+    [-0.12, 2.62, -0.08],
+    [0.11, 3.63, 0.06],
+    [0.04, 4.52, -0.04],
+    [0, 5.28, 0],
   ];
 
   segments.push({
@@ -114,7 +121,7 @@ function createTreeSegments() {
     role: "trunk",
     azimuth: 0,
     points: trunkPoints,
-    radii: [0.72, 0.64, 0.54, 0.4, 0.27],
+    radii: [0.86, 0.78, 0.68, 0.58, 0.46, 0.35, 0.25],
   });
 
   const primaryTips: Array<{ id: string; points: Point3[]; azimuth: number }> = [];
@@ -140,6 +147,7 @@ function createTreeSegments() {
       range(random, 1.15, 1.85),
       range(random, -0.36, 0.36),
       random,
+      range(random, 0.06, 0.36),
     );
     segments.push({
       id,
@@ -167,6 +175,7 @@ function createTreeSegments() {
         range(random, 0.35, 0.95),
         range(random, -0.22, 0.22),
         random,
+        range(random, 0.02, 0.18),
       );
       segments.push({
         id,
@@ -198,6 +207,7 @@ function createTreeSegments() {
           range(random, 0.16, 0.48),
           range(random, -0.12, 0.12),
           random,
+          range(random, 0.01, 0.08),
         ),
         radii: [0.052, 0.038, 0.026, 0.016, 0.009],
       });
@@ -207,7 +217,15 @@ function createTreeSegments() {
   const rootCount = 10;
   for (let index = 0; index < rootCount; index += 1) {
     const azimuth = (index / rootCount) * TAU + range(random, -0.12, 0.12);
-    const start: Point3 = [range(random, -0.2, 0.2), 0, range(random, -0.2, 0.2)];
+    // Start each surface root on its own buttress collar so the radial
+    // pattern remains legible in the low Page 7 camera instead of collapsing
+    // into ten overlapping tubes at the exact origin.
+    const collarRadius = range(random, 0.16, 0.3);
+    const start: Point3 = [
+      Math.cos(azimuth) * collarRadius,
+      range(random, -0.02, 0.02),
+      Math.sin(azimuth) * collarRadius,
+    ];
     segments.push({
       id: `root-${String(index + 1).padStart(2, "0")}`,
       parentId: "trunk",
@@ -233,26 +251,33 @@ export const TREE_SEGMENTS = createTreeSegments();
 function createCanopyClusters() {
   const random = createRandom(0x2e8b57);
   const clusters: CanopyClusterSpec[] = [];
-  const canopyRadius = 4.85;
-  const canopyBase = 5.35;
-  const canopyHeight = 3.35;
+  const canopyRadius = 5.05;
+  const canopyBase = 5.16;
+  const canopyHeight = 3.12;
   // Smaller, denser volumes avoid the old "five polygon balls" silhouette.
   // The count still stays comfortably below a single instanced draw-call's
   // practical range on the target desktop viewport.
-  const clusterCount = 204;
+  const clusterCount = 260;
 
   for (let index = 0; index < clusterCount; index += 1) {
-    const radialRatio = Math.sqrt(random());
+    // Bias the interior toward a denser heart while retaining enough edge
+    // samples for a continuous, near-circular silhouette from above.
+    const radialRatio = Math.pow(random(), 1.24);
     const azimuth = index * GOLDEN_ANGLE + range(random, -0.12, 0.12);
     const irregularity = 1 + range(random, -0.1, 0.1);
     const radius = canopyRadius * radialRatio * irregularity;
     // A broad, low dome with a slightly lifted inner crown. The edge is kept
     // lower so the 360° footprint remains legible from the Page 8 top view.
-    const dome = canopyHeight * (1 - Math.pow(radialRatio, 1.7));
-    const edgeSparse = 1 - radialRatio * 0.26;
+    const dome = canopyHeight * (1 - Math.pow(radialRatio, 1.52));
+    const edgeSparse = 1 - radialRatio * 0.3;
     const layer = radialRatio < 0.34 ? "inner" : radialRatio < 0.76 ? "middle" : "edge";
     const layerScale = layer === "inner" ? 0.92 : layer === "middle" ? 0.82 : 0.7;
-    const scaleBase = range(random, 0.23, 0.48) * edgeSparse * layerScale;
+    const layerPalette = layer === "inner"
+      ? LEAF_COLORS.slice(0, 3)
+      : layer === "middle"
+        ? LEAF_COLORS.slice(1, 5)
+        : LEAF_COLORS.slice(2);
+    const scaleBase = range(random, 0.28, 0.58) * edgeSparse * layerScale;
     clusters.push({
       id: `canopy-${String(index + 1).padStart(3, "0")}`,
       position: [
@@ -266,7 +291,7 @@ function createCanopyClusters() {
         scaleBase * range(random, 0.85, 1.25),
       ],
       rotation: [range(random, -0.35, 0.35), azimuth + range(random, -0.4, 0.4), range(random, -0.35, 0.35)],
-      color: LEAF_COLORS[Math.floor(random() * LEAF_COLORS.length)],
+      color: layerPalette[Math.floor(random() * layerPalette.length)],
       layer,
     });
   }
@@ -290,6 +315,11 @@ function createLeaflets() {
       const azimuth = clusterSeed + index * GOLDEN_ANGLE + range(random, -0.24, 0.24);
       const radial = range(random, 0.34, 0.72);
       const vertical = range(random, -0.22, 0.38);
+      const layerPalette = cluster.layer === "inner"
+        ? LEAFLET_COLORS.slice(0, 2)
+        : cluster.layer === "middle"
+          ? LEAFLET_COLORS.slice(0, 3)
+          : LEAFLET_COLORS.slice(1);
       leaflets.push({
         id: `leaflet-${String(leaflets.length + 1).padStart(4, "0")}`,
         position: [
@@ -307,7 +337,7 @@ function createLeaflets() {
           azimuth + range(random, -0.4, 0.4),
           range(random, -0.7, 0.7),
         ],
-        color: LEAFLET_COLORS[Math.floor(random() * LEAFLET_COLORS.length)],
+        color: layerPalette[Math.floor(random() * layerPalette.length)],
         layer: cluster.layer,
       });
     }

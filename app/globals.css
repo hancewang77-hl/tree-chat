@@ -189,7 +189,20 @@ html.landing-scroll-root {
   scrollbar-color: rgba(159, 189, 120, .58) var(--landing-scroll-track, #081b14);
 }
 
+/* Some embedded browser shells expose <body> as the document scroller. The
+   duplicate root rule is intentional: whichever element owns the scroll box
+   still receives the same one-page-at-a-time snap behavior. */
+body.landing-scroll-root {
+  scroll-padding-top: 0;
+  scroll-snap-type: y mandatory;
+  scrollbar-color: rgba(159, 189, 120, .58) var(--landing-scroll-track, #081b14);
+}
+
 html.landing-scroll-root::-webkit-scrollbar-track {
+  background: #081b14;
+}
+
+body.landing-scroll-root::-webkit-scrollbar-track {
   background: #081b14;
 }
 
@@ -1461,9 +1474,13 @@ html.landing-scroll-root::-webkit-scrollbar-track {
 .landing-footer__links a:hover { color: var(--landing-cream); }
 
 @media (prefers-reduced-motion: reduce) {
-  html.landing-scroll-root {
+  html.landing-scroll-root,
+  body.landing-scroll-root {
     scroll-behavior: auto !important;
-    scroll-snap-type: none;
+    /* Reduced motion removes smooth interpolation, not the page boundary.
+       Mandatory snap prevents a wheel/touch gesture from leaving the user
+       halfway through the dense Page 4–8 camera sequence. */
+    scroll-snap-type: y mandatory;
   }
 
   .landing-page .landing-seed-button__halo {

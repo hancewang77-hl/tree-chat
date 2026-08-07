@@ -24,9 +24,22 @@ describe("1920 × 1080 landing composition contract", () => {
 
   test("uses mandatory snap stops for every fixed review page", () => {
     expect(css).toMatch(/html\.landing-scroll-root\s*\{[\s\S]*scroll-snap-type:\s*y mandatory;/);
+    expect(css).toMatch(/body\.landing-scroll-root\s*\{[\s\S]*scroll-snap-type:\s*y mandatory;/);
     expect(css).toMatch(/\.landing-section\s*\{[\s\S]*scroll-snap-align:\s*start;[\s\S]*scroll-snap-stop:\s*always;/);
     expect(css).toMatch(/\.landing-tree-scroll-stop\s*\{[\s\S]*scroll-snap-align:\s*start;[\s\S]*scroll-snap-stop:\s*always;/);
-    expect(css).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*scroll-snap-type:\s*none;/);
+    expect(css).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*scroll-snap-type:\s*y mandatory;/);
+  });
+
+  test("applies the snap contract to either document root", () => {
+    expect(landingPage).toContain('document.documentElement.classList.add("landing-scroll-root")');
+    expect(landingPage).toContain('document.body.classList.add("landing-scroll-root")');
+    expect(landingPage).toContain('document.documentElement.classList.remove("landing-scroll-root")');
+    expect(landingPage).toContain('document.body.classList.remove("landing-scroll-root")');
+    expect(landingPage).toContain('window.addEventListener("scrollend"');
+    expect(landingPage).toContain("settleToNearestPage");
+    expect(landingPage).toContain('window.setTimeout(settleToNearestPage, 180)');
+    expect(landingPage).toContain("programmaticScrollRef.current = true");
+    expect(landingPage).toContain("if (programmaticScrollRef.current) return;");
   });
 
   test("marks the nine landing pages and five sticky stops explicitly", () => {

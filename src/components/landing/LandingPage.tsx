@@ -217,13 +217,22 @@ export function LandingPage() {
   const seedRef = useRef<HTMLButtonElement | null>(null);
   const sproutRef = useRef<SVGSVGElement | null>(null);
   const seedHintRef = useRef<HTMLParagraphElement | null>(null);
+  const programmaticScrollRef = useRef(false);
   const revealAnimations = useRef<RevealAnimation[]>([]);
 
   const story = TREE_STORIES[treeChapter];
 
   useEffect(() => {
+    // The scrolling element is normally <html>, but embedded shells and
+    // WebKit-based browsers can delegate document scrolling to <body>. Keep
+    // the same snap contract on both roots so every review frame (including
+    // the five sticky tree stops) settles on an intentional 1080px boundary.
     document.documentElement.classList.add("landing-scroll-root");
-    return () => document.documentElement.classList.remove("landing-scroll-root");
+    document.body.classList.add("landing-scroll-root");
+    return () => {
+      document.documentElement.classList.remove("landing-scroll-root");
+      document.body.classList.remove("landing-scroll-root");
+    };
   }, []);
 
   useEffect(() => {
@@ -267,6 +276,62 @@ export function LandingPage() {
     const animations = revealAnimations.current;
     return () => animations.forEach((animation) => animation.pause());
   }, []);
+
+  useEffect(() => {
+    // Native CSS snapping is the first line of defense. A few WebKit/embed
+    // shells still leave a wheel gesture between stops (most noticeably when
+    // scrolling upward), so settle the nearest explicit page marker after the
+    // gesture ends. This is a debounced fallback, not a scroll lock: keyboard
+    // focus, links, and assistive scrolling remain usable during the gesture.
+    const snapMarkers = () => Array.from(document.querySelectorAll<HTMLElement>("[data-page]"));
+    let settleTimer = 0;
+    let fallbackReleaseTimer = 0;
+    let requestedTop: number | null = null;
+
+    const currentScrollTop = () => window.scrollY || document.documentElement.scrollTop || document.body.scrollTop;
+    const settleToNearestPage = () => {
+      settleTimer = 0;
+      if (programmaticScrollRef.current) return;
+      const currentTop = currentScrollTop();
+      const markers = snapMarkers();
+      if (!markers.length) return;
+      const targetTop = markers.reduce((nearest, marker) => {
+        const markerTop = marker.getBoundingClientRect().top + currentTop;
+        return Math.abs(markerTop - currentTop) < Math.abs(nearest - currentTop) ? markerTop : nearest;
+      }, 0);
+      if (Math.abs(targetTop - currentTop) <= 2) {
+        requestedTop = null;
+        return;
+      }
+      if (requestedTop === targetTop) return;
+      requestedTop = targetTop;
+      window.scrollTo({ top: targetTop, behavior: reducedMotion ? "auto" : "smooth" });
+      window.clearTimeout(fallbackReleaseTimer);
+      fallbackReleaseTimer = window.setTimeout(() => {
+        requestedTop = null;
+        fallbackReleaseTimer = 0;
+      }, reducedMotion ? 120 : 1100);
+    };
+    const scheduleSettle = () => {
+      window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(settleToNearestPage, 180);
+    };
+    const onScrollEnd = () => {
+      window.clearTimeout(settleTimer);
+      settleToNearestPage();
+    };
+
+    window.addEventListener("scroll", scheduleSettle, { passive: true });
+    document.addEventListener("scroll", scheduleSettle, { passive: true, capture: true });
+    window.addEventListener("scrollend", onScrollEnd as EventListener, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", scheduleSettle);
+      document.removeEventListener("scroll", scheduleSettle, { capture: true });
+      window.removeEventListener("scrollend", onScrollEnd as EventListener);
+      window.clearTimeout(settleTimer);
+      window.clearTimeout(fallbackReleaseTimer);
+    };
+  }, [reducedMotion]);
 
   useEffect(() => {
     const initialTargets = [
@@ -346,6 +411,7 @@ export function LandingPage() {
   useEffect(() => {
     if (!seedPlanted) return;
 
+    let programmaticReleaseTimer = 0;
     const scrollTimer = window.setTimeout(() => {
       const dilemma = dilemmaRef.current;
       if (!dilemma) return;
@@ -354,13 +420,23 @@ export function LandingPage() {
       // transition before the scroll observer's next frame recalculates it.
       activeChapterRef.current = 2;
       setActiveChapter(2);
+      // Do not let the nearest-marker fallback interrupt this intentional
+      // smooth transition while it passes through Page 2.
+      programmaticScrollRef.current = true;
       dilemma.scrollIntoView({
         behavior: reducedMotion ? "auto" : "smooth",
         block: "start",
       });
+      programmaticReleaseTimer = window.setTimeout(() => {
+        programmaticScrollRef.current = false;
+      }, reducedMotion ? 80 : 1400);
     }, reducedMotion ? 0 : SEED_AUTO_SCROLL_DELAY);
 
-    return () => window.clearTimeout(scrollTimer);
+    return () => {
+      window.clearTimeout(scrollTimer);
+      window.clearTimeout(programmaticReleaseTimer);
+      programmaticScrollRef.current = false;
+    };
   }, [reducedMotion, seedPlanted]);
 
   useEffect(() => {

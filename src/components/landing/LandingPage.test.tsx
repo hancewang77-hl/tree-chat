@@ -178,4 +178,16 @@ describe("LandingPage seed transition", () => {
     expect(markers.filter((marker) => marker.matches(".landing-section"))).toHaveLength(4);
     expect(markers.filter((marker) => marker.matches(".landing-tree-scroll-stop"))).toHaveLength(5);
   });
+
+  test("marks both document roots while the landing narrative is mounted", () => {
+    const { unmount } = render(<LandingPage />);
+
+    expect(document.documentElement).toHaveClass("landing-scroll-root");
+    expect(document.body).toHaveClass("landing-scroll-root");
+
+    unmount();
+
+    expect(document.documentElement).not.toHaveClass("landing-scroll-root");
+    expect(document.body).not.toHaveClass("landing-scroll-root");
+  });
 });

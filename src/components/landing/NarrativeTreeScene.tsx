@@ -156,10 +156,10 @@ function createTaperedBranchGeometry(segment: TreeSegmentSpec) {
 }
 
 function createCanopyBlobGeometry() {
-  // A subtly deformed UV sphere reads as a leafy mass while retaining smooth
-  // normals. The deterministic lobes prevent the repeated, faceted-ball look
-  // without introducing a texture or an extra draw call.
-  const geometry = new THREE.SphereGeometry(1, 20, 14);
+  // A subdivided icosphere keeps the cluster silhouette organic from every
+  // angle. It avoids the obvious lat/long seams of a UV sphere while still
+  // being cheap enough to instance hundreds of times.
+  const geometry = new THREE.IcosahedronGeometry(1, 2);
   const position = geometry.getAttribute("position");
   const vertex = new THREE.Vector3();
   for (let index = 0; index < position.count; index += 1) {
@@ -169,7 +169,7 @@ function createCanopyBlobGeometry() {
     const fineLobe = Math.sin(direction.z * 8.5 - direction.x * 3.4 + direction.y * 5.7) * 0.028;
     const underside = direction.y < -0.15 ? -0.025 * Math.abs(direction.y) : 0;
     vertex.multiplyScalar(1 + broadLobe + fineLobe + underside);
-    vertex.y *= 0.96;
+    vertex.y *= 0.92;
     position.setXYZ(index, vertex.x, vertex.y, vertex.z);
   }
   position.needsUpdate = true;
@@ -180,11 +180,50 @@ function createCanopyBlobGeometry() {
 }
 
 function createLeafletGeometry() {
-  // Octahedra give each instance a pointed, leaf-like silhouette. A small
-  // depth keeps the leaves visible from the oblique Page 5/6 cameras without
-  // resorting to transparent billboards.
-  const geometry = new THREE.OctahedronGeometry(1, 1);
+  // A small folded leaf mesh gives close branch views an actual leaf profile
+  // (midrib ridge + pointed tip) instead of a repeated low-poly diamond. The
+  // mesh is double-sided so foliage remains readable from all camera angles.
+  const vertices = new Float32Array([
+    -0.9, 0, 0,
+    -0.28, 0.54, 0.08,
+    0.38, 0.42, 0.06,
+    0.9, 0, 0,
+    0.38, -0.42, 0.06,
+    -0.28, -0.54, 0.08,
+    0, 0, 0.2,
+  ]);
+  const indices = [
+    0, 1, 6, 1, 2, 6, 2, 3, 6,
+    3, 4, 6, 4, 5, 6, 5, 0, 6,
+  ];
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setIndex(indices);
   geometry.computeVertexNormals();
+  return geometry;
+}
+
+function createRootFlareGeometry() {
+  // The root collar is deliberately irregular: a perfect UV sphere reads as
+  // a decorative blob, while broad lobes blend the bole into the radial roots
+  // like the buttress flare of a mature street tree.
+  const geometry = new THREE.IcosahedronGeometry(1, 2);
+  const position = geometry.getAttribute("position");
+  const vertex = new THREE.Vector3();
+  for (let index = 0; index < position.count; index += 1) {
+    vertex.fromBufferAttribute(position, index);
+    const azimuth = Math.atan2(vertex.z, vertex.x);
+    const lobe = 1 + Math.sin(azimuth * 5.0 + vertex.y * 2.1) * 0.11
+      + Math.sin(azimuth * 9.0 - vertex.y * 1.7) * 0.045;
+    vertex.x *= lobe;
+    vertex.z *= lobe;
+    vertex.y *= 0.86;
+    position.setXYZ(index, vertex.x, vertex.y, vertex.z);
+  }
+  position.needsUpdate = true;
+  geometry.computeVertexNormals();
+  geometry.computeBoundingSphere();
+  geometry.computeBoundingBox();
   return geometry;
 }
 
@@ -216,6 +255,7 @@ function createBarkTexture() {
   }
 
   const texture = new THREE.DataTexture(data, width, height, THREE.RGBAFormat);
+  texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(1.2, 4.2);
@@ -289,6 +329,7 @@ type FoliageTransform = {
   position: Point3;
   scale: Point3;
   rotation: Point3;
+  color?: string;
 };
 
 function InstancedFoliage({
@@ -318,9 +359,11 @@ function InstancedFoliage({
       quaternion.setFromEuler(rotation);
       matrix.compose(position, quaternion, scale);
       mesh.setMatrixAt(index, matrix);
+      if (instance.color) mesh.setColorAt(index, new THREE.Color(instance.color));
     });
     mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
     mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     mesh.computeBoundingBox();
     mesh.computeBoundingSphere();
   }, [instances]);
@@ -351,21 +394,27 @@ function VolumetricCanopy() {
   }), []);
   const layerMaterials = useMemo(() => ({
     inner: new THREE.MeshStandardMaterial({
-      color: "#315f37",
+      // Instance colors carry the deterministic botanical palette; white
+      // keeps them from being multiplied into an unintentionally near-black
+      // result by a second layer tint.
+      color: "#ffffff",
+      vertexColors: true,
       roughness: 0.94,
       metalness: 0,
       emissive: "#315f37",
       emissiveIntensity: 0.14,
     }),
     middle: new THREE.MeshStandardMaterial({
-      color: "#4f8144",
+      color: "#ffffff",
+      vertexColors: true,
       roughness: 0.92,
       metalness: 0,
       emissive: "#42753b",
       emissiveIntensity: 0.14,
     }),
     edge: new THREE.MeshStandardMaterial({
-      color: "#6c9b52",
+      color: "#ffffff",
+      vertexColors: true,
       roughness: 0.9,
       metalness: 0,
       emissive: "#5a8a46",
@@ -373,7 +422,9 @@ function VolumetricCanopy() {
     }),
   }), []);
   const leafletMaterial = useMemo(() => new THREE.MeshStandardMaterial({
-    color: "#78a556",
+    color: "#ffffff",
+    vertexColors: true,
+    side: THREE.DoubleSide,
     roughness: 0.84,
     metalness: 0,
     emissive: "#5b8b47",
@@ -408,6 +459,7 @@ function VolumetricCanopy() {
 
 function TreeModel({ groupRef }: { groupRef: { current: THREE.Group | null } }) {
   const barkTexture = useMemo(() => createBarkTexture(), []);
+  const rootFlareGeometry = useMemo(() => createRootFlareGeometry(), []);
   const trunkAndRoots = useMemo(
     () => TREE_SEGMENTS.filter((segment) => segment.role === "trunk" || segment.role === "root"),
     [],
@@ -421,7 +473,10 @@ function TreeModel({ groupRef }: { groupRef: { current: THREE.Group | null } }) 
     [],
   );
 
-  useEffect(() => () => barkTexture.dispose(), [barkTexture]);
+  useEffect(() => () => {
+    barkTexture.dispose();
+    rootFlareGeometry.dispose();
+  }, [barkTexture, rootFlareGeometry]);
 
   return (
     <group ref={groupRef} position={[0, -2.05, 0]}>
@@ -429,8 +484,7 @@ function TreeModel({ groupRef }: { groupRef: { current: THREE.Group | null } }) 
       <MergedBranchMesh segments={primaryBranches} barkTexture={barkTexture} color="#805738" castShadow receiveShadow={false} />
       <MergedBranchMesh segments={fineBranches} barkTexture={barkTexture} color="#916745" castShadow={false} receiveShadow={false} />
       <VolumetricCanopy />
-      <mesh position={[0, -0.02, 0]} scale={[1.3, 0.55, 1.3]} castShadow receiveShadow={false}>
-        <sphereGeometry args={[1, 36, 22]} />
+      <mesh geometry={rootFlareGeometry} position={[0, -0.02, 0]} scale={[1.3, 0.55, 1.3]} castShadow receiveShadow={false} dispose={null}>
         <meshStandardMaterial
           color="#66452f"
           map={barkTexture}

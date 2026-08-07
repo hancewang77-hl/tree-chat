@@ -20,7 +20,7 @@ heuristics, not additional product requirements: the Plan and the explicit
 | Surface | Reference pattern | Applied principle | Deliberately not copied |
 | --- | --- | --- | --- |
 | Header | Editorial landing pages with transparent-to-solid headers | Keep the brand and one primary CTA available while scroll changes contrast | No third-party logo, label, or exact header styling |
-| Progress | Long-form storytelling pages | Show one compact chapter status rather than a clickable mega-menu | No forced page snapping or hidden navigation |
+| Progress | Long-form storytelling pages | Show one compact chapter status rather than a clickable mega-menu; settle each review frame on a mandatory 1080px page stop | No clickable mega-menu or hidden navigation |
 | Hero | Product showcase hero layouts | Pair one dominant statement with a primary “进入功能页” CTA and a secondary exploration CTA | No stock hero image, generic AI orb, or purple gradient |
 | Feature copy | Product storytelling callouts | Let short facts appear beside the visual scene, with the full explanation readable without hover | No icon-only explanation or hover-only interaction |
 | Desktop review canvas | 1920×1080 editorial composition | Keep each landing chapter on a fixed 1080px canvas, with chapter-specific tree, mask, copy, and fact positions | No mobile/tablet breakpoint branches, squeezed desktop canvas, or horizontal overflow |
