@@ -16,6 +16,14 @@ Every AI conversation tool forces you into a single, linear thread. You branch o
 
 It's a **spatial thinking tool** disguised as a chat interface.
 
+## Page entry points
+
+- `/` is the nine-chapter product narrative for demos and reviews.
+- `/app` is the interactive Tree Chat workbench; the existing tree editing,
+  AI branching, Nutrient, Auxo, Rings, and Harvest behavior remains there.
+- The hero, fixed header, and footer CTAs on the narrative page all lead to
+  `/app`.
+
 ## Innovation
 
 | Dimension | Conventional Chat | Tree Chat |
@@ -55,14 +63,19 @@ Every action is named after a botanical operation, making the mental model intui
 - That deterministic guarantee covers detected exam-style numbering. Unnumbered prose is still decomposed by the planning model and should be reviewed as a proposed task structure.
 - A top-level numbered question keeps its nested parenthetical subparts together so the shared stem is neither duplicated nor detached. Standalone parenthetical lists, including those in a separate section, are extracted item by item.
 
-### Visual Design — Organic Editorial
+### Visual Design — Deep Forest Editorial
 
 Tree Chat deliberately avoids the generic AI-chatbot aesthetic (neon blues, purple gradients, glowing orbs). Instead it uses a warm, tactile, editorial palette inspired by botanical field guides and print typography:
 
-- **Base tones**: cream paper (`#FBF7F0`), warm parchment (`#F5F0E8`)
+- **Landing base tones**: deep forest green, with restrained rust-red mountain
+  accents, silver branches, and sky-blue/cloud materials.
+- **Workbench outer UI**: the same deep natural palette through shared
+  semantic tokens; the 3D canvas keeps its paper-card material while the
+  existing layout and interaction model stay intact.
 - **Typography**: serif headings + sans-serif UI + monospace code, via system font stacks (Georgia/Noto Serif SC, Inter/system-ui — no webfonts shipped)
 - **Texture**: CSS grain overlay on every surface — it feels like paper, not glass
-- **Accents**: bark brown, sage green, amber gold — nothing glows, everything breathes
+- **Accents**: bark brown, sage green, amber gold, and a provisional brushed-
+  silver branch mark — no neon blue/purple chatbot treatment
 
 ### 3D Spatial Canvas
 
@@ -81,7 +94,8 @@ Nodes live on stacked glass planes (layers). You view one layer at a time in 2D 
 | Tree Layout | [d3-hierarchy](https://github.com/d3/d3-hierarchy) (`d3.tree()`) |
 | AI | DeepSeek API via OpenAI SDK |
 | Styling | Tailwind CSS 4 + CSS custom properties |
-| Deployment | Cloudflare Workers (OpenNext) |
+| Motion | [anime.js](https://github.com/juliangarnier/anime) for DOM/SVG + R3F `useFrame` for 3D |
+| Deployment | Vercel (native Next.js hosting, recommended for a first deployment) |
 | Icons | [Lucide React](https://lucide.dev) |
 
 ## Getting Started
@@ -113,7 +127,9 @@ The key is read only by server-side Route Handlers. Do not add a `NEXT_PUBLIC_` 
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000) for the narrative page, or
+go directly to [http://localhost:3000/app](http://localhost:3000/app) for the
+workbench.
 
 ### Production Build
 
@@ -122,7 +138,17 @@ npm run build
 npm start
 ```
 
-### Deploying to Cloudflare Workers
+### Deploying to Vercel (recommended for a first deployment)
+
+1. Push this repository to your GitHub account.
+2. Sign in to [Vercel](https://vercel.com), choose **Add New → Project**, and import the repository.
+3. Add `DEEPSEEK_API_KEY` under **Environment Variables**. Keep it server-only: do not use a `NEXT_PUBLIC_` prefix.
+4. Click **Deploy**. Vercel detects Next.js, installs dependencies, and runs the production build.
+5. Under **Settings → Domains**, add a domain you own and configure the DNS records that Vercel shows at your domain registrar.
+
+The workbench still stores projects in each visitor's browser `localStorage`; deployment does not add accounts or cross-device sync. Keep the DeepSeek key only in the hosting provider's server-side environment variables.
+
+### Deploying to Cloudflare Workers (advanced; not preconfigured here)
 
 ```bash
 npm run build
@@ -130,11 +156,14 @@ npx @opennextjs/cloudflare build
 npx wrangler deploy
 ```
 
+This requires additional `@opennextjs/cloudflare`, `wrangler`, and OpenNext configuration that are not included in the current `package.json`; use the Vercel flow first unless you specifically need Cloudflare.
+
 ## Architecture
 
 ```
 app/
-├── page.tsx           # TreeProvider shell + app orchestration
+├── page.tsx           # Public nine-chapter landing narrative
+├── app/page.tsx       # TreeProvider shell + workbench orchestration
 ├── layout.tsx         # Root layout (theme script, KaTeX CSS)
 ├── globals.css        # CSS vars, grain texture, animations
 └── api/

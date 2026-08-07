@@ -7,8 +7,8 @@ import "./globals.css";
 // Lora 与 Geist 字体文件并未随应用分发。
 
 export const metadata: Metadata = {
-  title: "智构树语",
-  description: "树状思维探索平台",
+  title: "智构树语 Tree Chat · 让思考拥有枝叶",
+  description: "以树的方式思考，而非线性对话。Tree Chat 是一个空间化的 AI 知识交互工作台。",
 };
 
 export default function RootLayout({

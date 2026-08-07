@@ -16,6 +16,12 @@
 
 本质上，它是一个**伪装成聊天界面的空间思维工具**。
 
+## 页面入口
+
+- `/` 是面向展示和答辩的产品介绍页：通过九段连续滚动叙事解释 Tree Chat 的思考模型与功能边界。
+- `/app` 是正式工作台，保留树状编辑、AI 分支、Nutrient、Auxo、Rings 和 Harvest 等交互。
+- 介绍页的首屏、固定顶部 CTA 和页尾 CTA 都可以直接进入 `/app`。
+
 ## 核心创新
 
 | 维度 | 传统对话 | Tree Chat |
@@ -55,14 +61,15 @@
 - 上述确定性保证适用于已检测到的试卷式编号题目；无编号的自然语言仍由规划模型提出拆解方案，需要用户审阅。
 - 顶层编号题内的括号子题会与共同题干保留为一个单元，避免题干被复制或割裂；独立括号列表或新章节中的括号题则逐项提取。
 
-### 视觉设计——有机编辑风 (Organic Editorial)
+### 视觉设计——深绿自然编辑风 (Deep Forest Editorial)
 
 Tree Chat 刻意避开了 AI 聊天工具千篇一律的"霓虹蓝紫渐变色 + 发光光球"风格，转而采用温暖、有触感的编辑美学，灵感来自植物图鉴和印刷排版：
 
-- **底色**：奶油纸 (`#FBF7F0`)、暖羊皮纸 (`#F5F0E8`)
+- **介绍页底色**：深森林绿为主，棕红只作为山景和氛围点缀；银色枝条、晴空蓝和云层承担叙事材质。
+- **工作台外层 UI**：通过共享语义 token 统一为深绿自然系；3D 画布仍保留纸面卡片材质，原有布局和交互不变。
 - **字体**：衬线标题 + 无衬线界面 + 等宽代码，均使用系统回退字体栈（Georgia/Noto Serif SC、Inter/system-ui——不加载网络字体）
 - **肌理**：全局 CSS 噪点叠加——触摸感如纸张，而非玻璃
-- **强调色**：树皮棕、鼠尾草绿、琥珀金——不发光的配色，会呼吸的界面
+- **强调色**：树皮棕、鼠尾草绿、琥珀金与银色拉丝概念 Logo——避免霓虹蓝紫 AI 聊天风格
 
 ### 3D 空间画布
 
@@ -81,7 +88,8 @@ Tree Chat 刻意避开了 AI 聊天工具千篇一律的"霓虹蓝紫渐变色 +
 | 树布局 | [d3-hierarchy](https://github.com/d3/d3-hierarchy) (`d3.tree()`) |
 | AI | DeepSeek API，通过 OpenAI SDK 调用 |
 | 样式 | Tailwind CSS 4 + CSS 自定义属性 |
-| 部署 | Cloudflare Workers (OpenNext) |
+| 动效 | [anime.js](https://github.com/juliangarnier/anime)（DOM/SVG） + React Three Fiber `useFrame`（3D） |
+| 部署 | Vercel（Next.js 原生托管，推荐入门） |
 | 图标 | [Lucide React](https://lucide.dev) |
 
 ## 快速开始
@@ -113,7 +121,7 @@ Key 只在服务端 Route Handler 中读取；不要使用 `NEXT_PUBLIC_` 前缀
 npm run dev
 ```
 
-打开 [http://localhost:3000](http://localhost:3000)。
+打开 [http://localhost:3000](http://localhost:3000) 查看介绍页；介绍页中的 CTA 会进入工作台，也可以直接访问 [http://localhost:3000/app](http://localhost:3000/app)。
 
 ### 生产构建
 
@@ -122,7 +130,17 @@ npm run build
 npm start
 ```
 
-### 部署到 Cloudflare Workers
+### 部署到 Vercel（推荐入门）
+
+1. 将本仓库推送到自己的 GitHub 账号。
+2. 登录 [Vercel](https://vercel.com)，选择 **Add New → Project**，导入该仓库。
+3. 在项目的 **Environment Variables** 中新增 `DEEPSEEK_API_KEY`，值填 DeepSeek 控制台生成的 Key；不要加 `NEXT_PUBLIC_` 前缀。
+4. 点击 **Deploy**。Vercel 会自动识别 Next.js、安装依赖并执行生产构建。
+5. 在 **Settings → Domains** 添加你购买的域名，再按 Vercel 显示的 DNS 记录到域名注册商处配置。DNS 生效后即可通过该域名访问。
+
+工作台项目和进度仍由每个访客浏览器的 `localStorage` 保存，不会自动跨设备同步；AI API Key 只放在 Vercel 的服务端环境变量中。
+
+### 部署到 Cloudflare Workers（进阶，当前仓库未预装）
 
 ```bash
 npm run build
@@ -130,11 +148,14 @@ npx @opennextjs/cloudflare build
 npx wrangler deploy
 ```
 
+上面的 Cloudflare 命令需要额外安装并配置 `@opennextjs/cloudflare`、`wrangler` 和 OpenNext 配置文件；它们不在当前 `package.json` 中，因此不能直接当作本仓库的开箱即用流程。第一次部署建议先使用 Vercel。
+
 ## 项目架构
 
 ```
 app/
-├── page.tsx           # TreeProvider 外壳与应用流程编排
+├── page.tsx           # 九段连续滚动产品介绍页
+├── app/page.tsx       # TreeProvider 外壳与工作台流程编排
 ├── layout.tsx         # 根布局（主题脚本、KaTeX 样式）
 ├── globals.css        # CSS 变量、噪点肌理、动画
 └── api/
