@@ -2,52 +2,44 @@
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import { Component, memo, type ReactNode, useMemo, useRef, useSyncExternalStore } from "react";
+import {
+  Component,
+  memo,
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from "react";
+import {
+  CANOPY_CLUSTERS,
+  CANOPY_LEAFLETS,
+  TREE_SEGMENTS,
+  type TreeSegmentSpec,
+} from "./treeGeometry";
 
 type Point3 = [number, number, number];
 
-type BranchSpec = { from: Point3; to: Point3; radius: number };
-
-const BRANCH_PAIRS: BranchSpec[] = [
-  { from: [0, 0, 0], to: [0, 2.8, 0], radius: 0.38 },
-  { from: [0, 2.2, 0], to: [-1.65, 4.1, 0.15], radius: 0.2 },
-  { from: [0, 2.55, 0], to: [1.7, 4.25, -0.1], radius: 0.2 },
-  { from: [0, 3.5, 0], to: [-0.85, 5.55, 0.12], radius: 0.14 },
-  { from: [0, 3.7, 0], to: [0.9, 5.85, -0.08], radius: 0.14 },
-  { from: [-1.65, 4.1, 0.15], to: [-2.7, 5.35, 0.12], radius: 0.11 },
-  { from: [1.7, 4.25, -0.1], to: [2.85, 5.25, -0.05], radius: 0.11 },
-  { from: [-0.85, 5.55, 0.12], to: [-1.35, 6.75, 0.15], radius: 0.08 },
-  { from: [0.9, 5.85, -0.08], to: [1.35, 6.9, -0.02], radius: 0.08 },
+export const CAMERA_KEYS: Array<{ progress: number; position: Point3; target: Point3 }> = [
+  // Page 4: complete establishing view. The tree is wider than it is tall,
+  // while its exposed lower trunk remains readable in the 1920×1080 frame.
+  { progress: 0, position: [0, 2.2, 16], target: [0, 2.35, 0] },
+  // Page 5: inspect a mature primary branch from above and to the side.
+  { progress: 0.25, position: [7.4, 8.6, 7.1], target: [2.65, 5.75, 0.25] },
+  // Page 6: move down to the bole while keeping the trunk on the right side.
+  { progress: 0.5, position: [-7.8, 4.1, 7.6], target: [0.25, 2.15, 0] },
+  // Page 7: settle close to the root flare and the radial surface roots.
+  { progress: 0.75, position: [6.6, 1.6, 7.6], target: [0, -0.35, 0] },
+  // Page 8: near-orthographic top view of the circular canopy footprint.
+  { progress: 1, position: [0, 18, 1.8], target: [0, 4.65, 0] },
 ];
 
-const ROOTS: Array<{ from: Point3; to: Point3 }> = [
-  { from: [0, 0, 0], to: [-1.55, -0.65, 0.2] },
-  { from: [0, 0, 0], to: [1.7, -0.52, -0.1] },
-  { from: [0, 0, 0], to: [-0.45, -0.82, 1.05] },
-  { from: [0, 0, 0], to: [0.45, -0.7, -1.1] },
-];
-
-const CANOPY_DESKTOP: Array<{ position: Point3; scale: number; color: string }> = [
-  { position: [-2.55, 5.45, 0.1], scale: 1.05, color: "#7f9f62" },
-  { position: [2.55, 5.35, -0.05], scale: 1.1, color: "#a8be78" },
-  { position: [-1.1, 6.55, 0.15], scale: 1.0, color: "#a8be78" },
-  { position: [1.2, 6.6, -0.05], scale: 1.02, color: "#7f9f62" },
-  { position: [0, 7.25, 0.05], scale: 1.22, color: "#a8be78" },
-];
-
-const CANOPY_MOBILE: Array<{ position: Point3; scale: number; color: string }> = [
-  { position: [-2.3, 5.65, 0.1], scale: 0.82, color: "#7f9f62" },
-  { position: [2.35, 5.6, -0.05], scale: 0.9, color: "#a8be78" },
-  { position: [0, 6.8, 0.05], scale: 1.05, color: "#7f9f62" },
-];
-
-const CAMERA_KEYS: Array<{ progress: number; position: Point3; target: Point3 }> = [
-  { progress: 0, position: [0, 1.8, 11], target: [0, 2, 0] },
-  { progress: 0.25, position: [3.7, 4.4, 6.2], target: [2.1, 4.3, 0] },
-  { progress: 0.5, position: [-4.6, 2.1, 6.5], target: [0, 2.3, 0] },
-  { progress: 0.75, position: [3.2, -1.6, 5.3], target: [0, -1.2, 0] },
-  { progress: 1, position: [0, 7.4, 9.2], target: [0, 4.8, 0] },
-];
+const CAMERA_KEY_VECTORS = CAMERA_KEYS.map((key) => ({
+  progress: key.progress,
+  position: new THREE.Vector3(...key.position),
+  target: new THREE.Vector3(...key.target),
+}));
 
 let webglSnapshot: boolean | undefined;
 
@@ -69,105 +61,385 @@ function subscribeToWebgl() {
   return () => undefined;
 }
 
-function sampleKeyframes(progress: number) {
+function sampleKeyframes(progress: number, position: THREE.Vector3, target: THREE.Vector3) {
   const clamped = THREE.MathUtils.clamp(progress, 0, 1);
   const rightIndex = Math.min(
-    CAMERA_KEYS.length - 1,
-    Math.max(1, CAMERA_KEYS.findIndex((key) => key.progress >= clamped)),
+    CAMERA_KEY_VECTORS.length - 1,
+    Math.max(1, CAMERA_KEY_VECTORS.findIndex((key) => key.progress >= clamped)),
   );
-  const left = CAMERA_KEYS[rightIndex - 1];
-  const right = CAMERA_KEYS[rightIndex];
+  const left = CAMERA_KEY_VECTORS[rightIndex - 1];
+  const right = CAMERA_KEY_VECTORS[rightIndex];
   const local = (clamped - left.progress) / (right.progress - left.progress || 1);
   const eased = THREE.MathUtils.smoothstep(local, 0, 1);
-  return {
-    position: new THREE.Vector3().lerpVectors(
-      new THREE.Vector3(...left.position),
-      new THREE.Vector3(...right.position),
-      eased,
-    ),
-    target: new THREE.Vector3().lerpVectors(
-      new THREE.Vector3(...left.target),
-      new THREE.Vector3(...right.target),
-      eased,
-    ),
-  };
+  position.lerpVectors(left.position, right.position, eased);
+  target.lerpVectors(left.target, right.target, eased);
 }
 
-function Branch({
-  from,
-  to,
-  radius,
+function radiusAt(radii: number[], amount: number) {
+  if (radii.length === 1) return radii[0];
+  const scaled = THREE.MathUtils.clamp(amount, 0, 1) * (radii.length - 1);
+  const index = Math.min(radii.length - 2, Math.floor(scaled));
+  return THREE.MathUtils.lerp(radii[index], radii[index + 1], scaled - index);
+}
+
+function createTaperedBranchGeometry(segment: TreeSegmentSpec) {
+  const curve = new THREE.CatmullRomCurve3(
+    segment.points.map((point) => new THREE.Vector3(...point)),
+    false,
+    "centripetal",
+    0.5,
+  );
+  const tubularSegments = segment.role === "trunk" ? 24 : segment.role === "primary" ? 12 : segment.role === "root" ? 9 : segment.role === "secondary" ? 8 : 6;
+  const radialSegments = segment.role === "trunk" ? 14 : segment.role === "primary" ? 10 : segment.role === "root" ? 9 : 7;
+  const frames = curve.computeFrenetFrames(tubularSegments, false);
+  const vertices: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+
+  for (let ring = 0; ring <= tubularSegments; ring += 1) {
+    const amount = ring / tubularSegments;
+    const center = curve.getPointAt(amount);
+    const normal = frames.normals[ring];
+    const binormal = frames.binormals[ring];
+    const radius = radiusAt(segment.radii, amount);
+
+    for (let side = 0; side <= radialSegments; side += 1) {
+      const angle = (side / radialSegments) * Math.PI * 2;
+      const radial = normal.clone().multiplyScalar(Math.cos(angle)).add(
+        binormal.clone().multiplyScalar(Math.sin(angle)),
+      ).normalize();
+      const point = center.clone().addScaledVector(radial, radius);
+      vertices.push(point.x, point.y, point.z);
+      uvs.push(side / radialSegments, amount);
+    }
+  }
+
+  // Close both ends. Branch collars remain hidden inside their parent tube,
+  // while the cap on each twig keeps the close Page 5 view from exposing a
+  // hollow cut surface.
+  const startCap = vertices.length / 3;
+  const startPoint = segment.points[0];
+  vertices.push(startPoint[0], startPoint[1], startPoint[2]);
+  uvs.push(0.5, 0);
+  const endCap = vertices.length / 3;
+  const endPoint = segment.points.at(-1) ?? startPoint;
+  vertices.push(endPoint[0], endPoint[1], endPoint[2]);
+  uvs.push(0.5, 1);
+
+  for (let ring = 0; ring < tubularSegments; ring += 1) {
+    for (let side = 0; side < radialSegments; side += 1) {
+      const row = radialSegments + 1;
+      const a = ring * row + side;
+      const b = (ring + 1) * row + side;
+      const c = (ring + 1) * row + side + 1;
+      const d = ring * row + side + 1;
+      indices.push(a, b, d, b, c, d);
+    }
+  }
+
+  const startRow = radialSegments + 1;
+  const endRow = tubularSegments * startRow;
+  for (let side = 0; side < radialSegments; side += 1) {
+    const nextSide = side + 1;
+    indices.push(startCap, nextSide, side);
+    indices.push(endCap, endRow + side, endRow + nextSide);
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+function createCanopyBlobGeometry() {
+  // A subtly deformed UV sphere reads as a leafy mass while retaining smooth
+  // normals. The deterministic lobes prevent the repeated, faceted-ball look
+  // without introducing a texture or an extra draw call.
+  const geometry = new THREE.SphereGeometry(1, 20, 14);
+  const position = geometry.getAttribute("position");
+  const vertex = new THREE.Vector3();
+  for (let index = 0; index < position.count; index += 1) {
+    vertex.fromBufferAttribute(position, index);
+    const direction = vertex.clone().normalize();
+    const broadLobe = Math.sin(direction.x * 4.2 + direction.z * 1.7 + direction.y * 2.1) * 0.055;
+    const fineLobe = Math.sin(direction.z * 8.5 - direction.x * 3.4 + direction.y * 5.7) * 0.028;
+    const underside = direction.y < -0.15 ? -0.025 * Math.abs(direction.y) : 0;
+    vertex.multiplyScalar(1 + broadLobe + fineLobe + underside);
+    vertex.y *= 0.96;
+    position.setXYZ(index, vertex.x, vertex.y, vertex.z);
+  }
+  position.needsUpdate = true;
+  geometry.computeVertexNormals();
+  geometry.computeBoundingSphere();
+  geometry.computeBoundingBox();
+  return geometry;
+}
+
+function createLeafletGeometry() {
+  // Octahedra give each instance a pointed, leaf-like silhouette. A small
+  // depth keeps the leaves visible from the oblique Page 5/6 cameras without
+  // resorting to transparent billboards.
+  const geometry = new THREE.OctahedronGeometry(1, 1);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function createBarkTexture() {
+  const width = 96;
+  const height = 192;
+  const data = new Uint8Array(width * height * 4);
+  const random = (() => {
+    let state = 0x5c3828;
+    return () => {
+      state = Math.imul(state ^ (state >>> 15), 1 | state);
+      state ^= state + Math.imul(state ^ (state >>> 7), 61 | state);
+      return ((state ^ (state >>> 14)) >>> 0) / 4294967296;
+    };
+  })();
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const verticalGrain = Math.sin(x * 0.34 + Math.sin(y * 0.035) * 2.1);
+      const fineGrain = Math.sin(x * 0.92 + y * 0.07) * 0.35;
+      const fissure = Math.pow(Math.abs(Math.sin(x * 0.115 + y * 0.018)), 11) * 54;
+      const value = THREE.MathUtils.clamp(164 + verticalGrain * 26 + fineGrain * 16 - fissure + (random() - 0.5) * 14, 58, 228);
+      const index = (y * width + x) * 4;
+      data[index] = value;
+      data[index + 1] = value;
+      data[index + 2] = value;
+      data[index + 3] = 255;
+    }
+  }
+
+  const texture = new THREE.DataTexture(data, width, height, THREE.RGBAFormat);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(1.2, 4.2);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function mergeBranchGeometries(segments: TreeSegmentSpec[]) {
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  let vertexOffset = 0;
+
+  segments.forEach((segment) => {
+    const geometry = createTaperedBranchGeometry(segment);
+    const position = geometry.getAttribute("position");
+    const normal = geometry.getAttribute("normal");
+    const uv = geometry.getAttribute("uv");
+    const index = geometry.getIndex();
+    positions.push(...Array.from(position.array as ArrayLike<number>));
+    normals.push(...Array.from(normal.array as ArrayLike<number>));
+    uvs.push(...Array.from(uv.array as ArrayLike<number>));
+    if (index) indices.push(...Array.from(index.array as ArrayLike<number>, (value) => value + vertexOffset));
+    vertexOffset += position.count;
+    geometry.dispose();
+  });
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+function MergedBranchMesh({
+  segments,
+  barkTexture,
   color,
-  roughness = 0.84,
+  castShadow,
+  receiveShadow = true,
 }: {
-  from: Point3;
-  to: Point3;
-  radius: number;
+  segments: TreeSegmentSpec[];
+  barkTexture: THREE.Texture;
   color: string;
-  roughness?: number;
+  castShadow: boolean;
+  receiveShadow?: boolean;
 }) {
-  const geometry = useMemo(() => {
-    const start = new THREE.Vector3(...from);
-    const end = new THREE.Vector3(...to);
-    const direction = end.clone().sub(start);
-    const length = direction.length();
-    const tube = new THREE.CylinderGeometry(radius * 0.78, radius, length, 8, 1);
-    tube.translate(0, length / 2, 0);
-    return { geometry: tube, start, direction };
-  }, [from, to, radius]);
-
-  const quaternion = useMemo(() => {
-    const q = new THREE.Quaternion();
-    q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), geometry.direction.clone().normalize());
-    return q;
-  }, [geometry.direction]);
+  const geometry = useMemo(() => mergeBranchGeometries(segments), [segments]);
 
   return (
-    <mesh
-      geometry={geometry.geometry}
-      position={geometry.start}
-      quaternion={quaternion}
-      castShadow
-    >
-      <meshStandardMaterial color={color} roughness={roughness} metalness={0.04} />
+    <mesh geometry={geometry} castShadow={castShadow} receiveShadow={receiveShadow}>
+      <meshStandardMaterial
+        color={color}
+        map={barkTexture}
+        bumpMap={barkTexture}
+        bumpScale={color === "#66452f" ? 0.18 : color === "#805738" ? 0.11 : 0.075}
+        roughness={0.94}
+        emissive="#5a341f"
+        emissiveIntensity={0.16}
+        metalness={0}
+      />
     </mesh>
   );
 }
 
-function LeafCluster({ position, scale, color }: { position: Point3; scale: number; color: string }) {
-  return (
-    <mesh position={position} scale={scale} castShadow>
-      <icosahedronGeometry args={[1, 1]} />
-      <meshStandardMaterial color={color} roughness={0.9} flatShading />
-    </mesh>
-  );
-}
+type FoliageTransform = {
+  position: Point3;
+  scale: Point3;
+  rotation: Point3;
+};
 
-function TreeModel({
-  groupRef,
-  mobile,
+function InstancedFoliage({
+  instances,
+  geometry,
+  material,
 }: {
-  groupRef: { current: THREE.Group | null };
-  mobile: boolean;
+  instances: FoliageTransform[];
+  geometry: THREE.BufferGeometry;
+  material: THREE.Material;
 }) {
-  const bark = "#5c3828";
-  const barkLight = "#81553a";
-  const canopy = mobile ? CANOPY_MOBILE : CANOPY_DESKTOP;
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+
+  useLayoutEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+    const matrix = new THREE.Matrix4();
+    const quaternion = new THREE.Quaternion();
+    const position = new THREE.Vector3();
+    const scale = new THREE.Vector3();
+    const rotation = new THREE.Euler();
+
+    instances.forEach((instance, index) => {
+      position.set(...instance.position);
+      scale.set(...instance.scale);
+      rotation.set(...instance.rotation);
+      quaternion.setFromEuler(rotation);
+      matrix.compose(position, quaternion, scale);
+      mesh.setMatrixAt(index, matrix);
+    });
+    mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingBox();
+    mesh.computeBoundingSphere();
+  }, [instances]);
 
   return (
-    <group ref={groupRef} position={[0, -1.9, 0]}>
-      {BRANCH_PAIRS.map((branch, index) => (
-        <Branch key={`branch-${index}`} {...branch} color={index < 2 ? bark : barkLight} />
+    <instancedMesh
+      ref={meshRef}
+      args={[geometry, material, instances.length]}
+      castShadow={false}
+      receiveShadow={false}
+      // VolumetricCanopy shares the blob geometry across three layer meshes;
+      // leave disposal to its single owner instead of letting R3F dispose the
+      // shared resource once per instance.
+      dispose={null}
+    />
+  );
+}
+
+const CANOPY_LAYERS = ["inner", "middle", "edge"] as const;
+
+function VolumetricCanopy() {
+  const geometry = useMemo(() => createCanopyBlobGeometry(), []);
+  const leafletGeometry = useMemo(() => createLeafletGeometry(), []);
+  const clustersByLayer = useMemo(() => ({
+    inner: CANOPY_CLUSTERS.filter((cluster) => cluster.layer === "inner"),
+    middle: CANOPY_CLUSTERS.filter((cluster) => cluster.layer === "middle"),
+    edge: CANOPY_CLUSTERS.filter((cluster) => cluster.layer === "edge"),
+  }), []);
+  const layerMaterials = useMemo(() => ({
+    inner: new THREE.MeshStandardMaterial({
+      color: "#315f37",
+      roughness: 0.94,
+      metalness: 0,
+      emissive: "#315f37",
+      emissiveIntensity: 0.14,
+    }),
+    middle: new THREE.MeshStandardMaterial({
+      color: "#4f8144",
+      roughness: 0.92,
+      metalness: 0,
+      emissive: "#42753b",
+      emissiveIntensity: 0.14,
+    }),
+    edge: new THREE.MeshStandardMaterial({
+      color: "#6c9b52",
+      roughness: 0.9,
+      metalness: 0,
+      emissive: "#5a8a46",
+      emissiveIntensity: 0.14,
+    }),
+  }), []);
+  const leafletMaterial = useMemo(() => new THREE.MeshStandardMaterial({
+    color: "#78a556",
+    roughness: 0.84,
+    metalness: 0,
+    emissive: "#5b8b47",
+    emissiveIntensity: 0.14,
+  }), []);
+
+  useEffect(() => () => {
+    geometry.dispose();
+    leafletGeometry.dispose();
+    CANOPY_LAYERS.forEach((layer) => layerMaterials[layer].dispose());
+    leafletMaterial.dispose();
+  }, [geometry, layerMaterials, leafletGeometry, leafletMaterial]);
+
+  return (
+    <group>
+      {CANOPY_LAYERS.map((layer) => (
+        <InstancedFoliage
+          key={layer}
+          instances={clustersByLayer[layer]}
+          geometry={geometry}
+          material={layerMaterials[layer]}
+        />
       ))}
-      {ROOTS.map((root, index) => (
-        <Branch key={`root-${index}`} from={root.from} to={root.to} radius={0.19} color={bark} />
-      ))}
-      {canopy.map((cluster, index) => (
-        <LeafCluster key={`canopy-${index}`} {...cluster} />
-      ))}
-      <mesh position={[0, -0.02, 0]} scale={[1.1, 0.24, 0.72]} receiveShadow>
-        <sphereGeometry args={[1, mobile ? 12 : 20, mobile ? 8 : 12]} />
-        <meshStandardMaterial color="#745238" roughness={1} />
+      <InstancedFoliage
+        instances={CANOPY_LEAFLETS}
+        geometry={leafletGeometry}
+        material={leafletMaterial}
+      />
+    </group>
+  );
+}
+
+function TreeModel({ groupRef }: { groupRef: { current: THREE.Group | null } }) {
+  const barkTexture = useMemo(() => createBarkTexture(), []);
+  const trunkAndRoots = useMemo(
+    () => TREE_SEGMENTS.filter((segment) => segment.role === "trunk" || segment.role === "root"),
+    [],
+  );
+  const primaryBranches = useMemo(
+    () => TREE_SEGMENTS.filter((segment) => segment.role === "primary"),
+    [],
+  );
+  const fineBranches = useMemo(
+    () => TREE_SEGMENTS.filter((segment) => segment.role === "secondary" || segment.role === "twig"),
+    [],
+  );
+
+  useEffect(() => () => barkTexture.dispose(), [barkTexture]);
+
+  return (
+    <group ref={groupRef} position={[0, -2.05, 0]}>
+      <MergedBranchMesh segments={trunkAndRoots} barkTexture={barkTexture} color="#66452f" castShadow receiveShadow={false} />
+      <MergedBranchMesh segments={primaryBranches} barkTexture={barkTexture} color="#805738" castShadow receiveShadow={false} />
+      <MergedBranchMesh segments={fineBranches} barkTexture={barkTexture} color="#916745" castShadow={false} receiveShadow={false} />
+      <VolumetricCanopy />
+      <mesh position={[0, -0.02, 0]} scale={[1.3, 0.55, 1.3]} castShadow receiveShadow={false}>
+        <sphereGeometry args={[1, 36, 22]} />
+        <meshStandardMaterial
+          color="#66452f"
+          map={barkTexture}
+          bumpMap={barkTexture}
+          bumpScale={0.18}
+          roughness={0.98}
+          emissive="#5a341f"
+          emissiveIntensity={0.16}
+        />
       </mesh>
     </group>
   );
@@ -175,35 +447,44 @@ function TreeModel({
 
 const MemoizedTreeModel = memo(TreeModel);
 
-function SceneRig({ progress, reducedMotion, mobile }: { progress: number; reducedMotion: boolean; mobile: boolean }) {
+function SceneRig({ progress, progressRef, reducedMotion }: { progress: number; progressRef?: { current: number }; reducedMotion: boolean }) {
   const { camera } = useThree();
   const groupRef = useRef<THREE.Group>(null);
-  const currentTarget = useRef(new THREE.Vector3(0, 2, 0));
-  const currentPosition = useRef(new THREE.Vector3(0, 1.8, 11));
+  const currentTarget = useRef(new THREE.Vector3(0, 2.35, 0));
+  const currentPosition = useRef(new THREE.Vector3(0, 2.2, 16));
+  const nextTarget = useRef(new THREE.Vector3());
+  const nextPosition = useRef(new THREE.Vector3());
 
-  useFrame((_, delta) => {
+  useFrame(({ clock }, delta) => {
     const group = groupRef.current;
+    const elapsed = clock.getElapsedTime();
     if (group && !reducedMotion) {
-      group.rotation.z = Math.sin(performance.now() * 0.00035) * 0.012;
-      group.rotation.x = Math.sin(performance.now() * 0.00022) * 0.008;
-      group.position.y = -1.9 + Math.sin(performance.now() * 0.00045) * 0.018;
+      group.rotation.z = Math.sin(elapsed * 0.34) * 0.008;
+      group.rotation.x = Math.sin(elapsed * 0.22) * 0.005;
+      group.position.y = -2.05 + Math.sin(elapsed * 0.42) * 0.012;
       group.updateMatrixWorld();
       if (delta > 0.04) group.rotation.z *= 0.98;
     }
-    const next = sampleKeyframes(progress);
-    const factor = reducedMotion ? 1 : 1 - Math.pow(0.0001, delta);
-    currentPosition.current.lerp(next.position, factor);
-    currentTarget.current.lerp(next.target, factor);
+
+    sampleKeyframes(progressRef?.current ?? progress, nextPosition.current, nextTarget.current);
+    const factor = reducedMotion ? 1 : 1 - Math.pow(0.00005, delta);
+    currentPosition.current.lerp(nextPosition.current, factor);
+    currentTarget.current.lerp(nextTarget.current, factor);
     camera.position.copy(currentPosition.current);
     camera.lookAt(currentTarget.current);
-    camera.updateProjectionMatrix();
   });
 
-  return <MemoizedTreeModel groupRef={groupRef} mobile={mobile} />;
+  return <MemoizedTreeModel groupRef={groupRef} />;
 }
 
 function StaticTreeFallback() {
-  return <div className="landing-tree-webgl-fallback" role="img" aria-label="Tree Chat 树状思考场景的静态预览" />;
+  return (
+    <div className="landing-tree-webgl-fallback" role="img" aria-label="Tree Chat 成熟阔叶树场景的静态预览">
+      <span className="landing-tree-webgl-fallback__canopy" aria-hidden="true" />
+      <span className="landing-tree-webgl-fallback__trunk" aria-hidden="true" />
+      <span className="landing-tree-webgl-fallback__roots" aria-hidden="true" />
+    </div>
+  );
 }
 
 class WebGLBoundary extends Component<
@@ -223,13 +504,13 @@ class WebGLBoundary extends Component<
 
 export function NarrativeTreeScene({
   progress,
+  progressRef,
   reducedMotion,
-  mobile,
   active,
 }: {
   progress: number;
+  progressRef?: { current: number };
   reducedMotion: boolean;
-  mobile: boolean;
   active: boolean;
 }) {
   const webglSupported = useSyncExternalStore(subscribeToWebgl, getWebglSupport, () => false);
@@ -243,17 +524,33 @@ export function NarrativeTreeScene({
         <WebGLBoundary fallback={<StaticTreeFallback />}>
           <Canvas
             aria-hidden="true"
-            dpr={mobile ? [1, 1.15] : [1, 1.6]}
+            dpr={[1, 1.5]}
             frameloop={active && !reducedMotion ? "always" : "demand"}
-            gl={{ antialias: !mobile, alpha: true, powerPreference: "high-performance" }}
-            camera={{ position: [0, 1.8, 11], fov: mobile ? 45 : 40, near: 0.1, far: 100 }}
+            shadows
+            gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
+            camera={{ position: [0, 2.2, 16], fov: 40, near: 0.1, far: 100 }}
             fallback={<StaticTreeFallback />}
           >
-            <ambientLight intensity={1.2} color="#d9e9d1" />
-            <hemisphereLight intensity={1.3} color="#d5efff" groundColor="#273d2b" />
-            <directionalLight position={[-5, 9, 5]} intensity={3.2} color="#fff0c8" castShadow={!mobile} />
-            <pointLight position={[3, 3, 3]} intensity={2.5} color="#d5edbf" />
-            <SceneRig progress={progress} reducedMotion={reducedMotion} mobile={mobile} />
+            <fog attach="fog" args={["#285e4d", 19, 44]} />
+            <ambientLight intensity={0.98} color="#e3efd8" />
+            <hemisphereLight intensity={1.28} color="#dff3ff" groundColor="#2b4a31" />
+            <directionalLight
+              position={[-7, 11, 7]}
+              intensity={2.6}
+              color="#fff0c8"
+              castShadow
+              shadow-mapSize={[1024, 1024]}
+              shadow-bias={-0.0002}
+            />
+            <pointLight position={[4, 5, 5]} intensity={1.15} color="#d5edbf" />
+            <pointLight
+              position={[0, 8, 14]}
+              intensity={3.8}
+              color="#edf4d7"
+              distance={40}
+              decay={1}
+            />
+            <SceneRig progress={progress} progressRef={progressRef} reducedMotion={reducedMotion} />
           </Canvas>
         </WebGLBoundary>
       ) : <StaticTreeFallback />}

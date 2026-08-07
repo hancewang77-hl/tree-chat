@@ -24,6 +24,11 @@ It's a **spatial thinking tool** disguised as a chat interface.
 - The hero, fixed header, and footer CTAs on the narrative page all lead to
   `/app`.
 
+The landing narrative is currently a fixed `1920×1080` review composition.
+Mobile, tablet, and short-landscape landing breakpoints are intentionally out
+of scope for this review build; reduced-motion, keyboard focus, ARIA labels,
+and the no-WebGL reading fallback remain supported.
+
 ## Innovation
 
 | Dimension | Conventional Chat | Tree Chat |

@@ -1,6 +1,6 @@
 "use client";
 
-import { animate, stagger } from "animejs";
+import { animate } from "animejs";
 import {
   ArrowDown,
   ArrowUpRight,
@@ -12,7 +12,6 @@ import {
   History,
   Network,
   Scissors,
-  Sprout,
   Trees,
   Upload,
   Waves,
@@ -26,7 +25,6 @@ type RevealAnimation = { pause: () => void };
 
 const LANDING_MOTION = {
   hero: { duration: 820, ease: "out(4)" },
-  reveal: { duration: 680, ease: "out(3)" },
   seed: { duration: 760, ease: "in(3)" },
   sprout: { duration: 900, ease: "out(4)" },
   chapter: { duration: 460, ease: "out(3)" },
@@ -60,55 +58,57 @@ const TREE_STORIES: Array<{
   facts: Array<{ label: string; text: string; icon: LucideIcon }>;
 }> = [
   {
-    chapter: "04 / 主干",
+    chapter: "主干",
     kicker: "One workspace, many directions",
     title: "让思考拥有空间",
     body: "Tree Chat 把每一对 prompt / response 变成树上的节点，让发散、回溯和比较都留在同一张思考地图里。",
-    accent: "#b8d78b",
+    accent: "var(--landing-moss-light)",
     facts: [
       { label: "树状结构", text: "从任意节点继续探索", icon: Network },
       { label: "2D / 3D", text: "在平面与空间之间切换", icon: Trees },
     ],
   },
   {
-    chapter: "05 / 枝条",
+    chapter: "枝条",
     kicker: "Branch · Graft · Prune · Leaf",
     title: "一根枝条，四种动作",
     body: "分支追问、挂载笔记、嫁接子树、修剪枯枝，让结构跟随你的判断持续生长。",
-    accent: "#d6bd86",
+    accent: "var(--landing-moss-light)",
     facts: [
-      { label: "Branch", text: "保留同一问题的多条路径", icon: GitBranch },
-      { label: "Graft / Prune / Leaf", text: "重组、清理与批注", icon: Scissors },
+      { label: "Branch", text: "从同一问题展开另一条路径", icon: GitBranch },
+      { label: "Graft", text: "把成熟思路接回主干", icon: GitFork },
+      { label: "Prune", text: "移除不再需要的分支", icon: Scissors },
+      { label: "Leaf", text: "为节点留下可回看的批注", icon: BookOpen },
     ],
   },
   {
-    chapter: "06 / 树干",
+    chapter: "树干",
     kicker: "Auxo · Rings",
     title: "看见一棵树的时间",
     body: "Auxo 将根任务规划为可审阅的任务树，Rings 保留工作区的变化轨迹，让复杂探索仍然可回到现场。",
-    accent: "#e4a760",
+    accent: "var(--landing-moss-light)",
     facts: [
       { label: "Auxo", text: "先规划，再逐项回答", icon: BrainCircuit },
       { label: "Rings", text: "安全撤销与重做", icon: History },
     ],
   },
   {
-    chapter: "07 / 树根",
+    chapter: "树根",
     kicker: "Nutrient · Harvest",
     title: "让资料成为根系",
     body: "上传的资料可以作为可追溯的营养来源，相关上下文进入回答；完成后再把整棵思考树收获为可携带的文件。",
-    accent: "#9bc6bd",
+    accent: "var(--landing-moss-light)",
     facts: [
       { label: "Nutrient", text: "关联本地资料与搜索", icon: Upload },
       { label: "Harvest", text: "导出 Markdown 或 JSON", icon: Download },
     ],
   },
   {
-    chapter: "08 / 树冠",
+    chapter: "树冠",
     kicker: "A canopy of connected ideas",
     title: "从局部回答回到全局",
     body: "在树冠视角下，所有分支、批注、历史和资料重新汇聚成一张可回望的知识地图。",
-    accent: "#d7e7a8",
+    accent: "var(--landing-moss-light)",
     facts: [
       { label: "Canopy", text: "一眼浏览完整树结构", icon: Waves },
       { label: "Open Source", text: "MIT License · GitHub", icon: GitFork },
@@ -130,6 +130,29 @@ const FRAGMENT_WORDS = [
   "可能性",
   "连接",
 ];
+
+// Page 3 is intentionally an arborescence, not a conversation graph with
+// re-joins: one question root, two branch choices, and four terminal answers.
+// Keep every edge directed from an earlier level to the next one; a leaf must
+// never point back to the root or share a terminal node with another branch.
+const TREE_MAP_NODES = [
+  { id: "page3-root", level: "root", x: 74, y: 190, r: 18, fill: "#d6bd86", label: "Q" },
+  { id: "page3-branch-a", level: "branch", x: 286, y: 100, r: 14, fill: "#88a86b", label: "B1" },
+  { id: "page3-branch-b", level: "branch", x: 286, y: 280, r: 14, fill: "#88a86b", label: "B2" },
+  { id: "page3-leaf-a1", level: "leaf", x: 488, y: 55, r: 12, fill: "#b8d6a0", label: "A1" },
+  { id: "page3-leaf-a2", level: "leaf", x: 488, y: 145, r: 12, fill: "#b8d6a0", label: "A2" },
+  { id: "page3-leaf-b1", level: "leaf", x: 488, y: 235, r: 12, fill: "#b8d6a0", label: "A3" },
+  { id: "page3-leaf-b2", level: "leaf", x: 488, y: 325, r: 12, fill: "#b8d6a0", label: "A4" },
+] as const;
+
+const TREE_MAP_EDGES = [
+  { id: "root-branch-a", parent: "page3-root", child: "page3-branch-a", d: "M92 190C160 190 190 100 272 100" },
+  { id: "root-branch-b", parent: "page3-root", child: "page3-branch-b", d: "M92 190C160 190 190 280 272 280" },
+  { id: "branch-a-leaf-1", parent: "page3-branch-a", child: "page3-leaf-a1", d: "M300 100C350 100 386 55 476 55" },
+  { id: "branch-a-leaf-2", parent: "page3-branch-a", child: "page3-leaf-a2", d: "M300 100C350 100 386 145 476 145" },
+  { id: "branch-b-leaf-1", parent: "page3-branch-b", child: "page3-leaf-b1", d: "M300 280C350 280 386 235 476 235" },
+  { id: "branch-b-leaf-2", parent: "page3-branch-b", child: "page3-leaf-b2", d: "M300 280C350 280 386 325 476 325" },
+] as const;
 
 function BranchLogo({ compact = false }: { compact?: boolean }) {
   const id = useId().replace(/:/g, "");
@@ -168,7 +191,7 @@ function BranchLogo({ compact = false }: { compact?: boolean }) {
 
 function FeaturePill({ icon: Icon, label, text }: { icon: LucideIcon; label: string; text: string }) {
   return (
-    <div className="landing-feature-pill" data-reveal>
+    <div className="landing-feature-pill">
       <span className="landing-feature-pill__icon"><Icon size={16} strokeWidth={1.7} /></span>
       <span><strong>{label}</strong><small>{text}</small></span>
     </div>
@@ -177,24 +200,25 @@ function FeaturePill({ icon: Icon, label, text }: { icon: LucideIcon; label: str
 
 export function LandingPage() {
   const [activeChapter, setActiveChapter] = useState(0);
-  const [treeProgress, setTreeProgress] = useState(0);
+  const [treeChapter, setTreeChapter] = useState(0);
   const [seedPlanted, setSeedPlanted] = useState(false);
+  const [seedInView, setSeedInView] = useState(true);
   const [scrolled, setScrolled] = useState(false);
-  const [mobile, setMobile] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
+  const activeChapterRef = useRef(0);
+  const treeChapterRef = useRef(0);
+  const treeProgressRef = useRef(0);
+  const scrolledRef = useRef(false);
   const treeStoryRef = useRef<HTMLElement | null>(null);
   const dilemmaRef = useRef<HTMLElement | null>(null);
+  const seedStageRef = useRef<HTMLDivElement | null>(null);
   const headerRef = useRef<HTMLElement | null>(null);
   const treeCopyRef = useRef<HTMLDivElement | null>(null);
-  const seedRef = useRef<SVGSVGElement | null>(null);
+  const seedRef = useRef<HTMLButtonElement | null>(null);
   const sproutRef = useRef<SVGSVGElement | null>(null);
   const seedHintRef = useRef<HTMLParagraphElement | null>(null);
   const revealAnimations = useRef<RevealAnimation[]>([]);
 
-  const treeChapter = Math.min(
-    TREE_STORIES.length - 1,
-    Math.max(0, Math.round(treeProgress * (TREE_STORIES.length - 1))),
-  );
   const story = TREE_STORIES[treeChapter];
 
   useEffect(() => {
@@ -203,26 +227,45 @@ export function LandingPage() {
   }, []);
 
   useEffect(() => {
+    const stage = seedStageRef.current;
+    if (!stage || typeof IntersectionObserver === "undefined") {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => setSeedInView(entry.isIntersecting),
+      { threshold: 0.05 },
+    );
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
     if (typeof window.matchMedia !== "function") {
       return;
     }
     const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const mobileQuery = window.matchMedia("(max-width: 900px)");
     const sync = () => {
       setReducedMotion(motionQuery.matches);
-      setMobile(mobileQuery.matches);
     };
     sync();
-    motionQuery.addEventListener?.("change", sync);
-    mobileQuery.addEventListener?.("change", sync);
-    motionQuery.addListener?.(sync);
-    mobileQuery.addListener?.(sync);
+    if (motionQuery.addEventListener) {
+      motionQuery.addEventListener("change", sync);
+    } else {
+      motionQuery.addListener?.(sync);
+    }
     return () => {
-      motionQuery.removeEventListener?.("change", sync);
-      mobileQuery.removeEventListener?.("change", sync);
-      motionQuery.removeListener?.(sync);
-      mobileQuery.removeListener?.(sync);
+      if (motionQuery.removeEventListener) {
+        motionQuery.removeEventListener("change", sync);
+      } else {
+        motionQuery.removeListener?.(sync);
+      }
     };
+  }, []);
+
+  useEffect(() => {
+    const animations = revealAnimations.current;
+    return () => animations.forEach((animation) => animation.pause());
   }, []);
 
   useEffect(() => {
@@ -254,40 +297,6 @@ export function LandingPage() {
   }, [reducedMotion]);
 
   useEffect(() => {
-    if (!("IntersectionObserver" in window)) {
-      document.querySelectorAll<HTMLElement>("[data-reveal]").forEach((target) => target.classList.add("is-visible"));
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (!entry.isIntersecting || entry.target.classList.contains("is-visible")) return;
-          entry.target.classList.add("is-visible");
-          if (reducedMotion) return;
-          const targets = Array.from(entry.target.querySelectorAll<HTMLElement>("[data-reveal]"));
-          if (!targets.length) return;
-          const animation = animate(targets, {
-            opacity: [0, 1],
-            translateY: [18, 0],
-            duration: LANDING_MOTION.reveal.duration,
-            delay: stagger(70),
-            ease: LANDING_MOTION.reveal.ease,
-          });
-          revealAnimations.current.push(animation);
-        });
-      },
-      { threshold: 0.2 },
-    );
-    document.querySelectorAll<HTMLElement>(".landing-section, .landing-tree-story").forEach((section) => observer.observe(section));
-    return () => {
-      observer.disconnect();
-      revealAnimations.current.forEach((animation) => animation.pause());
-      revealAnimations.current = [];
-    };
-  }, [reducedMotion]);
-
-  useEffect(() => {
     const header = headerRef.current;
     if (!header || reducedMotion) return;
     const animation = animate(header, {
@@ -304,7 +313,10 @@ export function LandingPage() {
   useEffect(() => {
     const copy = treeCopyRef.current;
     if (!copy || reducedMotion) return;
-    const animation = animate(copy, {
+    // Keep the chapter mask on the stable wrapper. Moving that wrapper by even
+    // a fraction of a pixel creates a visible seam against the WebGL canvas.
+    const targets = copy.querySelectorAll<HTMLElement>(".landing-tree-copy__intro, .landing-tree-facts");
+    const animation = animate(targets, {
       opacity: [0.12, 1],
       translateY: [16, 0],
       duration: LANDING_MOTION.chapter.duration,
@@ -338,9 +350,9 @@ export function LandingPage() {
       const dilemma = dilemmaRef.current;
       if (!dilemma) return;
 
-      // Keep the fixed chapter indicator in sync even on short landscape
-      // viewports, where Page 3's tall content can make a center-distance
-      // heuristic prefer the preceding seed section.
+      // Keep the fixed chapter indicator in sync with the explicit landing
+      // transition before the scroll observer's next frame recalculates it.
+      activeChapterRef.current = 2;
       setActiveChapter(2);
       dilemma.scrollIntoView({
         behavior: reducedMotion ? "auto" : "smooth",
@@ -355,17 +367,40 @@ export function LandingPage() {
     let frame = 0;
     const update = () => {
       frame = 0;
-      setScrolled(window.scrollY > 28);
+      const commitActiveChapter = (next: number) => {
+        if (activeChapterRef.current === next) return;
+        activeChapterRef.current = next;
+        setActiveChapter(next);
+      };
+      const commitTreeChapter = (next: number) => {
+        if (treeChapterRef.current === next) return;
+        treeChapterRef.current = next;
+        setTreeChapter(next);
+      };
+      const scrollTop = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop;
+      const nextScrolled = scrollTop > 28;
+      if (scrolledRef.current !== nextScrolled) {
+        scrolledRef.current = nextScrolled;
+        setScrolled(nextScrolled);
+      }
       const storyRect = treeStoryRef.current?.getBoundingClientRect();
       if (storyRect && storyRect.top <= window.innerHeight * 0.78) {
         const available = Math.max(1, storyRect.height - window.innerHeight);
         const progress = Math.min(1, Math.max(0, -storyRect.top / available));
-        setTreeProgress(progress);
+        treeProgressRef.current = progress;
+        // Switch copy and masks only when the camera reaches the next 1080px
+        // story stop. Midpoint rounding changed overlays while the camera was
+        // still between two compositions, which produced visible seams.
+        const nextTreeChapter = Math.min(
+          TREE_STORIES.length - 1,
+          Math.max(0, Math.floor(progress * (TREE_STORIES.length - 1) + 0.0001)),
+        );
         if (storyRect.bottom <= window.innerHeight * 0.72) {
-          setActiveChapter(CHAPTERS.length - 1);
+          commitActiveChapter(CHAPTERS.length - 1);
         } else {
-          setActiveChapter(3 + Math.min(TREE_STORIES.length - 1, Math.round(progress * (TREE_STORIES.length - 1))));
+          commitActiveChapter(3 + nextTreeChapter);
         }
+        commitTreeChapter(nextTreeChapter);
       } else {
         const earlySections = Array.from(document.querySelectorAll<HTMLElement>(".landing-hero, #seed, .landing-dilemma"));
         const viewportMarker = window.innerHeight * 0.42;
@@ -374,7 +409,7 @@ export function LandingPage() {
           return rect.top <= viewportMarker && rect.bottom > viewportMarker;
         });
         if (currentIndex >= 0) {
-          setActiveChapter(currentIndex);
+          commitActiveChapter(currentIndex);
           return;
         }
         const closest = earlySections.reduce<{ index: number; distance: number } | null>((best, section, index) => {
@@ -382,7 +417,8 @@ export function LandingPage() {
           const distance = Math.abs(rect.top + rect.height / 2 - viewportMarker);
           return !best || distance < best.distance ? { index, distance } : best;
         }, null);
-        setActiveChapter(closest?.index ?? 0);
+        const nextIndex = closest?.index ?? 0;
+        commitActiveChapter(nextIndex);
       }
     };
     const onScroll = () => {
@@ -390,10 +426,12 @@ export function LandingPage() {
     };
     update();
     window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll, { passive: true });
+    // The document is the scrolling element in some embedded browser shells;
+    // listen there as well so the fixed chapter indicator cannot become stale.
+    document.addEventListener("scroll", onScroll, { passive: true, capture: true });
     return () => {
       window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
+      document.removeEventListener("scroll", onScroll, { capture: true });
       if (frame) window.cancelAnimationFrame(frame);
     };
   }, []);
@@ -455,7 +493,7 @@ export function LandingPage() {
         </nav>
       </header>
 
-      <section id="top" className="landing-section landing-hero" aria-labelledby="landing-title">
+      <section id="top" data-page="1" className="landing-section landing-hero" aria-labelledby="landing-title">
         <div className="landing-hero__mountain" aria-hidden="true" />
         <div className="landing-hero-words" aria-hidden="true">
           {backgroundFragments.map((fragment) => (
@@ -485,23 +523,18 @@ export function LandingPage() {
             <a className="landing-button landing-button--primary" href="/app">进入 Tree Chat <ArrowUpRight size={18} aria-hidden="true" /></a>
             <a className="landing-button landing-button--ghost" href="#seed">先了解它如何生长 <ArrowDown size={17} aria-hidden="true" /></a>
           </div>
-          <div className="landing-hero__meta" data-reveal>
-            <span><Sprout size={15} aria-hidden="true" /> 把灵感化为种子</span>
-            <span className="landing-dot" aria-hidden="true" />
-            <span>让思考拥有枝叶</span>
-          </div>
         </div>
       </section>
 
-      <section id="seed" className="landing-section landing-seed-section" aria-labelledby="seed-title">
+      <section id="seed" data-page="2" className="landing-section landing-seed-section" aria-labelledby="seed-title">
         <div className="landing-seed-forest" aria-hidden="true"><span /><span /><span /><span /><span /></div>
-        <div className="landing-container landing-seed-layout">
-          <div className="landing-seed-copy" data-reveal>
-            <p className="landing-kicker">02 / Seed</p>
+        <div className={`landing-container landing-seed-layout ${seedPlanted ? "is-planted" : ""}`}>
+          <div className="landing-seed-copy">
+            <p className="landing-kicker">Seed / 播种</p>
             <h2 id="seed-title">每一次探索，都从一个问题开始。</h2>
             <p>Tree Chat 把你的灵感化为种子，置于 AI 智能的温床。先把问题种下，让它在可回望的上下文里长出下一条路径。</p>
           </div>
-          <div className={`landing-seed-stage ${seedPlanted ? "is-planted" : ""}`}>
+          <div ref={seedStageRef} className={`landing-seed-stage ${seedPlanted ? "is-planted" : ""} ${seedInView ? "is-in-view" : ""}`}>
             <div className="landing-soil" aria-hidden="true"><span className="landing-soil__ring landing-soil__ring--one" /><span className="landing-soil__ring landing-soil__ring--two" /></div>
             <svg ref={sproutRef} className="landing-sprout" viewBox="0 0 132 190" aria-hidden="true">
               <path className="landing-sprout__stem" d="M66 173C64 145 65 116 67 86C68 68 68 49 72 27" />
@@ -510,8 +543,8 @@ export function LandingPage() {
               <path className="landing-sprout__leaf landing-sprout__leaf--right" d="M100 44c14-6 25-2 29 8-9 11-21 10-29-8Z" />
               <circle className="landing-sprout__bud" cx="72" cy="26" r="6" />
             </svg>
-            <button type="button" className="landing-seed-button" onClick={plantSeed} aria-pressed={seedPlanted} aria-label={seedPlanted ? "种子已播下" : "点击播下 Tree Chat 种子"}>
-              <svg ref={seedRef} className="landing-seed" viewBox="0 0 88 110" aria-hidden="true">
+            <button ref={seedRef} type="button" className="landing-seed-button" onClick={plantSeed} aria-pressed={seedPlanted} aria-label={seedPlanted ? "种子已播下" : "点击播下 Tree Chat 种子"}>
+              <svg className="landing-seed" viewBox="0 0 88 110" aria-hidden="true">
                 <defs><radialGradient id="seed-shell" cx="34%" cy="27%"><stop offset="0" stopColor="#e9d4a0" /><stop offset="0.5" stopColor="#a9773f" /><stop offset="1" stopColor="#563a2a" /></radialGradient></defs>
                 <path d="M43 7C20 12 9 34 16 57c6 22 25 38 41 42 19-15 29-37 22-59C73 22 61 11 43 7Z" fill="url(#seed-shell)" stroke="#f0ddad" strokeOpacity=".42" strokeWidth="2" />
                 <path d="M46 15c-3 26-1 51 9 74" fill="none" stroke="#f9e8b5" strokeLinecap="round" strokeOpacity=".62" strokeWidth="2" />
@@ -523,28 +556,38 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section ref={dilemmaRef} id="dilemma" className="landing-section landing-dilemma" aria-labelledby="dilemma-title">
+      <section ref={dilemmaRef} id="dilemma" data-page="3" className="landing-section landing-dilemma" aria-labelledby="dilemma-title">
         <div className="landing-container landing-dilemma-grid">
-          <div className="landing-solution-visual" data-reveal>
-            <div className="landing-kicker">03 / Dilemma &amp; Solution</div>
-            <h2 id="dilemma-title">思考不是一条线。</h2>
-            <svg className="landing-branch-map" viewBox="0 0 560 380" role="img" aria-label="一个问题向多个方向分支，并保留上下文关系">
+          <div className="landing-solution-visual">
+            <svg className="landing-branch-map" viewBox="0 0 560 380" role="img" aria-label="三层树状结构：一个问题、两个分支、四个回答节点" data-tree-structure="three-level-acyclic">
               <defs><filter id="map-glow"><feGaussianBlur stdDeviation="5" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter></defs>
-              <path d="M74 188C168 188 180 98 286 98s112 90 202 90M74 188c94 0 108 94 212 94s115-94 202-94" fill="none" stroke="#9ebd77" strokeLinecap="round" strokeWidth="3" filter="url(#map-glow)" />
-              <path d="M74 188C168 188 180 98 286 98s112 90 202 90M74 188c94 0 108 94 212 94s115-94 202-94" fill="none" stroke="#d8e8c0" strokeLinecap="round" strokeWidth="1.2" />
-              <circle cx="74" cy="188" r="18" fill="#d6bd86" /><circle cx="286" cy="98" r="14" fill="#88a86b" /><circle cx="286" cy="282" r="14" fill="#88a86b" /><circle cx="488" cy="188" r="18" fill="#b8d6a0" />
-              <text x="74" y="193" textAnchor="middle" fill="#173322" fontSize="10" fontWeight="700">Q</text><text x="488" y="193" textAnchor="middle" fill="#173322" fontSize="10" fontWeight="700">A</text>
+              {TREE_MAP_EDGES.map((edge) => (
+                <path key={`${edge.id}-glow`} d={edge.d} fill="none" stroke="#9ebd77" strokeLinecap="round" strokeWidth="3" filter="url(#map-glow)" aria-hidden="true" />
+              ))}
+              {TREE_MAP_EDGES.map((edge) => (
+                <path key={edge.id} className="landing-branch-map__edge" data-tree-edge={edge.id} data-parent={edge.parent} data-child={edge.child} d={edge.d} fill="none" stroke="#d8e8c0" strokeLinecap="round" strokeWidth="1.2" />
+              ))}
+              {TREE_MAP_NODES.map((node) => (
+                <g key={node.id} data-tree-level={node.level} data-tree-node={node.id}>
+                  <circle cx={node.x} cy={node.y} r={node.r} fill={node.fill} />
+                  <text x={node.x} y={node.y + 4} textAnchor="middle" fill="#173322" fontSize="9" fontWeight="700">{node.label}</text>
+                </g>
+              ))}
             </svg>
-            <p className="landing-solution-visual__caption">同一个问题，可以留下多条可回到现场的路径。</p>
           </div>
-          <div className="landing-linear-visual" data-reveal>
-            <div className="landing-linear-stack" aria-hidden="true">
-              <div className="landing-linear-line"><span /><span /><span /><span /><span /></div>
-              <div className="landing-chat-bubble landing-chat-bubble--muted">继续追问……</div>
-              <div className="landing-chat-bubble landing-chat-bubble--muted landing-chat-bubble--short">刚才的上下文去哪了？</div>
-              <div className="landing-linear-break"><Waves size={17} aria-hidden="true" /> context lost</div>
+          <div className="landing-linear-visual">
+            <div className="landing-linear-stack" role="img" aria-label="线性对话逐步覆盖早先上下文的示意图">
+              <div className="landing-linear-line" aria-hidden="true"><span /><span /><span /><span /><span /></div>
+              <div className="landing-linear-thread" aria-hidden="true">
+                <span className="landing-linear-thread__segment landing-linear-thread__segment--one" />
+                <span className="landing-linear-thread__segment landing-linear-thread__segment--two" />
+                <span className="landing-linear-thread__segment landing-linear-thread__segment--three" />
+              </div>
+              <div className="landing-linear-break" aria-hidden="true"><Waves size={17} /></div>
             </div>
             <div className="landing-dilemma-copy">
+              <p className="landing-kicker">Dilemma / Solution</p>
+              <h2 id="dilemma-title">思考不是一条线。</h2>
               <p>线性对话只能把你带向下一句。</p>
               <p>Tree Chat 让每一个分岔都留下来。</p>
             </div>
@@ -555,19 +598,20 @@ export function LandingPage() {
       <section ref={treeStoryRef} className="landing-tree-story" aria-labelledby="tree-story-title">
         <div className="landing-tree-sticky">
           <NarrativeTreeScene
-            progress={treeProgress}
+            progress={treeChapter / (TREE_STORIES.length - 1)}
+            progressRef={treeProgressRef}
             reducedMotion={reducedMotion}
-            mobile={mobile}
             active={activeChapter >= 3 && activeChapter <= 7}
           />
           <div className="landing-tree-vignette" aria-hidden="true" />
-          <div className="landing-container landing-tree-overlay">
-            <div ref={treeCopyRef} className="landing-tree-copy" key={story.chapter}>
-              <p className="landing-kicker" style={{ color: story.accent }}>{story.chapter}</p>
-              <p className="landing-tree-copy__kicker">{story.kicker}</p>
-              <h2 id="tree-story-title">{story.title}</h2>
-              <p>{story.body}</p>
-            <div className="landing-tree-facts">
+          <div className="landing-tree-overlay" data-tree-composition={`chapter-${treeChapter + 4}`}>
+            <div ref={treeCopyRef} className={`landing-tree-copy landing-tree-copy--chapter-${treeChapter + 4}`} key={story.chapter}>
+              <div className="landing-tree-copy__intro">
+                <p className="landing-tree-copy__kicker" style={{ color: story.accent }}>{story.chapter} <span aria-hidden="true">·</span> {story.kicker}</p>
+                <h2 id="tree-story-title">{story.title}</h2>
+                <p>{story.body}</p>
+              </div>
+              <div className="landing-tree-facts">
                 {story.facts.map((fact) => <FeaturePill key={fact.label} {...fact} />)}
               </div>
             </div>
@@ -582,44 +626,44 @@ export function LandingPage() {
                 <span style={{ "--x": "-48%", "--y": "34%" } as CSSProperties}>Harvest</span>
               </div>
             )}
-            <div className="landing-tree-stage-label" aria-hidden="true"><span>SCROLL TO GROW</span><span className="landing-tree-stage-label__rule" /></div>
           </div>
-          <div className="landing-tree-progress" aria-hidden="true"><span style={{ transform: `scaleY(${treeProgress})` }} /></div>
         </div>
         <div className="landing-tree-scroll-track" aria-hidden="true">
-          {TREE_STORIES.map((item) => <div key={item.chapter} className="landing-tree-scroll-stop" />)}
+          {TREE_STORIES.map((item, index) => <div key={item.chapter} data-page={String(index + 4)} className="landing-tree-scroll-stop" />)}
         </div>
         <noscript>
           <div className="landing-tree-noscript">
-            <p className="landing-kicker">04–08 / Tree workspace</p>
+            <p className="landing-kicker">Tree workspace / 04–08</p>
             <h2>一棵可回望、可继续生长的思考树。</h2>
             <p>即使浏览器未启用脚本，仍可阅读 Tree Chat 的核心工作方式：</p>
             <ul>
               {TREE_STORIES.map((item) => <li key={item.chapter}><strong>{item.chapter} · {item.title}</strong><span>{item.body}</span></li>)}
             </ul>
-            <a className="landing-button landing-button--primary" href="/app">进入功能主页面 <ArrowUpRight size={18} aria-hidden="true" /></a>
+            <a className="landing-button landing-button--primary" href="/app">进入功能工作台 <ArrowUpRight size={18} aria-hidden="true" /></a>
           </div>
         </noscript>
       </section>
 
-      <section className="landing-section landing-footer-section" aria-labelledby="footer-title">
+      <section data-page="9" className="landing-section landing-footer-section" aria-labelledby="footer-title">
         <div className="landing-container">
-          <div className="landing-footer-reflection" data-reveal>
-            <p className="landing-kicker">09 / Reflection</p>
-            <h2 id="footer-title">一棵树，也要知道自己的边界。</h2>
+          <div className="landing-footer-reflection">
+            <div className="landing-footer-reflection__intro">
+              <p className="landing-kicker">Reflection / 开放与反思</p>
+              <h2 id="footer-title">一棵树，也要知道自己的边界。</h2>
+            </div>
             <div className="landing-limitation-grid">
-              <article><span>01</span><h3>需要模型连接</h3><p>回答依赖服务端配置的 DeepSeek API Key。</p></article>
-              <article><span>02</span><h3>工作区在浏览器里</h3><p>项目与进度由本地浏览器存储承载。</p></article>
-              <article><span>03</span><h3>状态不跨设备</h3><p>项目由浏览器 localStorage 承载，当前仓库未提供账号或云端同步。</p></article>
+              <article><span>依赖</span><h3>需要模型连接</h3><p>回答依赖服务端配置的 DeepSeek API Key。</p></article>
+              <article><span>存储</span><h3>工作区在浏览器里</h3><p>项目与进度由本地浏览器存储承载。</p></article>
+              <article><span>同步</span><h3>状态不跨设备</h3><p>项目由浏览器 localStorage 承载，当前仓库未提供账号或云端同步。</p></article>
             </div>
           </div>
-          <footer className="landing-footer" data-reveal>
+          <footer className="landing-footer">
             <div><BranchLogo /><p>让思考拥有枝叶。</p></div>
             <div className="landing-footer__links">
               <a href="https://github.com/hancewang77-hl/tree-chat" target="_blank" rel="noreferrer"><GitFork size={16} aria-hidden="true" /> GitHub</a>
               <a href="https://github.com/hancewang77-hl/tree-chat#license" target="_blank" rel="noreferrer"><BookOpen size={16} aria-hidden="true" /> MIT License</a>
             </div>
-            <a className="landing-button landing-button--primary" href="/app">进入功能主页面 <ArrowUpRight size={18} aria-hidden="true" /></a>
+            <a className="landing-button landing-button--primary" href="/app">进入功能工作台 <ArrowUpRight size={18} aria-hidden="true" /></a>
           </footer>
         </div>
       </section>

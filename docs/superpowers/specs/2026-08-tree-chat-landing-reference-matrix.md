@@ -4,15 +4,28 @@ This matrix records implementation principles, not copied visual assets or
 brand material. The product brief remains the source of truth for content,
 section order, and the tree metaphor.
 
+## External quality lenses
+
+The review also used the public guidance from [Taste Skill](https://github.com/Leonxlnx/taste-skill)
+(`design-taste-frontend`, v2 experimental) and [Impeccable](https://github.com/pbakaus/impeccable)
+(Skill 4.0.4; CLI package 3.5.0 at the reviewed upstream revision). These are
+heuristics, not additional product requirements: the Plan and the explicit
+1920×1080 scope win whenever a rule conflicts with the brief.
+
+| Lens | Adopted for this landing | Intentionally waived or bounded |
+| --- | --- | --- |
+| Taste Skill | Audit the existing IA before redesigning; fix typography, spacing, hierarchy, and overflow before adding effects; keep a single palette/token vocabulary; give every motion a narrative or state reason; use refs for continuous scroll and keep a fresh screenshot preflight | Its mobile-first branches, anti-centered-hero preference, and blanket ban on chapter labels do not apply to this brief; the SVG branch mark and R3F tree remain documented concept assets until final art review |
+| Impeccable | Treat the page as a Persuade/landing surface with one dominant focus per frame; prefer proximity and hairline structure over nested cards; check contrast, focus, ARIA, browser surfaces, reduced motion, and rendered evidence; avoid bounce/elastic and generic repeated reveal motion | Responsive/adapt and multi-viewport checks are a deliberate scope waiver for this review build; Plan-backed paper texture, chapter wayfinding, and large centered hero type are retained |
+
 | Surface | Reference pattern | Applied principle | Deliberately not copied |
 | --- | --- | --- | --- |
 | Header | Editorial landing pages with transparent-to-solid headers | Keep the brand and one primary CTA available while scroll changes contrast | No third-party logo, label, or exact header styling |
 | Progress | Long-form storytelling pages | Show one compact chapter status rather than a clickable mega-menu | No forced page snapping or hidden navigation |
 | Hero | Product showcase hero layouts | Pair one dominant statement with a primary “进入功能页” CTA and a secondary exploration CTA | No stock hero image, generic AI orb, or purple gradient |
 | Feature copy | Product storytelling callouts | Let short facts appear beside the visual scene, with the full explanation readable without hover | No icon-only explanation or hover-only interaction |
-| Responsive layout | Mobile-first editorial grids | Collapse columns, preserve reading order, reduce 3D complexity, and keep CTA targets at least 44px | No horizontal scrolling or desktop canvas squeezed into a phone |
-| Mobile CTA and spacing | Compact mobile product headers | Keep the entry CTA fixed in the header, reduce secondary information, and preserve generous edge spacing | No copied bottom bar, app-store badge, or proprietary mobile navigation |
-| Mobile information folding | Responsive feature showcases | Stack facts in reading order and simplify the canopy model below 900px without hiding core copy | No hover-only cards, carousels, or collapsed copy required to understand the product |
+| Desktop review canvas | 1920×1080 editorial composition | Keep each landing chapter on a fixed 1080px canvas, with chapter-specific tree, mask, copy, and fact positions | No mobile/tablet breakpoint branches, squeezed desktop canvas, or horizontal overflow |
+| Page 3 tree topology | Root-to-branch-to-leaf diagram | Use three explicit levels: one question root, two branch nodes, and four answer leaves; every edge is a one-way parent-child link | No shared terminal node, branch rejoin, ancestor return, or visual ring/cycle |
+| Accessibility fallback | Reduced-motion and resilient document flow | Preserve keyboard focus, ARIA labels, no-script copy, and a static tree when WebGL is unavailable | No interaction that is required only on a specific device class |
 | Footer | Open-source product footers | Show only verified repository and MIT License facts | No invented team, registration, contact, or usage metrics |
 
 ## Motion reference

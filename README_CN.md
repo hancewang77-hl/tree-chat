@@ -22,6 +22,8 @@
 - `/app` 是正式工作台，保留树状编辑、AI 分支、Nutrient、Auxo、Rings 和 Harvest 等交互。
 - 介绍页的首屏、固定顶部 CTA 和页尾 CTA 都可以直接进入 `/app`。
 
+本轮介绍页采用固定的 `1920×1080` 评审构图；移动端、平板和短横屏断点暂不在本评审版本范围。`prefers-reduced-motion`、键盘焦点、ARIA 标签和 WebGL 不可用时的静态阅读降级仍保留。
+
 ## 核心创新
 
 | 维度 | 传统对话 | Tree Chat |
