@@ -251,40 +251,70 @@ export const TREE_SEGMENTS = createTreeSegments();
 function createCanopyClusters() {
   const random = createRandom(0x2e8b57);
   const clusters: CanopyClusterSpec[] = [];
-  const canopyRadius = 5.05;
-  const canopyBase = 5.16;
-  const canopyHeight = 3.12;
-  // Smaller, denser volumes avoid the old "five polygon balls" silhouette.
-  // The count still stays comfortably below a single instanced draw-call's
-  // practical range on the target desktop viewport.
-  const clusterCount = 260;
+  const canopyRadius = 5.45;
+  const canopyBase = 5.1;
+  const canopyHeight = 3.0;
+  // The crown is made from enough overlapping volumes to read as one broad
+  // dome, while still leaving tiny gaps between layers for depth. A little
+  // over half of the clusters are anchored to real branch endpoints below;
+  // this prevents the old detached-balloon look in close camera shots.
+  const clusterCount = 300;
+  const anchorCount = Math.floor(clusterCount * 0.62);
+  const foliageBranches = TREE_SEGMENTS.filter(
+    (segment) => segment.role === "primary" || segment.role === "secondary" || segment.role === "twig",
+  );
 
   for (let index = 0; index < clusterCount; index += 1) {
-    // Bias the interior toward a denser heart while retaining enough edge
-    // samples for a continuous, near-circular silhouette from above.
-    const radialRatio = Math.pow(random(), 1.24);
-    const azimuth = index * GOLDEN_ANGLE + range(random, -0.12, 0.12);
-    const irregularity = 1 + range(random, -0.1, 0.1);
-    const radius = canopyRadius * radialRatio * irregularity;
-    // A broad, low dome with a slightly lifted inner crown. The edge is kept
-    // lower so the 360° footprint remains legible from the Page 8 top view.
-    const dome = canopyHeight * (1 - Math.pow(radialRatio, 1.52));
-    const edgeSparse = 1 - radialRatio * 0.3;
+    const anchored = index < anchorCount && foliageBranches.length > 0;
+    let radialRatio: number;
+    let azimuth: number;
+    let position: Point3;
+
+    if (anchored) {
+      const source = foliageBranches[index % foliageBranches.length];
+      const endpoint = source.points.at(-1) ?? source.points[0];
+      const endpointRadius = Math.hypot(endpoint[0], endpoint[2]);
+      const projectedRadius = Math.min(canopyRadius * 0.98, endpointRadius * range(random, 0.9, 1.03));
+      azimuth = source.azimuth + range(random, -0.22, 0.22);
+      radialRatio = Math.max(0.04, Math.min(0.98, projectedRadius / canopyRadius));
+      position = [
+        Math.cos(azimuth) * projectedRadius + range(random, -0.2, 0.2),
+        endpoint[1] + range(random, -0.2, 0.46),
+        Math.sin(azimuth) * projectedRadius + range(random, -0.2, 0.2),
+      ];
+    } else {
+      // Mix an area-uniform sample with a center-biased sample: the former
+      // keeps the broad circular rim continuous, the latter thickens the
+      // interior heart without making a perfect sphere.
+      radialRatio = index % 2 === 0 ? Math.sqrt(random()) : Math.pow(random(), 1.35);
+      azimuth = index * GOLDEN_ANGLE + range(random, -0.12, 0.12);
+      const irregularity = 1 + range(random, -0.1, 0.1);
+      const radius = canopyRadius * radialRatio * irregularity;
+      const dome = canopyHeight * (1 - Math.pow(radialRatio, 1.52));
+      position = [
+        Math.cos(azimuth) * radius,
+        canopyBase + dome + range(random, -0.32, 0.3) - radialRatio * 0.16,
+        Math.sin(azimuth) * radius,
+      ];
+    }
+
+    // Keep the underside low and the outer rim full: shrinking the edge too
+    // aggressively was what created the sparse arch in the previous frame.
+    const edgeSparse = 1 - radialRatio * 0.12;
     const layer = radialRatio < 0.34 ? "inner" : radialRatio < 0.76 ? "middle" : "edge";
-    const layerScale = layer === "inner" ? 0.92 : layer === "middle" ? 0.82 : 0.7;
+    const layerScale = layer === "inner" ? 0.94 : layer === "middle" ? 0.9 : 0.86;
     const layerPalette = layer === "inner"
       ? LEAF_COLORS.slice(0, 3)
       : layer === "middle"
         ? LEAF_COLORS.slice(1, 5)
         : LEAF_COLORS.slice(2);
-    const scaleBase = range(random, 0.28, 0.58) * edgeSparse * layerScale;
+    // Keep individual clusters small enough for the Page 5 branch close-up
+    // to remain legible while the 300 overlapping instances preserve a
+    // continuous crown in the Page 4 establishing and Page 8 top views.
+    const scaleBase = range(random, 0.3, 0.56) * edgeSparse * layerScale;
     clusters.push({
       id: `canopy-${String(index + 1).padStart(3, "0")}`,
-      position: [
-        Math.cos(azimuth) * radius,
-        canopyBase + dome + range(random, -0.32, 0.3) - radialRatio * 0.18,
-        Math.sin(azimuth) * radius,
-      ],
+      position,
       scale: [
         scaleBase * range(random, 0.85, 1.25),
         scaleBase * range(random, 0.72, 1.12),

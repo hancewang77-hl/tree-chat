@@ -25,10 +25,13 @@ export const CAMERA_KEYS: Array<{ progress: number; position: Point3; target: Po
   // Page 4: complete establishing view. The tree is wider than it is tall,
   // while its exposed lower trunk remains readable in the 1920×1080 frame.
   { progress: 0, position: [0, 2.2, 16], target: [0, 2.35, 0] },
-  // Page 5: inspect a mature primary branch from above and to the side.
-  { progress: 0.25, position: [7.4, 8.6, 7.1], target: [2.65, 5.75, 0.25] },
-  // Page 6: move down to the bole while keeping the trunk on the right side.
-  { progress: 0.5, position: [-7.8, 4.1, 7.6], target: [0.25, 2.15, 0] },
+  // Page 5: inspect a mature primary branch from below and to the side. The
+  // previous overhead key looked through the dense crown and hid the branch
+  // action; this low angle keeps the branch underside and its twig hierarchy
+  // readable while foliage remains layered above it.
+  { progress: 0.25, position: [7.4, 1.25, 7.1], target: [2.65, 3.15, 0.25] },
+  // Page 6: move down to the exposed bole instead of aiming into the canopy.
+  { progress: 0.5, position: [-7.8, 0.8, 7.6], target: [0.25, 0.7, 0] },
   // Page 7: settle close to the root flare and the radial surface roots.
   { progress: 0.75, position: [6.6, 1.6, 7.6], target: [0, -0.35, 0] },
   // Page 8: near-orthographic top view of the circular canopy footprint.
@@ -89,8 +92,8 @@ function createTaperedBranchGeometry(segment: TreeSegmentSpec) {
     "centripetal",
     0.5,
   );
-  const tubularSegments = segment.role === "trunk" ? 24 : segment.role === "primary" ? 12 : segment.role === "root" ? 9 : segment.role === "secondary" ? 8 : 6;
-  const radialSegments = segment.role === "trunk" ? 14 : segment.role === "primary" ? 10 : segment.role === "root" ? 9 : 7;
+  const tubularSegments = segment.role === "trunk" ? 32 : segment.role === "primary" ? 18 : segment.role === "root" ? 14 : segment.role === "secondary" ? 11 : 8;
+  const radialSegments = segment.role === "trunk" ? 24 : segment.role === "primary" ? 16 : segment.role === "root" ? 12 : 10;
   const frames = curve.computeFrenetFrames(tubularSegments, false);
   const vertices: number[] = [];
   const uvs: number[] = [];
@@ -156,10 +159,9 @@ function createTaperedBranchGeometry(segment: TreeSegmentSpec) {
 }
 
 function createCanopyBlobGeometry() {
-  // A subdivided icosphere keeps the cluster silhouette organic from every
-  // angle. It avoids the obvious lat/long seams of a UV sphere while still
-  // being cheap enough to instance hundreds of times.
-  const geometry = new THREE.IcosahedronGeometry(1, 2);
+  // A high-resolution, subtly displaced sphere keeps the cluster silhouette
+  // organic from every angle without the faceted low-poly appearance.
+  const geometry = new THREE.SphereGeometry(1, 32, 18);
   const position = geometry.getAttribute("position");
   const vertex = new THREE.Vector3();
   for (let index = 0; index < position.count; index += 1) {
@@ -204,10 +206,10 @@ function createLeafletGeometry() {
 }
 
 function createRootFlareGeometry() {
-  // The root collar is deliberately irregular: a perfect UV sphere reads as
-  // a decorative blob, while broad lobes blend the bole into the radial roots
-  // like the buttress flare of a mature street tree.
-  const geometry = new THREE.IcosahedronGeometry(1, 2);
+  // The root collar is deliberately irregular: broad smooth lobes blend the
+  // bole into the radial roots like a mature tree's buttress flare without a
+  // central faceted boulder that would hide the roots in Page 7.
+  const geometry = new THREE.SphereGeometry(1, 32, 18);
   const position = geometry.getAttribute("position");
   const vertex = new THREE.Vector3();
   for (let index = 0; index < position.count; index += 1) {
@@ -217,7 +219,7 @@ function createRootFlareGeometry() {
       + Math.sin(azimuth * 9.0 - vertex.y * 1.7) * 0.045;
     vertex.x *= lobe;
     vertex.z *= lobe;
-    vertex.y *= 0.86;
+    vertex.y *= 0.78;
     position.setXYZ(index, vertex.x, vertex.y, vertex.z);
   }
   position.needsUpdate = true;
@@ -315,7 +317,7 @@ function MergedBranchMesh({
         color={color}
         map={barkTexture}
         bumpMap={barkTexture}
-        bumpScale={color === "#66452f" ? 0.18 : color === "#805738" ? 0.11 : 0.075}
+        bumpScale={color === "#755335" ? 0.18 : color === "#8b603e" ? 0.11 : 0.075}
         roughness={0.94}
         emissive="#5a341f"
         emissiveIntensity={0.16}
@@ -480,13 +482,13 @@ function TreeModel({ groupRef }: { groupRef: { current: THREE.Group | null } }) 
 
   return (
     <group ref={groupRef} position={[0, -2.05, 0]}>
-      <MergedBranchMesh segments={trunkAndRoots} barkTexture={barkTexture} color="#66452f" castShadow receiveShadow={false} />
-      <MergedBranchMesh segments={primaryBranches} barkTexture={barkTexture} color="#805738" castShadow receiveShadow={false} />
-      <MergedBranchMesh segments={fineBranches} barkTexture={barkTexture} color="#916745" castShadow={false} receiveShadow={false} />
+      <MergedBranchMesh segments={trunkAndRoots} barkTexture={barkTexture} color="#755335" castShadow receiveShadow={false} />
+      <MergedBranchMesh segments={primaryBranches} barkTexture={barkTexture} color="#8b603e" castShadow receiveShadow={false} />
+      <MergedBranchMesh segments={fineBranches} barkTexture={barkTexture} color="#9a704a" castShadow={false} receiveShadow={false} />
       <VolumetricCanopy />
-      <mesh geometry={rootFlareGeometry} position={[0, -0.02, 0]} scale={[1.3, 0.55, 1.3]} castShadow receiveShadow={false} dispose={null}>
+      <mesh geometry={rootFlareGeometry} position={[0, -0.02, 0]} scale={[0.98, 0.46, 0.98]} castShadow receiveShadow={false} dispose={null}>
         <meshStandardMaterial
-          color="#66452f"
+          color="#755335"
           map={barkTexture}
           bumpMap={barkTexture}
           bumpScale={0.18}
