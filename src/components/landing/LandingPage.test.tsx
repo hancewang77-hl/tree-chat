@@ -73,6 +73,16 @@ describe("LandingPage seed transition", () => {
     expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "auto", block: "start" });
   });
 
+  test("stages a mature tree silhouette in the planted seed sequence", () => {
+    render(<LandingPage />);
+
+    const matureTree = document.querySelector(".landing-seed-tree");
+    expect(matureTree).toBeTruthy();
+    expect(matureTree?.querySelector(".landing-seed-tree__trunk")).toBeTruthy();
+    expect(matureTree?.querySelector(".landing-seed-tree__canopy")).toBeTruthy();
+    expect(matureTree?.querySelector(".landing-seed-tree__root")).toBeTruthy();
+  });
+
   test("renders Page 3 as a three-level tree without rejoining branches", () => {
     render(<LandingPage />);
 
@@ -82,6 +92,12 @@ describe("LandingPage seed transition", () => {
 
     expect(map).toHaveAttribute("aria-label", "三层树状结构：一个问题、两个分支、四个回答节点");
     expect(map).toHaveAttribute("data-tree-structure", "three-level-acyclic");
+    expect(map).toHaveAttribute("data-tree-direction", "root-to-leaf");
+
+    const comparison = document.querySelector(".landing-linear-stack");
+    expect(comparison).toHaveAttribute("data-tree-role", "comparison-only");
+    expect(comparison).toHaveAttribute("aria-label", "线性对话弊端的独立对照示意，不属于左侧树结构");
+    expect(map.contains(comparison)).toBe(false);
 
     const expectedNodeIds = [
       "page3-root",

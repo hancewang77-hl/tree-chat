@@ -25,15 +25,17 @@ export const CAMERA_KEYS: Array<{ progress: number; position: Point3; target: Po
   // Page 4: complete establishing view. The tree is wider than it is tall,
   // while its exposed lower trunk remains readable in the 1920×1080 frame.
   { progress: 0, position: [0, 2.2, 16], target: [0, 2.35, 0] },
-  // Page 5: inspect a mature primary branch from below and to the side. The
-  // previous overhead key looked through the dense crown and hid the branch
-  // action; this low angle keeps the branch underside and its twig hierarchy
-  // readable while foliage remains layered above it.
-  { progress: 0.25, position: [7.4, 1.25, 7.1], target: [2.65, 3.15, 0.25] },
-  // Page 6: move down to the exposed bole instead of aiming into the canopy.
-  { progress: 0.5, position: [-7.8, 0.8, 7.6], target: [0.25, 0.7, 0] },
-  // Page 7: settle close to the root flare and the radial surface roots.
-  { progress: 0.75, position: [6.6, 1.6, 7.6], target: [0, -0.35, 0] },
+  // Page 5: inspect a mature primary branch from a roughly 45-degree
+  // downward angle. The elevated camera keeps the branch hierarchy and its
+  // layered foliage legible instead of turning the frame into a low-angle
+  // silhouette.
+  { progress: 0.25, position: [7.4, 11.8, 7.1], target: [2.65, 4.65, 0.25] },
+  // Page 6: move down to the exposed bole, biased right so the left editorial
+  // rail remains clear.
+  { progress: 0.5, position: [-7.8, 5.2, 7.6], target: [-0.85, 2.15, 0] },
+  // Page 7: settle into a steep oblique top view of the root flare and radial
+  // surface roots; the final 3D asset may add a separate root mesh.
+  { progress: 0.75, position: [6.6, 10.8, 7.6], target: [0, -0.45, 0] },
   // Page 8: near-orthographic top view of the circular canopy footprint.
   { progress: 1, position: [0, 18, 1.8], target: [0, 4.65, 0] },
 ];

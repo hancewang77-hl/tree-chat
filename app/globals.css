@@ -255,7 +255,7 @@ body.landing-scroll-root::-webkit-scrollbar-track {
   right: 0;
   top: 0;
   /* The perceived shrink uses transforms so scrolling never animates layout. */
-  transition: backdrop-filter var(--landing-duration-nav) ease, border-color var(--landing-duration-nav) ease, transform var(--landing-duration-nav) ease;
+  transition: background-color var(--landing-duration-nav) ease, backdrop-filter var(--landing-duration-nav) ease, border-color var(--landing-duration-nav) ease, height var(--landing-duration-nav) ease, transform var(--landing-duration-nav) ease;
   z-index: 1000;
 }
 
@@ -271,14 +271,35 @@ body.landing-scroll-root::-webkit-scrollbar-track {
 }
 
 .landing-header.is-scrolled {
-  background: rgba(8, 27, 20, 0.82);
+  background: rgba(238, 243, 232, 0.94);
   border-bottom: 1px solid var(--landing-border);
   backdrop-filter: blur(18px);
-  transform: translateY(-7px);
+  height: 56px;
+  transform: none;
 }
 
 .landing-header.is-scrolled .landing-header__nav {
-  transform: scale(.96);
+  height: 56px;
+  transform: none;
+}
+
+.landing-header.is-scrolled .landing-header__brand,
+.landing-header.is-scrolled .landing-progress__label,
+.landing-header.is-scrolled .landing-button--header {
+  color: var(--landing-ink);
+}
+
+.landing-header.is-scrolled .landing-progress__line {
+  background: rgba(19, 41, 30, .2);
+}
+
+.landing-header.is-scrolled .landing-progress__line span {
+  background: var(--landing-forest-700);
+}
+
+.landing-header.is-scrolled .landing-button--header {
+  background: rgba(19, 41, 30, .08);
+  border-color: rgba(19, 41, 30, .28);
 }
 
 .landing-header__brand {
@@ -442,7 +463,7 @@ body.landing-scroll-root::-webkit-scrollbar-track {
 
 .landing-hero {
   align-items: center;
-  background: radial-gradient(ellipse at 50% 76%, rgba(125, 77, 56, 0.42), transparent 34%), linear-gradient(135deg, #091e17 0%, #103b29 52%, #1b3e31 100%);
+  background: radial-gradient(ellipse at 50% 76%, rgba(125, 77, 56, 0.48), transparent 34%), linear-gradient(135deg, #081b14 0%, #1d2f25 42%, #3d2526 100%);
   display: flex;
   justify-content: center;
   height: 1080px;
@@ -761,6 +782,47 @@ body.landing-scroll-root::-webkit-scrollbar-track {
   transform: translateY(0) scaleY(1);
 }
 
+/* The seed sequence resolves into a compact mature-tree silhouette before
+   the narrative advances to Page 3. It is intentionally a vector staging
+   asset, not the Page 4–8 hero tree; the latter remains the shared 3D scene. */
+.landing-seed-tree {
+  height: 450px;
+  left: 50%;
+  margin-left: -220px;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 310px;
+  transform: translateY(26px) scale(.72);
+  transform-origin: 50% 100%;
+  width: 440px;
+  z-index: 3;
+}
+
+.landing-seed-tree__trunk,
+.landing-seed-tree__branch,
+.landing-seed-tree__root,
+.landing-seed-tree__twig {
+  fill: none;
+  stroke: url(#seed-tree-bark);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.landing-seed-tree__trunk { stroke-width: 25; }
+.landing-seed-tree__branch { stroke-width: 12; }
+.landing-seed-tree__root { stroke-width: 8; opacity: .85; }
+.landing-seed-tree__twig { stroke-width: 4; opacity: .72; }
+
+.landing-seed-tree__canopy {
+  filter: drop-shadow(0 18px 22px rgba(4, 16, 9, .35));
+}
+
+.landing-seed-stage.is-planted .landing-seed-tree {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
 .landing-seed-button__halo {
   animation: none;
   border: 1px solid rgba(216, 232, 188, 0.64);
@@ -808,8 +870,8 @@ body.landing-scroll-root::-webkit-scrollbar-track {
 .landing-dilemma-grid {
   align-items: center;
   display: grid;
-  gap: 110px;
-  grid-template-columns: minmax(0, 2fr) minmax(420px, 1fr);
+  gap: 96px;
+  grid-template-columns: 1152px 480px;
   height: 1080px;
 }
 
@@ -1149,17 +1211,17 @@ body.landing-scroll-root::-webkit-scrollbar-track {
 }
 
 .landing-tree-copy--chapter-4 .landing-tree-copy__intro {
-  left: 120px;
+  left: 96px;
   top: 132px;
-  width: 560px;
+  width: 410px;
 }
 
 .landing-tree-copy--chapter-4 .landing-tree-copy__intro > p:last-child {
-  max-width: 500px;
+  max-width: 380px;
 }
 
 .landing-tree-copy--chapter-4 .landing-tree-copy__intro h2 {
-  font-size: 70px;
+  font-size: 62px;
 }
 
 .landing-tree-copy--chapter-4 .landing-tree-facts {
@@ -1169,16 +1231,16 @@ body.landing-scroll-root::-webkit-scrollbar-track {
 
 .landing-tree-copy--chapter-4 .landing-feature-pill {
   position: absolute;
-  top: 640px;
-  width: 420px;
+  top: 760px;
+  width: 360px;
 }
 
 .landing-tree-copy--chapter-4 .landing-feature-pill:first-child {
-  left: 120px;
+  left: 96px;
 }
 
 .landing-tree-copy--chapter-4 .landing-feature-pill:last-child {
-  right: 120px;
+  right: 96px;
 }
 
 /* Page 5 — the branch close-up stays in the left two-fifths. */
@@ -1212,7 +1274,7 @@ body.landing-scroll-root::-webkit-scrollbar-track {
 
 .landing-tree-copy--chapter-6 .landing-tree-copy__intro {
   left: 120px;
-  top: 142px;
+  top: 132px;
   width: 620px;
 }
 
@@ -1235,7 +1297,7 @@ body.landing-scroll-root::-webkit-scrollbar-track {
 
 .landing-tree-copy--chapter-7 .landing-tree-facts {
   display: flex;
-  bottom: 132px;
+  bottom: 260px;
   left: 120px;
   width: 620px;
 }
@@ -1244,7 +1306,7 @@ body.landing-scroll-root::-webkit-scrollbar-track {
   backdrop-filter: blur(10px);
   background: linear-gradient(90deg, transparent, rgba(7, 23, 16, .16));
   content: "";
-  inset: 0 0 0 67%;
+  inset: 0 0 0 75%;
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 48%);
   mask-image: linear-gradient(90deg, transparent, #000 48%);
   pointer-events: none;
@@ -1514,6 +1576,7 @@ body.landing-scroll-root::-webkit-scrollbar-track {
   }
 
   .landing-sprout,
+  .landing-seed-tree,
   .landing-seed-copy,
   .landing-tree-copy__intro,
   .landing-tree-facts {

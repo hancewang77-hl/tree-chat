@@ -216,6 +216,7 @@ export function LandingPage() {
   const treeCopyRef = useRef<HTMLDivElement | null>(null);
   const seedRef = useRef<HTMLButtonElement | null>(null);
   const sproutRef = useRef<SVGSVGElement | null>(null);
+  const matureTreeRef = useRef<SVGSVGElement | null>(null);
   const seedHintRef = useRef<HTMLParagraphElement | null>(null);
   const programmaticScrollRef = useRef(false);
   const revealAnimations = useRef<RevealAnimation[]>([]);
@@ -365,7 +366,7 @@ export function LandingPage() {
     const header = headerRef.current;
     if (!header || reducedMotion) return;
     const animation = animate(header, {
-      backgroundColor: scrolled ? "rgba(8, 27, 20, 0.82)" : "rgba(8, 27, 20, 0)",
+      backgroundColor: scrolled ? "rgba(238, 243, 232, 0.94)" : "rgba(8, 27, 20, 0)",
       duration: LANDING_MOTION.nav.duration,
       ease: LANDING_MOTION.nav.ease,
     });
@@ -536,6 +537,18 @@ export function LandingPage() {
       });
       revealAnimations.current.push(sproutAnimation);
     }
+
+    if (matureTreeRef.current) {
+      const matureTreeAnimation = animate(matureTreeRef.current, {
+        opacity: [0, 1],
+        translateY: [26, 0],
+        scale: [0.72, 1],
+        duration: 760,
+        delay: 480,
+        ease: "out(4)",
+      });
+      revealAnimations.current.push(matureTreeAnimation);
+    }
   }
 
   const backgroundFragments = useMemo(
@@ -619,6 +632,34 @@ export function LandingPage() {
               <path className="landing-sprout__leaf landing-sprout__leaf--right" d="M100 44c14-6 25-2 29 8-9 11-21 10-29-8Z" />
               <circle className="landing-sprout__bud" cx="72" cy="26" r="6" />
             </svg>
+            <svg ref={matureTreeRef} className="landing-seed-tree" viewBox="0 0 440 520" aria-hidden="true">
+              <defs>
+                <linearGradient id="seed-tree-bark" x1="0" x2="1" y1="0" y2="0">
+                  <stop offset="0" stopColor="#3d2920" />
+                  <stop offset="0.46" stopColor="#8b6040" />
+                  <stop offset="1" stopColor="#4e3024" />
+                </linearGradient>
+                <radialGradient id="seed-tree-leaf" cx="42%" cy="30%">
+                  <stop offset="0" stopColor="#b9d883" />
+                  <stop offset="0.58" stopColor="#6c9e50" />
+                  <stop offset="1" stopColor="#315f37" />
+                </radialGradient>
+              </defs>
+              <path className="landing-seed-tree__root" d="M220 472C176 470 128 481 78 495M220 472c46-2 94 9 144 23M220 474c-15 8-30 17-42 31M220 474c15 8 30 17 42 31" />
+              <path className="landing-seed-tree__trunk" d="M220 474C211 425 211 361 220 305C226 266 222 226 220 184" />
+              <path className="landing-seed-tree__branch" d="M220 306C174 286 137 254 99 207M220 298c45-19 82-49 120-91M220 241c-33-29-55-61-74-101M220 238c34-27 58-59 80-99M220 192c-10-20-14-41-16-67M220 192c13-20 22-40 25-63" />
+              <g className="landing-seed-tree__canopy">
+                <ellipse cx="220" cy="112" rx="128" ry="75" fill="url(#seed-tree-leaf)" />
+                <ellipse cx="126" cy="154" rx="82" ry="64" fill="#4d8245" />
+                <ellipse cx="314" cy="154" rx="84" ry="65" fill="#5f934b" />
+                <ellipse cx="174" cy="88" rx="76" ry="57" fill="#7ca75a" />
+                <ellipse cx="270" cy="88" rx="78" ry="58" fill="#6c9e50" />
+                <ellipse cx="220" cy="61" rx="56" ry="40" fill="#9fbd78" />
+                <ellipse cx="91" cy="199" rx="49" ry="34" fill="#3f743f" />
+                <ellipse cx="349" cy="199" rx="51" ry="35" fill="#477d42" />
+              </g>
+              <path className="landing-seed-tree__twig" d="M98 207c-11-16-22-25-35-31M340 207c12-17 24-25 38-31M145 145c-15-13-25-25-32-40M294 145c15-13 26-25 33-40" />
+            </svg>
             <button ref={seedRef} type="button" className="landing-seed-button" onClick={plantSeed} aria-pressed={seedPlanted} aria-label={seedPlanted ? "种子已播下" : "点击播下 Tree Chat 种子"}>
               <svg className="landing-seed" viewBox="0 0 88 110" aria-hidden="true">
                 <defs><radialGradient id="seed-shell" cx="34%" cy="27%"><stop offset="0" stopColor="#e9d4a0" /><stop offset="0.5" stopColor="#a9773f" /><stop offset="1" stopColor="#563a2a" /></radialGradient></defs>
@@ -635,7 +676,16 @@ export function LandingPage() {
       <section ref={dilemmaRef} id="dilemma" data-page="3" className="landing-section landing-dilemma" aria-labelledby="dilemma-title">
         <div className="landing-container landing-dilemma-grid">
           <div className="landing-solution-visual">
-            <svg className="landing-branch-map" viewBox="0 0 560 380" role="img" aria-label="三层树状结构：一个问题、两个分支、四个回答节点" data-tree-structure="three-level-acyclic">
+            <svg
+              className="landing-branch-map"
+              viewBox="0 0 560 380"
+              role="img"
+              aria-label="三层树状结构：一个问题、两个分支、四个回答节点"
+              data-tree-structure="three-level-acyclic"
+              data-tree-direction="root-to-leaf"
+            >
+              <title>Tree Chat 三层树状结构</title>
+              <desc>左侧一个问题节点向右展开为两个分支，每个分支再连接两个独立回答节点；没有回连或环。</desc>
               <defs><filter id="map-glow"><feGaussianBlur stdDeviation="5" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter></defs>
               {TREE_MAP_EDGES.map((edge) => (
                 <path key={`${edge.id}-glow`} d={edge.d} fill="none" stroke="#9ebd77" strokeLinecap="round" strokeWidth="3" filter="url(#map-glow)" aria-hidden="true" />
@@ -652,7 +702,12 @@ export function LandingPage() {
             </svg>
           </div>
           <div className="landing-linear-visual">
-            <div className="landing-linear-stack" role="img" aria-label="线性对话逐步覆盖早先上下文的示意图">
+            <div
+              className="landing-linear-stack"
+              role="img"
+              aria-label="线性对话弊端的独立对照示意，不属于左侧树结构"
+              data-tree-role="comparison-only"
+            >
               <div className="landing-linear-line" aria-hidden="true"><span /><span /><span /><span /><span /></div>
               <div className="landing-linear-thread" aria-hidden="true">
                 <span className="landing-linear-thread__segment landing-linear-thread__segment--one" />
@@ -697,8 +752,11 @@ export function LandingPage() {
                 <div className="landing-canopy-orbit__ring landing-canopy-orbit__ring--two" />
                 <div className="landing-canopy-orbit__core"><Trees size={30} strokeWidth={1.2} /></div>
                 <span style={{ "--x": "-46%", "--y": "-6%" } as CSSProperties}>Branch</span>
+                <span style={{ "--x": "-5%", "--y": "-51%" } as CSSProperties}>Graft</span>
                 <span style={{ "--x": "33%", "--y": "-35%" } as CSSProperties}>Nutrient</span>
+                <span style={{ "--x": "52%", "--y": "-4%" } as CSSProperties}>Prune</span>
                 <span style={{ "--x": "35%", "--y": "35%" } as CSSProperties}>Rings</span>
+                <span style={{ "--x": "4%", "--y": "51%" } as CSSProperties}>Leaf</span>
                 <span style={{ "--x": "-48%", "--y": "34%" } as CSSProperties}>Harvest</span>
               </div>
             )}

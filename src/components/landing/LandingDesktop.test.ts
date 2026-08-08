@@ -53,8 +53,20 @@ describe("1920 × 1080 landing composition contract", () => {
   test("keeps the establishing tree and Page 4 copy inside the review frame", () => {
     expect(scene).toContain("position: [0, 2.2, 16]");
     expect(css).toContain(".landing-tree-copy--chapter-4 .landing-tree-copy__intro");
-    expect(css).toContain("width: 560px");
-    expect(css).toContain("max-width: 500px");
+    expect(css).toContain("width: 410px");
+    expect(css).toContain("max-width: 380px");
+  });
+
+  test("uses elevated branch and root camera keys for the requested review angles", () => {
+    expect(scene).toContain("position: [7.4, 11.8, 7.1]");
+    expect(scene).toContain("target: [2.65, 4.65, 0.25]");
+    expect(scene).toContain("position: [6.6, 10.8, 7.6]");
+    expect(scene).toContain("target: [0, -0.45, 0]");
+  });
+
+  test("keeps Page 3 left-weighted and Page 7 right-quarter mask aligned", () => {
+    expect(css).toContain("grid-template-columns: 1152px 480px");
+    expect(css).toContain("inset: 0 0 0 75%");
   });
 
   test("keeps navigation chrome singular and Page 3 diagrammatic", () => {
