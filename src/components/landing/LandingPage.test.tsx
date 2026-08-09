@@ -250,16 +250,31 @@ describe("LandingPage seed transition", () => {
     expect(document.body).not.toHaveClass("landing-scroll-root");
   });
 
-  test("releases scroll snap when Page 9 enters the viewport and restores it above the tail", () => {
+  test.each([1080, 900])("releases scroll snap at the final tree stop in a %ipx viewport", (viewportHeight) => {
+    const stopTops = [3240, 4320, 5400, 6480, 7560];
+    const stopSpan = stopTops[1] - stopTops[0];
     const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
-    let footerTop = window.innerHeight;
+    let scrollTop = 0;
     let pendingFrame: FrameRequestCallback | undefined;
+    vi.spyOn(window, "scrollY", "get").mockImplementation(() => scrollTop);
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(viewportHeight);
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-      if (this.matches('.landing-footer-section')) {
+      if (this.matches(".landing-tree-scroll-stop")) {
+        const stopIndex = Number(this.dataset.page) - 4;
         return {
           ...originalGetBoundingClientRect.call(this),
-          top: footerTop,
-          bottom: footerTop + 1080,
+          top: stopTops[stopIndex] - scrollTop,
+          bottom: stopTops[stopIndex] + stopSpan - scrollTop,
+          height: stopSpan,
+        };
+      }
+      if (this.matches(".landing-footer-section")) {
+        const footerAbsoluteTop = stopTops.at(-1)! + stopSpan;
+        return {
+          ...originalGetBoundingClientRect.call(this),
+          top: footerAbsoluteTop - scrollTop,
+          bottom: footerAbsoluteTop + stopSpan - scrollTop,
+          height: stopSpan,
         };
       }
       return originalGetBoundingClientRect.call(this);
@@ -273,19 +288,19 @@ describe("LandingPage seed transition", () => {
     expect(document.documentElement).not.toHaveClass("landing-scroll-tail-free");
     expect(document.body).not.toHaveClass("landing-scroll-tail-free");
 
-    footerTop = window.innerHeight * 0.8;
+    scrollTop = stopTops.at(-1)!;
     fireEvent.scroll(window);
     act(() => pendingFrame?.(0));
     expect(document.documentElement).toHaveClass("landing-scroll-tail-free");
     expect(document.body).toHaveClass("landing-scroll-tail-free");
 
-    footerTop = window.innerHeight * 0.9;
+    scrollTop = stopTops.at(-1)! - 2;
     fireEvent.scroll(window);
     act(() => pendingFrame?.(16));
     expect(document.documentElement).not.toHaveClass("landing-scroll-tail-free");
     expect(document.body).not.toHaveClass("landing-scroll-tail-free");
 
-    footerTop = 0;
+    scrollTop = stopTops.at(-1)!;
     fireEvent.scroll(window);
     act(() => pendingFrame?.(32));
     expect(document.documentElement).toHaveClass("landing-scroll-tail-free");

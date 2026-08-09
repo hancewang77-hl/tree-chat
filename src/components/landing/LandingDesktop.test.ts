@@ -38,8 +38,8 @@ describe("1920 × 1080 landing composition contract", () => {
     expect(landingPage).not.toContain("settleToNearestPage");
     expect(landingPage).not.toContain("window.scrollTo({ top: targetTop");
     expect(landingPage).not.toContain("programmaticScrollRef");
-    expect(landingPage).toContain("const footerRef = useRef<HTMLElement | null>(null)");
-    expect(landingPage).toContain('<section ref={footerRef} data-page="9"');
+    expect(landingPage).not.toContain("footerRef");
+    expect(landingPage).toContain("const lastTreeStopTop = treeStopTopsRef.current.at(-1)");
     expect(landingPage).toContain('classList.toggle("landing-scroll-tail-free"');
     expect(landingPage).toContain('classList.remove("landing-scroll-tail-free")');
 

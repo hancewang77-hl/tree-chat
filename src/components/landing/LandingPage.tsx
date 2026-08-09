@@ -217,7 +217,6 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
   const scrolledRef = useRef(false);
   const treeStoryRef = useRef<HTMLElement | null>(null);
   const dilemmaRef = useRef<HTMLElement | null>(null);
-  const footerRef = useRef<HTMLElement | null>(null);
   const seedStageRef = useRef<HTMLDivElement | null>(null);
   const treeCopyRef = useRef<HTMLDivElement | null>(null);
   const seedRef = useRef<HTMLButtonElement | null>(null);
@@ -412,8 +411,8 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
         setTreeChapter(next);
       };
       const scrollTop = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop;
-      const footerTop = footerRef.current?.getBoundingClientRect().top;
-      const releaseTail = footerTop !== undefined && footerTop <= window.innerHeight * 0.82;
+      const lastTreeStopTop = treeStopTopsRef.current.at(-1);
+      const releaseTail = lastTreeStopTop !== undefined && scrollTop + 1 >= lastTreeStopTop;
       document.documentElement.classList.toggle("landing-scroll-tail-free", releaseTail);
       document.body.classList.toggle("landing-scroll-tail-free", releaseTail);
       const nextScrolled = scrollTop > 28;
@@ -738,7 +737,7 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
         </noscript>
       </section>
 
-      <section ref={footerRef} data-page="9" className="landing-section landing-footer-section" aria-labelledby="footer-title">
+      <section data-page="9" className="landing-section landing-footer-section" aria-labelledby="footer-title">
         <div className="landing-container">
           <div className="landing-footer-reflection">
             <div className="landing-footer-reflection__intro">
