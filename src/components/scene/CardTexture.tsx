@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { NODE_W, NODE_H } from "@/hooks/useTreeLayout";
 import { truncateText, roundRect, drawWrappedText } from "@/src/lib/utils";
 import { summarizeForCard } from "@/src/lib/formatResponse";
+import type { NodeRole } from "@/src/types/tree";
 
 const CARD_OLIVE = "#747A55";
 const CARD_OLIVE_DEEP = "#565B3D";
@@ -14,11 +15,10 @@ const CARD_PAPER_MID = "#D1CAA7";
 const CARD_PAPER_DARK = "#C0BA91";
 
 export function CardTexture({
-  prompt, response, kind, status, selected, inPath, layer,
+  prompt, response, kind, status, nodeRole, taskDescription, hasAuxoSource, selected, inPath, layer,
 }: {
   prompt: string; response: string; kind: "root" | "branch" | "leaf"; status?: string; selected: boolean;
-  inPath: boolean; layer: number;
-  interactive: boolean; priority: boolean;
+  nodeRole?: NodeRole; taskDescription?: string; hasAuxoSource?: boolean; inPath: boolean; layer: number;
 }) {
   const texture = useMemo(() => {
     const width = 1024;
@@ -29,27 +29,16 @@ export function CardTexture({
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
 
-    const nodeStatus = status ?? "complete";
+    const { promptLabel, titleText, responseLabel, summary } = resolveCardCopy({
+      prompt,
+      response,
+      kind,
+      status,
+      nodeRole,
+      taskDescription,
+      hasAuxoSource,
+    });
     const isNote = kind === "leaf";
-    const promptLabel = isNote ? "LEAF / 记录" : "SEED / 提问";
-    const responseLabel = isNote
-      ? "SOIL / 备注"
-      : nodeStatus === "streaming"
-        ? "GROWTH / 生成中"
-        : nodeStatus === "failed"
-          ? "CANOPY / 失败"
-          : nodeStatus === "stopped"
-            ? "CANOPY / 已停止"
-            : "CANOPY / 回答";
-    const summary = isNote
-      ? "这是一片手动记录的叶片，可继续生长出新的分支。"
-      : nodeStatus === "failed"
-        ? "生成失败。请检查网络或 API 配置后重新提问。"
-        : response.trim()
-          ? `${summarizeForCard(response, 150)}${nodeStatus === "streaming" ? " ▌" : ""}`
-          : nodeStatus === "streaming"
-            ? "正在等待第一段回答... ▌"
-            : "这个分支还没有回答。";
 
     ctx.clearRect(0, 0, width, height);
 
@@ -64,7 +53,7 @@ export function CardTexture({
     ctx.font = "500 26px 'Lora','Georgia',serif";
     ctx.textAlign = "left";
     ctx.textBaseline = "alphabetic";
-    drawWrappedText(ctx, truncateText(prompt, 124), 104, 116, width - 176, 37, 4);
+    drawWrappedText(ctx, truncateText(titleText, 124), 104, 116, width - 176, 37, 4);
 
     drawBranchDivider(ctx, 104, 266, width - 76, selected, inPath);
 
@@ -79,7 +68,7 @@ export function CardTexture({
     tex.anisotropy = 8;
     tex.needsUpdate = true;
     return tex;
-  }, [prompt, response, kind, status, selected, inPath, layer]);
+  }, [prompt, response, kind, status, nodeRole, taskDescription, hasAuxoSource, selected, inPath, layer]);
 
   if (!texture) return null;
 
@@ -89,6 +78,68 @@ export function CardTexture({
       <meshBasicMaterial map={texture} transparent depthTest={false} />
     </mesh>
   );
+}
+
+// 卡片文案：标签、标题与摘要完全由节点数据决定（纯函数，无绘制副作用）。
+function resolveCardCopy({
+  prompt,
+  response,
+  kind,
+  status,
+  nodeRole,
+  taskDescription,
+  hasAuxoSource,
+}: {
+  prompt: string;
+  response: string;
+  kind: "root" | "branch" | "leaf";
+  status?: string;
+  nodeRole?: NodeRole;
+  taskDescription?: string;
+  hasAuxoSource?: boolean;
+}) {
+  const nodeStatus = status ?? "complete";
+  const isNote = kind === "leaf";
+  const isAuxoTask = nodeRole === "task" || nodeRole === "task-group";
+  const isSourcedTask = nodeRole === "task" && Boolean(hasAuxoSource);
+  const promptLabel = isNote
+    ? "LEAF / 记录"
+    : nodeRole === "task-group"
+      ? "AUXO / 任务组"
+      : nodeRole === "task"
+        ? "AUXO / 原子任务"
+        : "SEED / 提问";
+  const titleText = isSourcedTask ? taskDescription?.trim() || prompt : prompt;
+  const responseLabel = isNote
+    ? "SOIL / 备注"
+    : isSourcedTask
+      ? "SOURCE / 原文"
+      : isAuxoTask
+      ? "STATUS / 待执行"
+    : nodeStatus === "streaming"
+      ? "GROWTH / 生成中"
+      : nodeStatus === "failed"
+        ? "CANOPY / 失败"
+        : nodeStatus === "stopped"
+          ? "CANOPY / 已停止"
+          : "CANOPY / 回答";
+  const summary = isNote
+    ? "这是一片手动记录的叶片，可继续生长出新的分支。"
+    : isSourcedTask
+      ? summarizeForCard(prompt, 150)
+    : isAuxoTask
+      ? taskDescription?.trim()
+        ? summarizeForCard(taskDescription, 150)
+        : "Auxo 已建立任务骨架，选中后可逐项执行。"
+    : nodeStatus === "failed"
+      ? "生成失败。请检查网络或 API 配置后重新提问。"
+      : response.trim()
+        ? `${summarizeForCard(response, 150)}${nodeStatus === "streaming" ? " ▌" : ""}`
+        : nodeStatus === "streaming"
+          ? "正在等待第一段回答... ▌"
+          : "这个分支还没有回答。";
+
+  return { promptLabel, titleText, responseLabel, summary };
 }
 
 function drawCardShell(

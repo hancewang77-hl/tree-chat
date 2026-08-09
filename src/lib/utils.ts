@@ -6,6 +6,11 @@ export function truncateText(text: string, max = 84) {
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
+/** NFKC + whitespace collapse + case-fold for duplicate-title comparison. */
+export function normalizeDuplicateKey(value: string): string {
+  return value.normalize("NFKC").replace(/\s+/g, " ").trim().toLocaleLowerCase();
+}
+
 export function roundRect(
   ctx: CanvasRenderingContext2D,
   x: number,

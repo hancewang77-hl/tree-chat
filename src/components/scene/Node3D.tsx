@@ -12,7 +12,6 @@ export function Node3D({
   selected,
   inPath,
   interactive,
-  priority,
   onSelect,
   showConfirmButton,
   onConfirmLayerMove,
@@ -22,8 +21,6 @@ export function Node3D({
   selected: boolean;
   inPath: boolean;
   interactive: boolean;
-  priority: boolean;
-  moving: boolean;
   onSelect: () => void;
   showConfirmButton: boolean;
   onConfirmLayerMove: () => void;
@@ -45,11 +42,12 @@ export function Node3D({
         response={node.response}
         kind={node.kind}
         status={node.status}
+        nodeRole={node.nodeRole}
+        taskDescription={node.taskDescription}
+        hasAuxoSource={Boolean(node.auxoSource)}
         selected={selected}
         inPath={inPath}
         layer={node.layer}
-        interactive={interactive}
-        priority={priority}
       />
 
       <group position={[NODE_W / 2 - 0.52, 0.62, 0.05]}>

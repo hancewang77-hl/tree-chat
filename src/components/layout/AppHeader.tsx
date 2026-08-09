@@ -55,6 +55,7 @@ export function AppHeader() {
         {/* Search */}
         <button
           onClick={() => window.dispatchEvent(new CustomEvent("search-toggle"))}
+          aria-label="搜索节点"
           className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] transition-all hover:opacity-85"
           style={{
             background: "var(--accent-olive-soft)",
@@ -77,6 +78,8 @@ export function AppHeader() {
         {/* 2D/3D toggle */}
         <button
           onClick={() => dispatch({ type: "TOGGLE_3D" })}
+          aria-label="3D 模式"
+          aria-pressed={state.is3DMode}
           className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-all hover:opacity-85"
           style={{
             background: "var(--accent-olive-soft)",
@@ -94,6 +97,8 @@ export function AppHeader() {
         {/* Canopy */}
         <button
           onClick={() => dispatch({ type: "TOGGLE_CANOPY" })}
+          aria-label="树冠 — 全局视图"
+          aria-pressed={state.isCanopyOpen}
           className="rounded-lg p-2 transition-all hover:opacity-85"
           style={{
             background: state.isCanopyOpen ? "var(--accent-sage)" : "var(--accent-olive-soft)",
@@ -108,6 +113,8 @@ export function AppHeader() {
         {/* Rings */}
         <button
           onClick={() => dispatch({ type: "OPEN_GLOBAL_RINGS" })}
+          aria-label="年轮 — 操作历史"
+          aria-pressed={state.isRingsOpen}
           className="rounded-lg p-2 transition-all hover:opacity-85"
           style={{
             background: state.isRingsOpen ? "var(--accent-sage)" : "var(--accent-olive-soft)",
@@ -125,6 +132,7 @@ export function AppHeader() {
         {/* Help */}
         <button
           onClick={() => setHelpOpen(true)}
+          aria-label="帮助 — 功能指南"
           className="rounded-lg p-2 transition-all hover:opacity-85"
           style={{
             background: "var(--accent-olive-soft)",
@@ -168,6 +176,8 @@ function ThemeToggle() {
   return (
     <button
       onClick={toggle}
+      aria-label="深色模式"
+      aria-pressed={isDark}
       className="rounded-lg p-2 transition-all hover:opacity-85"
       style={{
         background: "var(--accent-olive-soft)",
@@ -188,6 +198,7 @@ function HarvestButton() {
     <>
       <button
         onClick={() => setOpen(true)}
+        aria-label="收获 — 导出项目"
         className="rounded-lg p-2 transition-all hover:opacity-85"
         style={{
           background: "var(--accent-olive-soft)",

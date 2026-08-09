@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { treeReducer } from "./treeReducer";
-import type { MindNode, NutrientItem, SemanticCard, TreeState } from "@/src/types/tree";
+import { compileAuxoInput } from "@/src/lib/auxo";
+import type { AuxoPlan, MindNode, NutrientItem, SemanticCard, TreeState } from "@/src/types/tree";
 
 function node(overrides: Partial<MindNode>): MindNode {
   return {
@@ -237,7 +238,11 @@ describe("treeReducer product functions", () => {
       extractedCharCount: 57,
     };
 
-    let state = treeReducer(baseState(), { type: "ADD_NUTRIENTS", nutrients: [nutrient] });
+    let state = treeReducer(baseState(), {
+      type: "ADD_NUTRIENTS",
+      projectId: "project",
+      nutrients: [nutrient],
+    });
 
     expect(state.projects.project.activeNutrientIds).toEqual(["nutrient-1"]);
 
@@ -250,6 +255,40 @@ describe("treeReducer product functions", () => {
 
     const branch = findNodeByPrompt(state, "What should we build?");
     expect(branch?.nutrientRefs).toEqual(["nutrient-1"]);
+  });
+
+  test("async nutrient results stay with the project where ingestion started", () => {
+    const initial = baseState();
+    initial.projects.other = {
+      ...initial.projects.project,
+      id: "other",
+      name: "Other",
+      nutrients: {},
+      activeNutrientIds: [],
+    };
+    initial.activeProjectId = "other";
+    const nutrient: NutrientItem = {
+      id: "nutrient-delayed",
+      name: "source.docx",
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      size: 128,
+      kind: "document",
+      createdAt: 2,
+      extractionStatus: "ready",
+      extractedText: "# Delayed result",
+      excerpt: "Delayed result",
+      extractedCharCount: 16,
+    };
+
+    const state = treeReducer(initial, {
+      type: "ADD_NUTRIENTS",
+      projectId: "project",
+      nutrients: [nutrient],
+    });
+
+    expect(state.projects.project.nutrients["nutrient-delayed"]).toEqual(nutrient);
+    expect(state.projects.other.nutrients["nutrient-delayed"]).toBeUndefined();
+    expect(state.activeProjectId).toBe("other");
   });
 
   test("streaming branch starts selected before any response arrives", () => {
@@ -532,5 +571,272 @@ describe("treeReducer product functions", () => {
       expect(state.toolMode).toBe("view");
       expect(state.graftSourceId).toBeNull();
     }
+  });
+
+  test("Layer move 完整流程：起手预览、滚轮选层、确认写入一条可撤销历史", () => {
+    let state = treeReducer(graftState(), { type: "LAYER_MOVE_START", nodeId: "a" });
+
+    expect(state.toolMode).toBe("layerMove");
+    expect(state.movingNodeId).toBe("a");
+    expect(state.pendingNodeLayer).toBe(0);
+    expect(state.selectedNodeId).toBe("a");
+
+    // 滚轮切层时目标层跟随视图层
+    state = treeReducer(state, { type: "SET_LAYER", layer: 2 });
+    expect(state.selectedLayer).toBe(2);
+    expect(state.pendingNodeLayer).toBe(2);
+
+    state = treeReducer(state, { type: "LAYER_MOVE_CONFIRM" });
+    expect(projectNodes(state).a.layer).toBe(2);
+    expect(state.toolMode).toBe("view");
+    expect(state.movingNodeId).toBeNull();
+    expect(state.pendingNodeLayer).toBeNull();
+    expect(state.selectedLayer).toBe(2);
+    expect(state.history.past).toHaveLength(1);
+    expect(state.history.past[0].label).toContain("Layer");
+
+    // 全局 Undo 恢复原图层
+    state = treeReducer(state, { type: "UNDO" });
+    expect(projectNodes(state).a.layer).toBe(0);
+  });
+
+  test("Layer move 拒绝根、Leaf、流式节点与原层确认，不写入历史", () => {
+    // 根与 Leaf 不能起手
+    for (const nodeId of ["root", "leaf"]) {
+      const state = treeReducer(graftState(), { type: "LAYER_MOVE_START", nodeId });
+      expect(state.toolMode).toBe("view");
+      expect(state.movingNodeId).toBeNull();
+    }
+
+    // 未换层就确认 → 无操作退出，不产生 Rings 记录
+    let state = treeReducer(graftState(), { type: "LAYER_MOVE_START", nodeId: "a" });
+    state = treeReducer(state, { type: "LAYER_MOVE_CONFIRM" });
+    expect(projectNodes(state).a.layer).toBe(0);
+    expect(state.history.past).toHaveLength(0);
+    expect(state.toolMode).toBe("view");
+
+    // 流式节点确认时被拒绝
+    const streaming = graftState();
+    streaming.projects.project.nodes.a = {
+      ...streaming.projects.project.nodes.a,
+      status: "streaming",
+    };
+    let s2 = treeReducer(streaming, { type: "LAYER_MOVE_START", nodeId: "a" });
+    s2 = treeReducer(s2, { type: "SET_LAYER", layer: 1 });
+    s2 = treeReducer(s2, { type: "LAYER_MOVE_CONFIRM" });
+    expect(projectNodes(s2).a.layer).toBe(0);
+    expect(s2.history.past).toHaveLength(0);
+  });
+
+  test("Layer move 期间修剪移动节点会自动取消移层模式", () => {
+    let state = treeReducer(graftState(), { type: "LAYER_MOVE_START", nodeId: "b" });
+    // 修剪 b 所在的父分支 a（子树含 b）
+    state = treeReducer(state, { type: "PRUNE", nodeId: "a" });
+
+    expect(state.toolMode).toBe("view");
+    expect(state.movingNodeId).toBeNull();
+    expect(state.pendingNodeLayer).toBeNull();
+    expect(projectNodes(state).a).toBeUndefined();
+    expect(projectNodes(state).b).toBeUndefined();
+  });
+
+  test("Auxo 原子写入有序任务树，并通过一次全局 Undo/Redo 撤销与恢复", () => {
+    const initial = baseState();
+    initial.projects.project.nodes.root.prompt = "1. Root";
+    const input = compileAuxoInput(initial.projects.project);
+    const plan: AuxoPlan = {
+      version: 1,
+      generatedAt: 100,
+      model: "deepseek-chat",
+      nodes: [
+        {
+          planId: "group",
+          parentPlanId: "root",
+          nodeRole: "task-group",
+          title: "准备阶段",
+          order: 1,
+        },
+        {
+          planId: "task-1",
+          parentPlanId: "group",
+          nodeRole: "task",
+          title: "读取根任务",
+          order: 2,
+          sourceUnitId: "source-001",
+        },
+        {
+          planId: "task-2",
+          parentPlanId: "group",
+          nodeRole: "task",
+          title: "列出交付物",
+          order: 3,
+        },
+      ],
+    };
+
+    let state = treeReducer(initial, {
+      type: "APPLY_AUXO_PLAN",
+      projectId: "project",
+      rootNodeId: "root",
+      generationId: "auxo-run-1",
+      inputFingerprint: input.inputFingerprint,
+      nutrientRefs: input.nutrientRefs,
+      plan,
+    });
+
+    const root = projectNodes(state).root;
+    const group = projectNodes(state)[root.children[0]];
+    const tasks = group.children.map((id) => projectNodes(state)[id]);
+    expect(Object.keys(projectNodes(state))).toHaveLength(4);
+    expect(group.nodeRole).toBe("task-group");
+    expect(group.contextState).toBe("valid");
+    expect(group.response).toBe("");
+    expect(tasks.map((task) => task.prompt)).toEqual(["1. Root", "列出交付物"]);
+    expect(tasks.map((task) => task.nodeRole)).toEqual(["task", "task"]);
+    expect(group.taskDescription).toBe("Auxo 任务组 · 共 2 项子任务，按顺序完成。");
+    expect(tasks.map((task) => task.taskDescription)).toEqual([
+      "读取根任务",
+      "Auxo 补充任务 · 由整体目标推导，不对应单一原文题目。",
+    ]);
+    expect(tasks.every((task) => task.auxoGenerationId === "auxo-run-1")).toBe(true);
+    expect(root.auxoManifest).toMatchObject({
+      generationId: "auxo-run-1",
+      nodeCount: 3,
+      nutrientChunks: [],
+    });
+    expect(state.history.past).toHaveLength(1);
+    expect(state.history.past[0].nodeUndoable).toBe(false);
+    expect(state.history.past[0].label).toContain("Auxo");
+
+    const generatedIds = [group.id, ...group.children];
+    state = treeReducer(state, { type: "UNDO" });
+    expect(projectNodes(state).root.children).toEqual([]);
+    expect(projectNodes(state).root.auxoManifest).toBeUndefined();
+    for (const id of generatedIds) expect(projectNodes(state)[id]).toBeUndefined();
+
+    state = treeReducer(state, { type: "REDO" });
+    expect(projectNodes(state).root.children).toEqual([group.id]);
+    expect(projectNodes(state)[group.id].children).toEqual(group.children);
+    for (const id of generatedIds) expect(projectNodes(state)[id]).toBeDefined();
+  });
+
+  test("Auxo 批次不允许节点级非顺序撤销，避免遗留孤儿节点", () => {
+    const initial = baseState();
+    const input = compileAuxoInput(initial.projects.project);
+    const plan: AuxoPlan = {
+      version: 1,
+      generatedAt: 100,
+      model: "deepseek-chat",
+      nodes: [
+        {
+          planId: "task",
+          parentPlanId: "root",
+          nodeRole: "task",
+          title: "执行任务",
+          order: 1,
+        },
+      ],
+    };
+    let state = treeReducer(initial, {
+      type: "APPLY_AUXO_PLAN",
+      projectId: "project",
+      rootNodeId: "root",
+      generationId: "auxo-run-safe",
+      inputFingerprint: input.inputFingerprint,
+      nutrientRefs: [],
+      plan,
+    });
+    const taskId = projectNodes(state).root.children[0];
+    const before = JSON.stringify(projectNodes(state));
+
+    state = treeReducer(state, { type: "UNDO_NODE", nodeId: taskId });
+    expect(JSON.stringify(projectNodes(state))).toBe(before);
+    expect(state.history.past).toHaveLength(1);
+  });
+
+  test("Auxo 批次是节点 Rings 的历史屏障，不会越过它撤销更早操作", () => {
+    let state = baseState();
+    state = treeReducer(state, {
+      type: "BRANCH",
+      prompt: "临时分支",
+      response: "临时回答",
+      parentId: "root",
+    });
+    const temporaryId = projectNodes(state).root.children[0];
+    state = treeReducer(state, { type: "PRUNE", nodeId: temporaryId });
+    const input = compileAuxoInput(state.projects.project);
+    const plan: AuxoPlan = {
+      version: 1,
+      generatedAt: 100,
+      model: "deepseek-v4-flash",
+      nodes: [{
+        planId: "task",
+        parentPlanId: "root",
+        nodeRole: "task",
+        title: "执行任务",
+        order: 1,
+      }],
+    };
+    state = treeReducer(state, {
+      type: "APPLY_AUXO_PLAN",
+      projectId: "project",
+      rootNodeId: "root",
+      generationId: "auxo-run-barrier",
+      inputFingerprint: input.inputFingerprint,
+      nutrientRefs: [],
+      plan,
+    });
+    const beforeNodeUndo = state;
+
+    state = treeReducer(state, { type: "UNDO_NODE", nodeId: "root" });
+
+    expect(state).toBe(beforeNodeUndo);
+    expect(projectNodes(state).root.children).toHaveLength(1);
+    expect(state.history.past).toHaveLength(3);
+  });
+
+  test("Auxo 在输入指纹变化或根节点已有内容时保持零写入", () => {
+    const initial = baseState();
+    const input = compileAuxoInput(initial.projects.project);
+    const plan: AuxoPlan = {
+      version: 1,
+      generatedAt: 100,
+      model: "deepseek-chat",
+      nodes: [
+        {
+          planId: "task",
+          parentPlanId: "root",
+          nodeRole: "task",
+          title: "执行任务",
+          order: 1,
+        },
+      ],
+    };
+    const action = {
+      type: "APPLY_AUXO_PLAN" as const,
+      projectId: "project",
+      rootNodeId: "root",
+      generationId: "auxo-run-stale",
+      inputFingerprint: "stale-fingerprint",
+      nutrientRefs: [] as string[],
+      plan,
+    };
+
+    const stale = treeReducer(initial, action);
+    expect(stale).toBe(initial);
+
+    const withChild = baseState();
+    withChild.projects.project.nodes.root.children = ["existing"];
+    withChild.projects.project.nodes.existing = node({
+      id: "existing",
+      kind: "branch",
+      nodeRole: "answer",
+      parentId: "root",
+    });
+    const blocked = treeReducer(withChild, {
+      ...action,
+      inputFingerprint: input.inputFingerprint,
+    });
+    expect(blocked).toBe(withChild);
   });
 });

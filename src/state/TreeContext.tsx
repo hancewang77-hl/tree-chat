@@ -14,7 +14,9 @@ const TreeContext = createContext<TreeContextType | null>(null);
 export function TreeProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(treeReducer, undefined, initialState);
 
-  // After mount, hydrate from localStorage (avoids SSR hydration mismatch)
+  // After mount, hydrate from localStorage (avoids SSR hydration mismatch).
+  // An empty workspace keeps the initial empty state without dispatching, so
+  // first-run onboarding renders unchanged.
   useEffect(() => {
     const stored = loadInitialState();
     if (Object.keys(stored.projects).length > 0) {

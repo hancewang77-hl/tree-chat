@@ -23,7 +23,7 @@ It's a **spatial thinking tool** disguised as a chat interface.
 | **Structure** | Linear thread — you can only go forward or back | Tree graph — branch, graft, prune at any node |
 | **Navigation** | Scroll up/down through history | 3D spatial canvas with layers, minimap, and path highlighting |
 | **Exploration** | One answer per prompt | Branch multiple AI responses from the same prompt, compare side-by-side |
-| **Annotation** | Mixed with conversation | Leaf notes — detached manual annotations that don't pollute the AI chain |
+| **Annotation** | Mixed with conversation | Named leaf notes — two-step creation (name → content), max 3 per node, isolated from AI context |
 | **History** | Undo a message | Rings system — global or node-specific patch history (max 50) |
 | **Aesthetic** | Blue/purple AI-chatbot generic | Organic editorial — paper textures, serif typography, botanical metaphors |
 
@@ -35,7 +35,7 @@ Every action is named after a botanical operation, making the mental model intui
 |--------|-------------|
 | 🌱 **Seed** | Create a new project with a root question |
 | 🌿 **Branch** | Ask AI a follow-up — spawns a new child node |
-| 🍃 **Leaf** | Attach a manual note (no AI call, keeps context clean) |
+| 🍃 **Leaf** | Two-step: name a note, then write content — max 3 per node, isolated from AI context |
 | 🌳 **Graft** | Two-click re-parent: move a subtree to a different parent |
 | ✂️ **Prune** | Delete a node and its entire subtree |
 | 🔆 **Sunlight** | Focus on a node — selects it and jumps to its layer |
@@ -46,7 +46,7 @@ Every action is named after a botanical operation, making the mental model intui
 ### Tree-aware context
 
 - Full `response` text remains the source for display, history, and export; subsequent model context reads only lightweight semantic cards whose state is `valid`.
-- The Context Compiler builds one bounded input in this order: root task → valid parent-path semantics → explicitly included Leaf notes → current task → relevant nutrient chunks → current question.
+- The Context Compiler builds one bounded input in this order: root task → valid parent-path semantics → explicitly included Leaf notes (name + content) → current task → relevant nutrient chunks → current question.
 - Leaf notes are isolated from AI context by default and are included only after the user explicitly enables them.
 - Graft preserves every original prompt and response while marking AI semantics in the moved subtree as `stale`, preventing knowledge from the old path from leaking into later requests.
 
@@ -145,9 +145,9 @@ src/
 │   ├── scene/                    # 3D Canvas, nodes, layers, edges, camera
 │   ├── layout/                   # Header, sidebars, composer
 │   ├── toolbar/                  # TreeToolbar, ZoomControls
-│   └── overlays/                 # Minimap, history, search, dialogs
+│   └── overlays/                 # Minimap, history, search, dialogs, modal portal
 ├── hooks/
-│   ├── useTreeLayout.ts          # D3 tree layout + constants
+│   ├── useTreeLayout.ts          # D3 tree layout + constants (MAX_LEAVES_PER_NODE = 3)
 │   └── useAIChat.ts              # DeepSeek API interaction
 └── lib/
     ├── contextCompiler.ts        # Tree-aware Context Compiler

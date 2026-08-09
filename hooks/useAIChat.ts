@@ -1,60 +1,6 @@
 import { useRef, useState } from "react";
-import type { SemanticCard } from "@/src/types/tree";
 import type { ChatMessage } from "@/src/lib/contextCompiler";
-import { isUsableSemanticCard } from "@/src/lib/semanticCard";
-import { readTextStream } from "@/src/lib/streamText";
-
-async function generateDeepSeekResponse(
-  messages: ChatMessage[],
-  onText: (text: string) => void,
-  signal: AbortSignal,
-) {
-  const res = await fetch("/api/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: "deepseek-chat", messages, stream: true }),
-    signal,
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    console.error("/api/chat failed:", res.status, text);
-    throw new Error(`请求失败：${res.status} ${text}`);
-  }
-
-  return readTextStream(res, onText);
-}
-
-async function requestSemanticCard(prompt: string, response: string): Promise<SemanticCard> {
-  const abortController = new AbortController();
-  const timeoutId = setTimeout(() => abortController.abort(), 30_000);
-  try {
-    const res = await fetch("/api/structure", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, response }),
-      signal: abortController.signal,
-    });
-    const body = (await res.json().catch(() => null)) as
-      | { semanticCard?: SemanticCard; error?: string }
-      | null;
-
-    if (!res.ok) {
-      throw new Error(body?.error || `语义整理失败：${res.status}`);
-    }
-    if (!isUsableSemanticCard(body?.semanticCard)) {
-      throw new Error("语义整理返回了无效卡片");
-    }
-    return body.semanticCard;
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      throw new Error("语义整理超时，可在节点信息中重试");
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
+import { requestChatCompletion, requestSemanticCard } from "@/src/lib/aiChat";
 
 export function useAIChat() {
   const [isAiTyping, setIsAiTyping] = useState(false);
@@ -71,7 +17,7 @@ export function useAIChat() {
     isTypingRef.current = true;
     setIsAiTyping(true);
     try {
-      return await generateDeepSeekResponse(
+      return await requestChatCompletion(
         messages,
         onText,
         abortController.signal,

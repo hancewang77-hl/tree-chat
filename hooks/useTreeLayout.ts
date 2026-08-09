@@ -65,36 +65,18 @@ export const Y_SPACING = 2.4;
 
 export function getContextPath(nodes: NodesMap, nodeId: string): MindNode[] {
   const path: MindNode[] = [];
+  const seen = new Set<string>();
   let currentId: string | null = nodeId;
 
-  while (currentId && nodes[currentId]) {
+  // The visited guard stops a cyclic parentId chain (e.g. corrupt persisted
+  // state where a → b → a) from looping forever.
+  while (currentId && nodes[currentId] && !seen.has(currentId)) {
+    seen.add(currentId);
     path.unshift(nodes[currentId]);
     currentId = nodes[currentId].parentId;
   }
 
   return path;
-}
-
-export function getVisibleIdsForPlane(nodes: NodesMap, layer: number) {
-  const ids = new Set<string>();
-  const planeIds = Object.values(nodes)
-    .filter((node) => node.layer === layer)
-    .map((node) => node.id);
-
-  if (planeIds.length === 0) {
-    ids.add("root");
-    return ids;
-  }
-
-  for (const id of planeIds) {
-    let current: string | null = id;
-    while (current && nodes[current]) {
-      ids.add(current);
-      current = nodes[current].parentId;
-    }
-  }
-
-  return ids;
 }
 
 type TreeLayoutInput = {
@@ -104,6 +86,7 @@ type TreeLayoutInput = {
   is3DMode: boolean;
   movingNodeId: string | null;
   pendingNodeLayer: number | null;
+  rootNodeId?: string;
 };
 
 export type LeafAttachment = {
@@ -143,6 +126,7 @@ export function useTreeLayout({
   is3DMode,
   movingNodeId,
   pendingNodeLayer,
+  rootNodeId = "root",
 }: TreeLayoutInput) {
   const visibleIds = useMemo(
     () => (is3DMode ? null : new Set(Object.keys(nodes))),
@@ -150,16 +134,20 @@ export function useTreeLayout({
   );
 
   const fullTreeLayout = useMemo(() => {
+    // `seen` prevents unbounded recursion if corrupt persisted state contains a
+    // children cycle (a lists b, b lists a); a revisited id is skipped.
+    const seen = new Set<string>();
     function buildHierarchy(id: string): HierarchyNodeData | null {
       const node = nodes[id];
-      if (!node) return null;
+      if (!node || seen.has(id)) return null;
+      seen.add(id);
       const hierarchyChildren = getTrunkChildIds(nodes, id)
         .map((childId) => buildHierarchy(childId))
         .filter((c): c is HierarchyNodeData => c !== null);
       return { ...node, children: hierarchyChildren } as HierarchyNodeData;
     }
 
-    const rootHierarchy = buildHierarchy("root");
+    const rootHierarchy = buildHierarchy(rootNodeId);
     if (!rootHierarchy) {
       return {
         descendants: [] as HierarchyPointNode<HierarchyNodeData>[],
@@ -176,7 +164,7 @@ export function useTreeLayout({
       descendants: rootD3.descendants() as SettledNode[],
       links: rootD3.links() as SettledLink[],
     };
-  }, [nodes]);
+  }, [nodes, rootNodeId]);
 
   const renderedNodes = useMemo(() => {
     return fullTreeLayout.descendants.filter((d) =>
