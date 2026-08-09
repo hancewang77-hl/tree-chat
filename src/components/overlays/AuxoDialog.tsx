@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { FileText, FolderTree, Leaf, LoaderCircle, ShieldCheck, Sparkles, X } from "lucide-react";
 import { AUXO_MAX_DEPTH, AUXO_MAX_NODES, AUXO_MAX_NUTRIENT_CHARS } from "@/src/lib/auxo";
 import { summarizeForCard } from "@/src/lib/formatResponse";
 import type { AuxoPlan, AuxoPlanNode } from "@/src/types/tree";
+import { DialogPortal, useDialogFocus } from "./useDialogFocus";
 
 type PlanTreeRow = { node: AuxoPlanNode; depth: number };
 
@@ -51,34 +52,37 @@ export function AuxoDialog({
   onDiscard?: () => void;
   onCancel: () => void;
 }) {
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onCancel();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onCancel]);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const { modalRootRef, dialogRef, onDialogKeyDown } = useDialogFocus<HTMLDivElement>({
+    open: true,
+    initialFocusRef: closeButtonRef,
+    onEscape: onCancel,
+  });
 
   const totalChars = nutrients.reduce((sum, nutrient) => sum + nutrient.extractedCharCount, 0);
   const planRows = useMemo(() => (plan ? flattenPlanForPreview(plan) : []), [plan]);
 
   return (
-    <div
-      className="absolute inset-0 z-[70] flex items-center justify-center px-4"
-      style={{ background: "rgba(44, 36, 22, 0.22)", backdropFilter: "blur(3px)" }}
-      onClick={() => {
-        if (!isGenerating) onCancel();
-      }}
-      role="presentation"
-    >
+    <DialogPortal>
       <div
-        className="w-[520px] max-w-full overflow-hidden rounded-2xl shadow-2xl animate-fade-up"
-        style={{ background: "var(--bg-paper)", border: "1px solid var(--border-warm)" }}
-        onClick={(event) => event.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="auxo-title"
+        ref={modalRootRef}
+        className="fixed inset-0 z-[70] flex items-center justify-center px-4"
+        style={{ background: "rgba(44, 36, 22, 0.22)", backdropFilter: "blur(3px)" }}
+        onClick={() => {
+          if (!isGenerating) onCancel();
+        }}
+        role="presentation"
       >
+        <div
+          ref={dialogRef}
+          className="w-[520px] max-w-full overflow-hidden rounded-2xl shadow-2xl animate-fade-up"
+          style={{ background: "var(--bg-paper)", border: "1px solid var(--border-warm)" }}
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={onDialogKeyDown}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="auxo-title"
+        >
         <div
           className="flex items-start justify-between gap-4 border-b px-6 py-5"
           style={{ borderColor: "var(--border-warm)" }}
@@ -104,6 +108,7 @@ export function AuxoDialog({
             </div>
           </div>
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={onCancel}
             className="rounded-lg p-1.5 transition-opacity hover:opacity-70"
@@ -269,7 +274,8 @@ export function AuxoDialog({
             )}
           </button>
         </div>
+        </div>
       </div>
-    </div>
+    </DialogPortal>
   );
 }

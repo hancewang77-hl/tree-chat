@@ -213,13 +213,13 @@ describe("InspectorSidebar", () => {
     const user = userEvent.setup();
     const { project, root, child } = buildTree();
     renderInspector({ selectedNodeId: "child", currentPath: [root, child], project });
+    const aside = screen.getByRole("complementary");
 
     await user.click(await screen.findByRole("button", { name: "修剪" }));
 
     const title = screen.getByText("修剪分支 · Prune");
     expect(screen.getByText(/确定要删除「子问题」/)).toBeInTheDocument();
     // The overlay must cover the whole app, not just the sidebar column.
-    const aside = screen.getByRole("complementary");
     expect(aside.contains(title)).toBe(false);
 
     await user.click(screen.getByRole("button", { name: "确认删除" }));

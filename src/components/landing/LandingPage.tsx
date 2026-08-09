@@ -19,6 +19,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import type { CSSProperties } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import type { LandingPresentation } from "@/src/lib/siteProfile";
 import { NarrativeTreeScene } from "./NarrativeTreeScene";
 
 type RevealAnimation = { pause: () => void };
@@ -28,14 +29,17 @@ const LANDING_MOTION = {
   seed: { duration: 760, ease: "in(3)" },
   sprout: { duration: 900, ease: "out(4)" },
   chapter: { duration: 460, ease: "out(3)" },
-  nav: { duration: 260, ease: "out(3)" },
 } as const;
 
-// Keep the chapter transition aligned with the visible seed-to-sprout sequence.
-// The scroll is scheduled independently from anime.js so it still works when
-// the animation target is unavailable (for example in a reduced-motion or
-// static-rendering environment).
-const SEED_AUTO_SCROLL_DELAY = 420 + LANDING_MOTION.sprout.duration;
+const SEED_MATURE_TREE_DELAY = 480;
+const SEED_MATURE_TREE_DURATION = 760;
+const SEED_MATURE_TREE_DWELL = 280;
+
+// Let the resolved tree remain fully readable before leaving the chapter. The
+// timer stays independent from anime.js so reduced-motion/static environments
+// retain deterministic navigation.
+const SEED_AUTO_SCROLL_DELAY =
+  SEED_MATURE_TREE_DELAY + SEED_MATURE_TREE_DURATION + SEED_MATURE_TREE_DWELL;
 
 const CHAPTERS = [
   "总览",
@@ -111,7 +115,6 @@ const TREE_STORIES: Array<{
     accent: "var(--landing-moss-light)",
     facts: [
       { label: "Canopy", text: "一眼浏览完整树结构", icon: Waves },
-      { label: "Open Source", text: "MIT License · GitHub", icon: GitFork },
     ],
   },
 ];
@@ -163,10 +166,10 @@ function BranchLogo({ compact = false }: { compact?: boolean }) {
       <svg viewBox="0 0 104 42" role="img" aria-label="Tree Chat branch logo">
         <defs>
           <linearGradient id={metalGradientId} x1="0" x2="1" y1="0" y2="1">
-            <stop offset="0" stopColor="#f5f7ed" />
-            <stop offset="0.38" stopColor="#9eac9c" />
-            <stop offset="0.6" stopColor="#e9eee1" />
-            <stop offset="1" stopColor="#68766d" />
+            <stop className="landing-logo__metal--light" offset="0" />
+            <stop className="landing-logo__metal--mid" offset="0.38" />
+            <stop className="landing-logo__metal--highlight" offset="0.6" />
+            <stop className="landing-logo__metal--deep" offset="1" />
           </linearGradient>
         </defs>
         <path
@@ -176,8 +179,8 @@ function BranchLogo({ compact = false }: { compact?: boolean }) {
           strokeLinecap="round"
           strokeWidth="3.4"
         />
-        <path d="M35 20 25 10M57 24 52 12M75 19 78 7" fill="none" stroke="#cbd6c5" strokeLinecap="round" strokeWidth="2" />
-        <path d="M23 10c-2-4 4-7 8-4-1 4-4 6-8 4ZM49 11c0-4 6-6 9-2-2 4-5 5-9 2ZM75 7c1-4 7-4 9 0-3 3-6 3-9 0Z" fill="#a9bca4" opacity=".94" />
+        <path className="landing-logo__twig" d="M35 20 25 10M57 24 52 12M75 19 78 7" fill="none" strokeLinecap="round" strokeWidth="2" />
+        <path className="landing-logo__leaf" d="M23 10c-2-4 4-7 8-4-1 4-4 6-8 4ZM49 11c0-4 6-6 9-2-2 4-5 5-9 2ZM75 7c1-4 7-4 9 0-3 3-6 3-9 0Z" opacity=".94" />
       </svg>
       {!compact && (
         <span className="landing-logo__wordmark">
@@ -198,7 +201,7 @@ function FeaturePill({ icon: Icon, label, text }: { icon: LucideIcon; label: str
   );
 }
 
-export function LandingPage() {
+export function LandingPage({ profile }: { profile: LandingPresentation }) {
   const [activeChapter, setActiveChapter] = useState(0);
   const [treeChapter, setTreeChapter] = useState(0);
   const [seedPlanted, setSeedPlanted] = useState(false);
@@ -212,16 +215,24 @@ export function LandingPage() {
   const treeStoryRef = useRef<HTMLElement | null>(null);
   const dilemmaRef = useRef<HTMLElement | null>(null);
   const seedStageRef = useRef<HTMLDivElement | null>(null);
-  const headerRef = useRef<HTMLElement | null>(null);
   const treeCopyRef = useRef<HTMLDivElement | null>(null);
   const seedRef = useRef<HTMLButtonElement | null>(null);
   const sproutRef = useRef<SVGSVGElement | null>(null);
   const matureTreeRef = useRef<SVGSVGElement | null>(null);
   const seedHintRef = useRef<HTMLParagraphElement | null>(null);
   const programmaticScrollRef = useRef(false);
-  const revealAnimations = useRef<RevealAnimation[]>([]);
+  const seedAnimations = useRef<RevealAnimation[]>([]);
 
-  const story = TREE_STORIES[treeChapter];
+  const storyBase = TREE_STORIES[treeChapter];
+  const story = treeChapter === TREE_STORIES.length - 1
+    ? {
+        ...storyBase,
+        facts: [
+          storyBase.facts[0],
+          { ...profile.canopyFact, icon: GitFork },
+        ],
+      }
+    : storyBase;
 
   useEffect(() => {
     // The scrolling element is normally <html>, but embedded shells and
@@ -274,8 +285,11 @@ export function LandingPage() {
   }, []);
 
   useEffect(() => {
-    const animations = revealAnimations.current;
-    return () => animations.forEach((animation) => animation.pause());
+    const animations = seedAnimations.current;
+    return () => {
+      const trackedAnimations = animations.splice(0);
+      trackedAnimations.forEach((animation) => animation.pause());
+    };
   }, []);
 
   useEffect(() => {
@@ -358,23 +372,8 @@ export function LandingPage() {
         ease: LANDING_MOTION.hero.ease,
       }),
     );
-    revealAnimations.current.push(...animations);
     return () => animations.forEach((animation) => animation.pause());
   }, [reducedMotion]);
-
-  useEffect(() => {
-    const header = headerRef.current;
-    if (!header || reducedMotion) return;
-    const animation = animate(header, {
-      backgroundColor: scrolled ? "rgba(238, 243, 232, 0.94)" : "rgba(8, 27, 20, 0)",
-      duration: LANDING_MOTION.nav.duration,
-      ease: LANDING_MOTION.nav.ease,
-    });
-    revealAnimations.current.push(animation);
-    return () => {
-      animation.pause();
-    };
-  }, [reducedMotion, scrolled]);
 
   useEffect(() => {
     const copy = treeCopyRef.current;
@@ -388,7 +387,6 @@ export function LandingPage() {
       duration: LANDING_MOTION.chapter.duration,
       ease: LANDING_MOTION.chapter.ease,
     });
-    revealAnimations.current.push(animation);
     return () => {
       animation.pause();
     };
@@ -403,7 +401,6 @@ export function LandingPage() {
       duration: LANDING_MOTION.chapter.duration,
       ease: LANDING_MOTION.chapter.ease,
     });
-    revealAnimations.current.push(animation);
     return () => {
       animation.pause();
     };
@@ -524,7 +521,7 @@ export function LandingPage() {
       duration: LANDING_MOTION.seed.duration,
       ease: LANDING_MOTION.seed.ease,
     });
-    revealAnimations.current.push(animation);
+    seedAnimations.current.push(animation);
 
     if (sproutRef.current) {
       const sproutAnimation = animate(sproutRef.current, {
@@ -535,7 +532,7 @@ export function LandingPage() {
         delay: 420,
         ease: LANDING_MOTION.sprout.ease,
       });
-      revealAnimations.current.push(sproutAnimation);
+      seedAnimations.current.push(sproutAnimation);
     }
 
     if (matureTreeRef.current) {
@@ -543,11 +540,11 @@ export function LandingPage() {
         opacity: [0, 1],
         translateY: [26, 0],
         scale: [0.72, 1],
-        duration: 760,
-        delay: 480,
+        duration: SEED_MATURE_TREE_DURATION,
+        delay: SEED_MATURE_TREE_DELAY,
         ease: "out(4)",
       });
-      revealAnimations.current.push(matureTreeAnimation);
+      seedAnimations.current.push(matureTreeAnimation);
     }
   }
 
@@ -563,9 +560,9 @@ export function LandingPage() {
   );
 
   return (
-    <main className="landing-page">
+    <main className="landing-page" data-site-profile={profile.id}>
       <a className="landing-skip-link" href="#seed">跳到产品叙事</a>
-      <header ref={headerRef} className={`landing-header ${scrolled ? "is-scrolled" : ""}`}>
+      <header className={`landing-header ${scrolled ? "is-scrolled" : ""}`}>
         <nav className="landing-header__nav" aria-label="产品介绍导航">
           <a href="#top" className="landing-header__brand" aria-label="回到 Tree Chat 介绍页开头">
             <BranchLogo compact />
@@ -793,10 +790,12 @@ export function LandingPage() {
           </div>
           <footer className="landing-footer">
             <div><BranchLogo /><p>让思考拥有枝叶。</p></div>
-            <div className="landing-footer__links">
-              <a href="https://github.com/hancewang77-hl/tree-chat" target="_blank" rel="noreferrer"><GitFork size={16} aria-hidden="true" /> GitHub</a>
-              <a href="https://github.com/hancewang77-hl/tree-chat#license" target="_blank" rel="noreferrer"><BookOpen size={16} aria-hidden="true" /> MIT License</a>
-            </div>
+            {profile.repositoryUrl && profile.licenseUrl && profile.repositoryLabel && profile.licenseLabel && (
+              <div className="landing-footer__links">
+                <a href={profile.repositoryUrl} target="_blank" rel="noreferrer"><GitFork size={16} aria-hidden="true" /> {profile.repositoryLabel}</a>
+                <a href={profile.licenseUrl} target="_blank" rel="noreferrer"><BookOpen size={16} aria-hidden="true" /> {profile.licenseLabel}</a>
+              </div>
+            )}
             <a className="landing-button landing-button--primary" href="/app">进入功能工作台 <ArrowUpRight size={18} aria-hidden="true" /></a>
           </footer>
         </div>

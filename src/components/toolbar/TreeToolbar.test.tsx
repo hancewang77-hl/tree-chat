@@ -199,6 +199,26 @@ describe("TreeToolbar", () => {
     expect(branchButton.getAttribute("style")).not.toContain("background: var(--accent-sage)");
   });
 
+  it("exposes the tool group name and pressed state without relying on hover tooltips", async () => {
+    const user = userEvent.setup();
+    seedWorkspace(branchProject(), "branch-1", 1);
+    renderToolbar();
+
+    expect(screen.getByRole("group", { name: "树编辑工具" })).toBeInTheDocument();
+    expect(screen.queryByRole("toolbar", { name: "树编辑工具" })).not.toBeInTheDocument();
+    const branchButton = await screen.findByRole("button", { name: "分支" });
+    const leafButton = screen.getByRole("button", { name: "叶片" });
+
+    expect(branchButton).toHaveAttribute("aria-label", "分支");
+    expect(branchButton).toHaveAttribute("title", "Branch — AI 生成子节点");
+    expect(branchButton).toHaveAttribute("aria-pressed", "true");
+    expect(leafButton).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(leafButton);
+    expect(branchButton).toHaveAttribute("aria-pressed", "false");
+    expect(leafButton).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("graft toggles GRAFT_START/GRAFT_CANCEL and shows the target hint", async () => {
     const user = userEvent.setup();
     seedWorkspace(branchProject(), "branch-1", 1);

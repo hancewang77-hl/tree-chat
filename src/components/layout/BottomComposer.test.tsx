@@ -76,11 +76,29 @@ describe("BottomComposer", () => {
   it("starts in AI mode with the layer-aware placeholder and a disabled seed button", () => {
     renderComposer();
 
-    expect(screen.getByRole("textbox")).toHaveAttribute("placeholder", AI_PLACEHOLDER_L0);
+    expect(screen.getByRole("textbox", { name: "AI 提问" })).toHaveAttribute(
+      "placeholder",
+      AI_PLACEHOLDER_L0,
+    );
     expect(screen.getByTitle("播种 · Plant")).toBeDisabled(); // nothing typed yet
     expect(screen.getByRole("button", { name: "AI 分支" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "笔记" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "养分" })).toBeInTheDocument();
+  });
+
+  it("keeps explicit accessible names on the responsive mode toggles", async () => {
+    const user = userEvent.setup();
+    renderComposer();
+
+    const aiMode = screen.getByRole("button", { name: "AI 分支" });
+    const noteMode = screen.getByRole("button", { name: "笔记" });
+
+    expect(aiMode).toHaveAttribute("aria-label", "AI 分支");
+    expect(noteMode).toHaveAttribute("aria-label", "笔记");
+
+    await user.click(noteMode);
+    expect(aiMode).toHaveAttribute("aria-label", "AI 分支");
+    expect(noteMode).toHaveAttribute("aria-label", "笔记");
   });
 
   it("shows the hydrated selected layer in the AI placeholder", async () => {
@@ -103,6 +121,7 @@ describe("BottomComposer", () => {
       expect(modeSpy).toHaveBeenCalledTimes(1);
       expect((modeSpy.mock.calls[0][0] as CustomEvent).detail).toBe("note");
       expect(screen.getByRole("textbox")).toHaveAttribute("placeholder", NOTE_PLACEHOLDER);
+      expect(screen.getByRole("textbox", { name: "叶片笔记" })).toBeInTheDocument();
       expect(screen.getByTitle("保存 · Keep")).toBeInTheDocument();
 
       await user.click(screen.getByRole("button", { name: "AI 分支" }));

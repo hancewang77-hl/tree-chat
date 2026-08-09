@@ -1,10 +1,12 @@
 import { describe, expect, test, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Project } from "@/src/types/tree";
 import { useTreeState } from "@/src/state/TreeContext";
 import { renderWithProject } from "@/src/test/harness/renderWithTree";
 import { testNode, testProject } from "@/src/test/fixtures/tree";
+import { LayerNameDialog } from "../LayerNameDialog";
 import { ConfirmDialog, usePruneConfirm } from "./ConfirmDialog";
 
 function renderDialog() {
@@ -22,13 +24,74 @@ function renderDialog() {
   return { onConfirm, onCancel, view };
 }
 
+function ConfirmDialogHost() {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <>
+      <button onClick={() => setIsOpen(true)}>Open confirmation</button>
+      {isOpen && (
+        <ConfirmDialog
+          title="Confirm removal"
+          message="This action can be undone."
+          confirmLabel="Remove"
+          onConfirm={() => setIsOpen(false)}
+          onCancel={() => setIsOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+function StackedDialogHost() {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [layerOpen, setLayerOpen] = useState(false);
+
+  return (
+    <>
+      <button onClick={() => setConfirmOpen(true)}>Open modal stack</button>
+      {confirmOpen && (
+        <ConfirmDialog
+          title="First dialog"
+          message="Open a nested dialog from here."
+          confirmLabel="Open nested dialog"
+          onConfirm={() => setLayerOpen(true)}
+          onCancel={() => setConfirmOpen(false)}
+        />
+      )}
+      <LayerNameDialog
+        isOpen={layerOpen}
+        selectedLayer={2}
+        planeNameInput="Branches"
+        onInputChange={() => undefined}
+        onConfirm={() => setLayerOpen(false)}
+        onCancel={() => setLayerOpen(false)}
+      />
+    </>
+  );
+}
+
 describe("ConfirmDialog", () => {
   test("renders title, message and action labels", () => {
     renderDialog();
+    const dialog = screen.getByRole("alertdialog", { name: "修剪分支 · Prune" });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(dialog).toHaveAccessibleDescription("确定要删除这个节点吗？");
     expect(screen.getByText("修剪分支 · Prune")).toBeInTheDocument();
     expect(screen.getByText("确定要删除这个节点吗？")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "确认删除" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "取消" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "取消" })).toHaveFocus();
+  });
+
+  test("Escape cancels the destructive action", async () => {
+    const user = userEvent.setup();
+    const { onConfirm, onCancel } = renderDialog();
+
+    await user.keyboard("{Escape}");
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onConfirm).not.toHaveBeenCalled();
   });
 
   test("the confirm button fires onConfirm only", async () => {
@@ -53,17 +116,91 @@ describe("ConfirmDialog", () => {
 
   test("clicking the backdrop cancels; clicking inside the panel does not", async () => {
     const user = userEvent.setup();
-    const { onConfirm, onCancel, view } = renderDialog();
+    const { onConfirm, onCancel } = renderDialog();
 
     // The panel stops propagation, so clicks inside never cancel.
     await user.click(screen.getByText("修剪分支 · Prune"));
     expect(onCancel).not.toHaveBeenCalled();
 
-    const backdrop = view.container.firstElementChild as HTMLElement;
+    const backdrop = screen.getByRole("alertdialog").parentElement as HTMLElement;
     await user.click(backdrop);
 
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  test("portals a fixed full-application backdrop to document.body", () => {
+    renderDialog();
+
+    const backdrop = screen.getByRole("alertdialog").parentElement;
+    expect(backdrop).toHaveClass("fixed", "inset-0");
+    expect(backdrop?.parentElement).toBe(document.body);
+  });
+
+  test("makes the body background inert only while the dialog is open", async () => {
+    const user = userEvent.setup();
+    const view = render(<ConfirmDialogHost />);
+    const opener = screen.getByRole("button", { name: "Open confirmation" });
+
+    expect(view.container).not.toHaveAttribute("inert");
+    await user.click(opener);
+    expect(view.container).toHaveAttribute("inert");
+    expect(view.container).toHaveAttribute("aria-hidden", "true");
+
+    await user.keyboard("{Escape}");
+    expect(view.container).not.toHaveAttribute("inert");
+    expect(view.container).not.toHaveAttribute("aria-hidden");
+  });
+
+  test("Escape closes only the topmost dialog and restores each opener", async () => {
+    const user = userEvent.setup();
+    render(<StackedDialogHost />);
+    const outerOpener = screen.getByRole("button", { name: "Open modal stack" });
+
+    await user.click(outerOpener);
+    const nestedOpener = screen.getByRole("button", { name: "Open nested dialog" });
+    await user.click(nestedOpener);
+    expect(screen.getByRole("dialog", { name: "命名当前平面" })).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("dialog", { name: "命名当前平面" })).toBeNull();
+    expect(screen.getByRole("alertdialog", { name: "First dialog" })).toBeInTheDocument();
+    expect(nestedOpener).toHaveFocus();
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("alertdialog", { name: "First dialog" })).toBeNull();
+    expect(outerOpener).toHaveFocus();
+  });
+
+  test("Tab and Shift+Tab keep focus inside the alert dialog", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    const dialog = screen.getByRole("alertdialog");
+    const [cancelButton, confirmButton] = within(dialog).getAllByRole("button");
+
+    expect(cancelButton).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(confirmButton).toHaveFocus();
+
+    await user.tab();
+    expect(cancelButton).toHaveFocus();
+  });
+
+  test("Escape closes the alert dialog and restores focus to its opener", async () => {
+    const user = userEvent.setup();
+    render(<ConfirmDialogHost />);
+    const opener = screen.getByRole("button", { name: "Open confirmation" });
+
+    await user.click(opener);
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(opener).toHaveFocus();
   });
 });
 

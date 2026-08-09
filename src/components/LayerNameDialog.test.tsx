@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { useState } from "react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { LayerNameDialog } from "./LayerNameDialog";
 
@@ -19,6 +20,25 @@ function renderDialog(
   return { ...view, props };
 }
 
+function LayerNameDialogHost() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [value, setValue] = useState("Branches");
+
+  return (
+    <>
+      <button onClick={() => setIsOpen(true)}>Open layer dialog</button>
+      <LayerNameDialog
+        isOpen={isOpen}
+        selectedLayer={2}
+        planeNameInput={value}
+        onInputChange={setValue}
+        onConfirm={() => setIsOpen(false)}
+        onCancel={() => setIsOpen(false)}
+      />
+    </>
+  );
+}
+
 describe("LayerNameDialog", () => {
   test("renders nothing while closed", () => {
     const { container } = renderDialog({ isOpen: false });
@@ -28,12 +48,15 @@ describe("LayerNameDialog", () => {
   test("shows the current layer and the controlled input value", () => {
     renderDialog();
 
+    const dialog = screen.getByRole("dialog", { name: "命名当前平面" });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(dialog).toHaveAccessibleDescription("当前平面：z = 2");
     expect(
       screen.getByRole("heading", { name: "命名当前平面" }),
     ).toBeInTheDocument();
     expect(screen.getByText("当前平面：z = 2")).toBeInTheDocument();
 
-    const input = screen.getByPlaceholderText("输入平面名称");
+    const input = screen.getByRole("textbox", { name: "平面名称" });
     expect(input).toHaveValue("枝干层");
     expect(input).toHaveFocus();
   });
@@ -67,16 +90,53 @@ describe("LayerNameDialog", () => {
     expect(props.onConfirm).toHaveBeenCalledTimes(1);
   });
 
-  test("pressing Enter in the input does not submit (current behavior)", async () => {
-    // PRODUCT BUG (pinned): the dialog has no form element and no onKeyDown
-    // handler, so Enter neither confirms nor cancels — the user must click
-    // 确定 with the mouse. If Enter-to-submit is added, update this test.
+  test("Enter confirms and Escape cancels from the keyboard", async () => {
     const user = userEvent.setup();
     const { props } = renderDialog();
 
     await user.type(screen.getByPlaceholderText("输入平面名称"), "{Enter}");
-
-    expect(props.onConfirm).not.toHaveBeenCalled();
+    expect(props.onConfirm).toHaveBeenCalledTimes(1);
     expect(props.onCancel).not.toHaveBeenCalled();
+
+    await user.keyboard("{Escape}");
+    expect(props.onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  test("Tab and Shift+Tab keep focus inside the dialog", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    const dialog = screen.getByRole("dialog");
+    const input = within(dialog).getByRole("textbox");
+    const [, confirmButton] = within(dialog).getAllByRole("button");
+
+    expect(input).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(confirmButton).toHaveFocus();
+
+    await user.tab();
+    expect(input).toHaveFocus();
+  });
+
+  test("portals a fixed full-application backdrop to document.body", () => {
+    renderDialog();
+
+    const backdrop = screen.getByRole("dialog").parentElement;
+    expect(backdrop).toHaveClass("fixed", "inset-0");
+    expect(backdrop?.parentElement).toBe(document.body);
+  });
+
+  test("Escape closes the dialog and restores focus to its opener", async () => {
+    const user = userEvent.setup();
+    render(<LayerNameDialogHost />);
+    const opener = screen.getByRole("button", { name: "Open layer dialog" });
+
+    await user.click(opener);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(opener).toHaveFocus();
   });
 });

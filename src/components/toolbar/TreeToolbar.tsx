@@ -139,6 +139,8 @@ export function TreeToolbar({
     <>
       <div className="absolute left-4 top-1/2 z-30 -translate-y-1/2">
         <div
+          role="group"
+          aria-label="树编辑工具"
           className="flex flex-col gap-0.5 rounded-2xl px-1.5 py-1.5 shadow-lg backdrop-blur-sm"
           style={{
             background: "rgba(216, 204, 184, 0.90)",
@@ -152,6 +154,8 @@ export function TreeToolbar({
               onClick={btn.onClick}
               disabled={btn.disabled}
               title={btn.title}
+              aria-label={btn.label}
+              aria-pressed={btn.active === undefined ? undefined : btn.active}
               className={`group relative flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
                 btn.disabled ? "opacity-25 cursor-not-allowed" : "hover:opacity-85"
               }`}
@@ -164,6 +168,7 @@ export function TreeToolbar({
             >
               {btn.icon}
               <span
+                aria-hidden="true"
                 className="pointer-events-none absolute left-11 rounded-lg px-2.5 py-1.5 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50"
                 style={{
                   background: "var(--accent-olive-deep)",

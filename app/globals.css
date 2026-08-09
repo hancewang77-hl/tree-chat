@@ -254,8 +254,8 @@ body.landing-scroll-root::-webkit-scrollbar-track {
   position: fixed;
   right: 0;
   top: 0;
-  /* The perceived shrink uses transforms so scrolling never animates layout. */
-  transition: background-color var(--landing-duration-nav) ease, backdrop-filter var(--landing-duration-nav) ease, border-color var(--landing-duration-nav) ease, height var(--landing-duration-nav) ease, transform var(--landing-duration-nav) ease;
+  /* Height switches at the chapter boundary; only paint-only chrome fades. */
+  transition: background-color var(--landing-duration-nav) ease, backdrop-filter var(--landing-duration-nav) ease, border-color var(--landing-duration-nav) ease;
   z-index: 1000;
 }
 
@@ -267,7 +267,6 @@ body.landing-scroll-root::-webkit-scrollbar-track {
   height: 76px;
   justify-content: space-between;
   min-width: 0;
-  transition: transform var(--landing-duration-nav) cubic-bezier(.16, 1, .3, 1);
 }
 
 .landing-header.is-scrolled {
@@ -423,6 +422,20 @@ body.landing-scroll-root::-webkit-scrollbar-track {
   height: 31px;
   width: 76px;
 }
+
+.landing-logo__metal--light { stop-color: #f5f7ed; }
+.landing-logo__metal--mid { stop-color: #9eac9c; }
+.landing-logo__metal--highlight { stop-color: #e9eee1; }
+.landing-logo__metal--deep { stop-color: #68766d; }
+.landing-logo__twig { stroke: #cbd6c5; }
+.landing-logo__leaf { fill: #a9bca4; }
+
+.landing-header.is-scrolled .landing-logo__metal--light { stop-color: #355f43; }
+.landing-header.is-scrolled .landing-logo__metal--mid { stop-color: #173322; }
+.landing-header.is-scrolled .landing-logo__metal--highlight { stop-color: #52745a; }
+.landing-header.is-scrolled .landing-logo__metal--deep { stop-color: #10271a; }
+.landing-header.is-scrolled .landing-logo__twig { stroke: #284c34; }
+.landing-header.is-scrolled .landing-logo__leaf { fill: #31593e; }
 
 .landing-logo__wordmark {
   display: inline-flex;

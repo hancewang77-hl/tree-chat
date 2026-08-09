@@ -273,7 +273,12 @@ export function BottomComposer({
               );
             })}
             {uploadError && (
-              <span className="text-[11px]" style={{ color: "#B43C28" }}>
+              <span
+                className="text-[11px]"
+                style={{ color: "#B43C28" }}
+                role="status"
+                aria-live="polite"
+              >
                 {uploadError}
               </span>
             )}
@@ -287,6 +292,8 @@ export function BottomComposer({
           >
             <button
               onClick={() => emitComposerMode("ai")}
+              aria-label="AI 分支"
+              aria-pressed={mode === "ai"}
               className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-medium transition-all relative"
               style={{
                 background: mode === "ai" ? "var(--accent-sage)" : "var(--accent-olive-soft)",
@@ -304,6 +311,8 @@ export function BottomComposer({
             </button>
             <button
               onClick={() => emitComposerMode("note")}
+              aria-label="笔记"
+              aria-pressed={mode === "note"}
               className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-medium transition-all"
               style={{
                 background: mode === "note" ? "var(--accent-sage)" : "var(--accent-olive-soft)",
@@ -326,6 +335,7 @@ export function BottomComposer({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
+            aria-label="养分"
             disabled={isUploading}
             className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl px-3 text-[12px] font-medium transition-all hover:opacity-85 disabled:opacity-50"
             style={{
@@ -355,6 +365,7 @@ export function BottomComposer({
           >
             <textarea
               ref={textareaRef}
+              aria-label={mode === "ai" ? "AI 提问" : "叶片笔记"}
               className="w-full resize-none bg-transparent text-[14px] leading-6 outline-none placeholder:opacity-40 relative z-[1]"
               rows={2}
               placeholder={placeholder}
@@ -373,6 +384,15 @@ export function BottomComposer({
           {/* Send — seed-shaped button with burst effect */}
           <button
             onClick={mode === "ai" && isAiTyping ? onStop : handleSubmit}
+            aria-label={mode === "ai" && isAiTyping
+              ? "停止生成"
+              : mode === "ai" && isContextPreparing
+                ? "模型上下文整理中"
+                : mode === "ai" && isUploading
+                  ? "附件正在转换为 Markdown"
+                  : mode === "ai"
+                    ? "播种 · Plant"
+                    : "保存 · Keep"}
             disabled={
               (!(mode === "ai" && isAiTyping) && isAiSubmitBlocked) ||
               (!(mode === "ai" && isAiTyping) && !text.trim())

@@ -57,11 +57,11 @@ describe("1920 × 1080 landing composition contract", () => {
     expect(css).toContain("max-width: 380px");
   });
 
-  test("uses elevated branch and root camera keys for the requested review angles", () => {
-    expect(scene).toContain("position: [7.4, 11.8, 7.1]");
-    expect(scene).toContain("target: [2.65, 4.65, 0.25]");
-    expect(scene).toContain("position: [6.6, 10.8, 7.6]");
-    expect(scene).toContain("target: [0, -0.45, 0]");
+  test("uses model-offset-aware branch and root camera keys", () => {
+    expect(scene).toContain("position: [3.28, 9.01, 7.99]");
+    expect(scene).toContain("target: [-0.54, 3.4, 1.37]");
+    expect(scene).toContain("position: [6.6, 4.4, 7.6]");
+    expect(scene).toContain("target: [0, -1.7, 0]");
   });
 
   test("keeps Page 3 left-weighted and Page 7 right-quarter mask aligned", () => {
@@ -87,5 +87,20 @@ describe("1920 × 1080 landing composition contract", () => {
     expect(landingPage).toContain('{ label: "Graft"');
     expect(landingPage).toContain('{ label: "Prune"');
     expect(landingPage).toContain('{ label: "Leaf"');
+  });
+
+  test("keeps the compact header on one CSS-owned, contrast-safe transition", () => {
+    expect(css).not.toMatch(/\.landing-header\s*\{[\s\S]*?transition:[^;]*height/);
+    expect(landingPage).not.toContain("animate(header");
+    expect(landingPage).not.toContain("headerRef");
+    expect(css).toContain(".landing-header.is-scrolled .landing-logo__metal--light");
+    expect(css).toContain(".landing-header.is-scrolled .landing-logo__leaf");
+  });
+
+  test("keeps public identity constants out of the shared client module", () => {
+    expect(landingPage).not.toContain("hancewang77-hl");
+    expect(landingPage).not.toContain("Open Source");
+    expect(landingPage).not.toContain("GitHub");
+    expect(landingPage).not.toContain("MIT License");
   });
 });

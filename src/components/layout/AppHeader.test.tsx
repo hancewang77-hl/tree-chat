@@ -106,4 +106,36 @@ describe("AppHeader", () => {
     expect(document.documentElement).not.toHaveAttribute("data-theme");
     expect(localStorage.getItem("theme")).toBe("light");
   });
+
+  test("icon controls expose names and toggle state to assistive technology", async () => {
+    const user = userEvent.setup();
+    renderWithTree(<AppHeader />);
+
+    const viewMode = screen.getByRole("button", { name: "3D 模式" });
+    const canopy = screen.getByRole("button", { name: "树冠 — 全局视图" });
+    const rings = screen.getByRole("button", { name: "年轮 — 操作历史" });
+
+    expect(viewMode).toHaveAttribute("aria-pressed", "false");
+    expect(canopy).toHaveAttribute("aria-pressed", "false");
+    expect(rings).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "收获 — 导出项目" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "帮助 — 功能指南" })).toBeInTheDocument();
+    const darkMode = screen.getByRole("button", { name: "深色模式" });
+    expect(darkMode).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+
+    await user.click(viewMode);
+    expect(screen.getByRole("button", { name: "3D 模式" })).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(darkMode);
+    expect(screen.getByRole("button", { name: "深色模式" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    await user.click(canopy);
+    expect(canopy).toHaveAttribute("aria-pressed", "true");
+  });
 });

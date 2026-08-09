@@ -1,12 +1,13 @@
 import { describe, expect, test } from "vitest";
-import { act } from "react";
-import { screen, waitFor } from "@testing-library/react";
+import { act, useEffect, useState } from "react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { MindNode, Project } from "@/src/types/tree";
 import { useTreeState } from "@/src/state/TreeContext";
 import { SearchPalette } from "./SearchPalette";
 import { renderWithProject } from "@/src/test/harness/renderWithTree";
 import { testNode, testProject } from "@/src/test/fixtures/tree";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 /** Renders the current selection so SUNLIGHT side effects are observable. */
 function SelectionProbe() {
@@ -68,6 +69,66 @@ function toggleSearch() {
   });
 }
 
+function SearchHost() {
+  return (
+    <>
+      <button onClick={toggleSearch}>Open search</button>
+      <SearchPalette />
+    </>
+  );
+}
+
+function SearchBlockedByConfirmHost() {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  return (
+    <>
+      <button onClick={() => setConfirmOpen(true)}>Open blocking confirmation</button>
+      <SearchPalette />
+      {confirmOpen && (
+        <ConfirmDialog
+          title="Blocking confirmation"
+          message="Search must stay closed."
+          confirmLabel="Continue"
+          onConfirm={() => setConfirmOpen(false)}
+          onCancel={() => setConfirmOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+function SearchUnderConfirmHost() {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  useEffect(() => {
+    const openConfirm = () => setConfirmOpen(true);
+    window.addEventListener("test-open-confirm", openConfirm);
+    return () => window.removeEventListener("test-open-confirm", openConfirm);
+  }, []);
+
+  return (
+    <>
+      <SearchPalette />
+      {confirmOpen && (
+        <ConfirmDialog
+          title="Stacked confirmation"
+          message="Search remains mounted underneath."
+          confirmLabel="Continue"
+          onConfirm={() => setConfirmOpen(false)}
+          onCancel={() => setConfirmOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+function openStackedConfirm() {
+  act(() => {
+    window.dispatchEvent(new CustomEvent("test-open-confirm"));
+  });
+}
+
 describe("SearchPalette", () => {
   test("is hidden by default and toggles with Ctrl+K / Cmd+K", async () => {
     const user = userEvent.setup();
@@ -77,6 +138,10 @@ describe("SearchPalette", () => {
 
     await user.keyboard("{Control>}k{/Control}");
     expect(await screen.findByPlaceholderText("搜索节点...")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "搜索节点" })).toHaveAttribute(
+      "aria-modal",
+      "true",
+    );
     expect(screen.getByText("输入关键词搜索所有节点")).toBeInTheDocument();
 
     await user.keyboard("{Control>}k{/Control}");
@@ -199,5 +264,80 @@ describe("SearchPalette", () => {
     // SUNLIGHT selected node b and jumped to its layer (2), then closed.
     expect(screen.getByTestId("selection")).toHaveTextContent("b:2");
     expect(screen.queryByPlaceholderText("搜索节点...")).toBeNull();
+  });
+
+  test.each(["Control", "Meta"])(
+    "does not open from %s+K while another modal is active",
+    async (modifier) => {
+      const user = userEvent.setup();
+      renderWithProject(<SearchBlockedByConfirmHost />, searchProject());
+      await user.click(screen.getByRole("button", { name: "Open blocking confirmation" }));
+
+      await user.keyboard(`{${modifier}>}k{/${modifier}}`);
+
+      expect(screen.getByRole("alertdialog", { name: "Blocking confirmation" })).toBeInTheDocument();
+      expect(screen.queryByRole("dialog", { name: "搜索节点" })).toBeNull();
+    },
+  );
+
+  test("does not open from search-toggle while another modal is active", async () => {
+    const user = userEvent.setup();
+    renderWithProject(<SearchBlockedByConfirmHost />, searchProject());
+    await user.click(screen.getByRole("button", { name: "Open blocking confirmation" }));
+
+    toggleSearch();
+
+    expect(screen.getByRole("alertdialog", { name: "Blocking confirmation" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "搜索节点" })).toBeNull();
+  });
+
+  test("search triggers do not close Search while a newer modal is topmost", async () => {
+    const user = userEvent.setup();
+    renderWithProject(<SearchUnderConfirmHost />, searchProject());
+    toggleSearch();
+    const searchInput = await screen.findByPlaceholderText("搜索节点...");
+
+    openStackedConfirm();
+    expect(screen.getByRole("alertdialog", { name: "Stacked confirmation" })).toBeInTheDocument();
+
+    await user.keyboard("{Control>}k{/Control}");
+    expect(searchInput).toBeInTheDocument();
+
+    toggleSearch();
+    expect(searchInput).toBeInTheDocument();
+  });
+
+  test("Tab and Shift+Tab keep focus inside the search dialog", async () => {
+    const user = userEvent.setup();
+    renderWithProject(<SearchHost />, searchProject());
+    await user.click(screen.getByRole("button", { name: "Open search" }));
+
+    const dialog = await screen.findByRole("dialog");
+    const input = within(dialog).getByRole("textbox");
+    await user.type(input, "soil");
+    const resultButtons = within(dialog).getAllByRole("button");
+    const lastResult = resultButtons.at(-1);
+    expect(lastResult).toBeDefined();
+
+    expect(input).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(lastResult).toHaveFocus();
+
+    await user.tab();
+    expect(input).toHaveFocus();
+  });
+
+  test("Escape closes search and restores focus to its opener", async () => {
+    const user = userEvent.setup();
+    renderWithProject(<SearchHost />, searchProject());
+    const opener = screen.getByRole("button", { name: "Open search" });
+
+    await user.click(opener);
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(opener).toHaveFocus();
   });
 });

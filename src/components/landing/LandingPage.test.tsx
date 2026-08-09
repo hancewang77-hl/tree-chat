@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import { animate } from "animejs";
 import { LandingPage } from "./LandingPage";
+import { resolveLandingPresentation } from "@/src/lib/siteProfile";
+
+const PUBLIC_PROFILE = resolveLandingPresentation("tree-chat.example.workers.dev", {
+  publicHost: "tree-chat.example.workers.dev",
+  competitionHost: "treechat.tech",
+});
 
 vi.mock("animejs", () => ({
   animate: vi.fn(() => ({ pause: vi.fn() })),
@@ -17,6 +24,9 @@ describe("LandingPage seed transition", () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.mocked(animate).mockImplementation(
+      () => ({ pause: vi.fn() }) as unknown as ReturnType<typeof animate>,
+    );
     originalDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollIntoView");
     scrollIntoView = vi.fn();
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
@@ -34,16 +44,17 @@ describe("LandingPage seed transition", () => {
     vi.useRealTimers();
   });
 
-  test("automatically scrolls to Page 3 after the seed-to-sprout sequence", () => {
-    render(<LandingPage />);
+  test("waits for a readable mature-tree frame before scrolling to Page 3", () => {
+    render(<LandingPage profile={PUBLIC_PROFILE} />);
 
     const seedButton = screen.getByRole("button", { name: "点击播下 Tree Chat 种子" });
     fireEvent.click(seedButton);
 
     expect(seedButton).toHaveAttribute("aria-pressed", "true");
+    expect(document.querySelector(".landing-seed-stage")).toHaveClass("is-planted");
     expect(scrollIntoView).not.toHaveBeenCalled();
 
-    act(() => vi.advanceTimersByTime(1319));
+    act(() => vi.advanceTimersByTime(1519));
     expect(scrollIntoView).not.toHaveBeenCalled();
 
     act(() => vi.advanceTimersByTime(1));
@@ -65,7 +76,7 @@ describe("LandingPage seed transition", () => {
       dispatchEvent: vi.fn(() => false),
     }));
 
-    render(<LandingPage />);
+    render(<LandingPage profile={PUBLIC_PROFILE} />);
     fireEvent.click(screen.getByRole("button", { name: "点击播下 Tree Chat 种子" }));
 
     act(() => vi.runOnlyPendingTimers());
@@ -74,7 +85,7 @@ describe("LandingPage seed transition", () => {
   });
 
   test("stages a mature tree silhouette in the planted seed sequence", () => {
-    render(<LandingPage />);
+    render(<LandingPage profile={PUBLIC_PROFILE} />);
 
     const matureTree = document.querySelector(".landing-seed-tree");
     expect(matureTree).toBeTruthy();
@@ -84,7 +95,7 @@ describe("LandingPage seed transition", () => {
   });
 
   test("renders Page 3 as a three-level tree without rejoining branches", () => {
-    render(<LandingPage />);
+    render(<LandingPage profile={PUBLIC_PROFILE} />);
 
     const map = document.querySelector<SVGSVGElement>(".landing-branch-map");
     expect(map).toBeTruthy();
@@ -177,7 +188,7 @@ describe("LandingPage seed transition", () => {
   });
 
   test("exposes one auditable snap marker for each of the nine pages", () => {
-    render(<LandingPage />);
+    render(<LandingPage profile={PUBLIC_PROFILE} />);
 
     const markers = [...document.querySelectorAll<HTMLElement>("[data-page]")];
     expect(markers.map((marker) => marker.dataset.page)).toEqual([
@@ -196,7 +207,7 @@ describe("LandingPage seed transition", () => {
   });
 
   test("marks both document roots while the landing narrative is mounted", () => {
-    const { unmount } = render(<LandingPage />);
+    const { unmount } = render(<LandingPage profile={PUBLIC_PROFILE} />);
 
     expect(document.documentElement).toHaveClass("landing-scroll-root");
     expect(document.body).toHaveClass("landing-scroll-root");
@@ -205,5 +216,35 @@ describe("LandingPage seed transition", () => {
 
     expect(document.documentElement).not.toHaveClass("landing-scroll-root");
     expect(document.body).not.toHaveClass("landing-scroll-root");
+  });
+
+  test("does not retain chapter animations after their effect cleanup", () => {
+    const animations: Array<{ pause: ReturnType<typeof vi.fn> }> = [];
+    vi.mocked(animate).mockImplementation(() => {
+      const animation = { pause: vi.fn() };
+      animations.push(animation);
+      return animation as unknown as ReturnType<typeof animate>;
+    });
+    const { unmount } = render(<LandingPage profile={PUBLIC_PROFILE} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "点击播下 Tree Chat 种子" }));
+    const cleanedAnimation = animations.find((animation) => animation.pause.mock.calls.length === 1);
+    expect(cleanedAnimation).toBeDefined();
+
+    unmount();
+
+    expect(cleanedAnimation?.pause).toHaveBeenCalledTimes(1);
+  });
+
+  test("keeps identity-bearing links out of the competition build", () => {
+    render(<LandingPage profile={resolveLandingPresentation("treechat.tech", {
+      publicHost: "tree-chat.example.workers.dev",
+      competitionHost: "treechat.tech",
+    })} />);
+
+    expect(document.querySelector("main")).toHaveAttribute("data-site-profile", "competition");
+    expect(screen.queryByRole("link", { name: /GitHub/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /MIT License/i })).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("hancewang77-hl");
   });
 });
