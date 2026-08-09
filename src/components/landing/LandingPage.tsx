@@ -212,6 +212,7 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
   const activeChapterRef = useRef(0);
   const treeChapterRef = useRef(0);
   const treeProgressRef = useRef(0);
+  const requestTreeRenderRef = useRef<(() => void) | null>(null);
   const treeStopTopsRef = useRef<number[]>([]);
   const scrolledRef = useRef(false);
   const treeStoryRef = useRef<HTMLElement | null>(null);
@@ -422,6 +423,7 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
       }
       const treeScrollState = resolveTreeScrollState(scrollTop, treeStopTopsRef.current);
       treeProgressRef.current = treeScrollState.progress;
+      requestTreeRenderRef.current?.();
       const storyRect = treeStoryRef.current?.getBoundingClientRect();
       if (storyRect && storyRect.top <= window.innerHeight * 0.78) {
         // Switch copy and masks only when the camera reaches the next 1080px
@@ -689,8 +691,8 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
           <NarrativeTreeScene
             progress={treeChapter / (TREE_STORIES.length - 1)}
             progressRef={treeProgressRef}
+            requestRenderRef={requestTreeRenderRef}
             reducedMotion={reducedMotion}
-            active={activeChapter >= 3 && activeChapter <= 7}
           />
           <div className="landing-tree-vignette" aria-hidden="true" />
           <div className="landing-tree-overlay" data-tree-composition={`chapter-${treeChapter + 4}`}>

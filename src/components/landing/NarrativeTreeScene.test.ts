@@ -1,5 +1,42 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import { CANOPY_CLUSTERS, CANOPY_LEAFLETS, TREE_SEGMENTS } from "./treeGeometry";
+
+const landingPage = readFileSync(resolve(process.cwd(), "src/components/landing/LandingPage.tsx"), "utf8");
+const scene = readFileSync(resolve(process.cwd(), "src/components/landing/NarrativeTreeScene.tsx"), "utf8");
+
+describe("demand-rendered tree scene contract", () => {
+  test("renders only when landing scroll progress requests a frame", () => {
+    expect(scene).toContain('frameloop="demand"');
+    expect(scene).toContain("dpr={[1, 1.25]}");
+    expect(scene).toContain("requestRenderRef");
+    expect(scene).toContain("requestRenderRef.current = requestRender");
+    expect(scene).toContain("invalidate()");
+    expect(landingPage).toContain("const requestTreeRenderRef = useRef<(() => void) | null>(null)");
+    expect(landingPage).toContain("requestRenderRef={requestTreeRenderRef}");
+    expect(landingPage).toMatch(
+      /treeProgressRef\.current = treeScrollState\.progress;\s*requestTreeRenderRef\.current\?\.\(\);/,
+    );
+  });
+
+  test("applies sampled camera keys directly without an idle animation loop", () => {
+    expect(scene).toContain("camera.position.copy(sampledPosition.current)");
+    expect(scene).toContain("camera.lookAt(sampledTarget.current)");
+    expect(scene).toContain("const cameraProgress = reducedMotion ? progress : liveProgress;");
+    expect(scene).not.toContain("Math.round(liveProgress");
+    expect(scene).not.toContain("frameloop={active");
+    expect(scene).not.toMatch(/<Canvas[\s\S]*?\s+shadows(?:\s|\/>)/);
+    expect(scene).not.toContain("castShadow");
+    expect(scene).not.toContain("receiveShadow");
+    expect(scene).not.toContain("shadow-mapSize");
+    expect(scene).not.toContain("shadow-bias");
+    expect(scene).not.toContain("Math.sin(elapsed");
+    expect(scene).not.toContain("updateMatrixWorld");
+    expect(scene).not.toContain("currentPosition");
+    expect(scene).not.toContain("currentTarget");
+  });
+});
 
 describe("mature broadleaf tree geometry contract", () => {
   test("forms one connected, acyclic hierarchy with trunk, primary, secondary, twig and root levels", () => {

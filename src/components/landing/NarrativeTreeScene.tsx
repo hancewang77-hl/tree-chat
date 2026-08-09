@@ -5,6 +5,7 @@ import * as THREE from "three";
 import {
   Component,
   memo,
+  type MutableRefObject,
   type ReactNode,
   useEffect,
   useLayoutEffect,
@@ -300,19 +301,15 @@ function MergedBranchMesh({
   segments,
   barkTexture,
   color,
-  castShadow,
-  receiveShadow = true,
 }: {
   segments: TreeSegmentSpec[];
   barkTexture: THREE.Texture;
   color: string;
-  castShadow: boolean;
-  receiveShadow?: boolean;
 }) {
   const geometry = useMemo(() => mergeBranchGeometries(segments), [segments]);
 
   return (
-    <mesh geometry={geometry} castShadow={castShadow} receiveShadow={receiveShadow}>
+    <mesh geometry={geometry}>
       <meshStandardMaterial
         color={color}
         map={barkTexture}
@@ -374,8 +371,6 @@ function InstancedFoliage({
     <instancedMesh
       ref={meshRef}
       args={[geometry, material, instances.length]}
-      castShadow={false}
-      receiveShadow={false}
       // VolumetricCanopy shares the blob geometry across three layer meshes;
       // leave disposal to its single owner instead of letting R3F dispose the
       // shared resource once per instance.
@@ -459,7 +454,7 @@ function VolumetricCanopy() {
   );
 }
 
-function TreeModel({ groupRef }: { groupRef: { current: THREE.Group | null } }) {
+function TreeModel() {
   const barkTexture = useMemo(() => createBarkTexture(), []);
   const rootFlareGeometry = useMemo(() => createRootFlareGeometry(), []);
   const trunkAndRoots = useMemo(
@@ -481,12 +476,12 @@ function TreeModel({ groupRef }: { groupRef: { current: THREE.Group | null } }) 
   }, [barkTexture, rootFlareGeometry]);
 
   return (
-    <group ref={groupRef} position={[0, -2.05, 0]}>
-      <MergedBranchMesh segments={trunkAndRoots} barkTexture={barkTexture} color="#755335" castShadow receiveShadow={false} />
-      <MergedBranchMesh segments={primaryBranches} barkTexture={barkTexture} color="#8b603e" castShadow receiveShadow={false} />
-      <MergedBranchMesh segments={fineBranches} barkTexture={barkTexture} color="#9a704a" castShadow={false} receiveShadow={false} />
+    <group position={[0, -2.05, 0]}>
+      <MergedBranchMesh segments={trunkAndRoots} barkTexture={barkTexture} color="#755335" />
+      <MergedBranchMesh segments={primaryBranches} barkTexture={barkTexture} color="#8b603e" />
+      <MergedBranchMesh segments={fineBranches} barkTexture={barkTexture} color="#9a704a" />
       <VolumetricCanopy />
-      <mesh geometry={rootFlareGeometry} position={[0, -0.02, 0]} scale={[0.98, 0.46, 0.98]} castShadow receiveShadow={false} dispose={null}>
+      <mesh geometry={rootFlareGeometry} position={[0, -0.02, 0]} scale={[0.98, 0.46, 0.98]} dispose={null}>
         <meshStandardMaterial
           color="#755335"
           map={barkTexture}
@@ -503,34 +498,45 @@ function TreeModel({ groupRef }: { groupRef: { current: THREE.Group | null } }) 
 
 const MemoizedTreeModel = memo(TreeModel);
 
-function SceneRig({ progress, progressRef, reducedMotion }: { progress: number; progressRef?: { current: number }; reducedMotion: boolean }) {
-  const { camera } = useThree();
-  const groupRef = useRef<THREE.Group>(null);
-  const currentTarget = useRef(new THREE.Vector3(0, 2.35, 0));
-  const currentPosition = useRef(new THREE.Vector3(0, 2.2, 16));
-  const nextTarget = useRef(new THREE.Vector3());
-  const nextPosition = useRef(new THREE.Vector3());
+type RenderRequestRef = MutableRefObject<(() => void) | null>;
 
-  useFrame(({ clock }, delta) => {
-    const group = groupRef.current;
-    const elapsed = clock.getElapsedTime();
-    if (group && !reducedMotion) {
-      group.rotation.z = Math.sin(elapsed * 0.34) * 0.008;
-      group.rotation.x = Math.sin(elapsed * 0.22) * 0.005;
-      group.position.y = -2.05 + Math.sin(elapsed * 0.42) * 0.012;
-      group.updateMatrixWorld();
-      if (delta > 0.04) group.rotation.z *= 0.98;
-    }
+function SceneRig({
+  progress,
+  progressRef,
+  requestRenderRef,
+  reducedMotion,
+}: {
+  progress: number;
+  progressRef?: { current: number };
+  requestRenderRef: RenderRequestRef;
+  reducedMotion: boolean;
+}) {
+  const { camera, invalidate } = useThree();
+  const sampledTarget = useRef(new THREE.Vector3());
+  const sampledPosition = useRef(new THREE.Vector3());
 
-    sampleKeyframes(progressRef?.current ?? progress, nextPosition.current, nextTarget.current);
-    const factor = reducedMotion ? 1 : 1 - Math.pow(0.00005, delta);
-    currentPosition.current.lerp(nextPosition.current, factor);
-    currentTarget.current.lerp(nextTarget.current, factor);
-    camera.position.copy(currentPosition.current);
-    camera.lookAt(currentTarget.current);
+  useEffect(() => {
+    const requestRender = () => invalidate();
+    requestRenderRef.current = requestRender;
+    invalidate();
+    return () => {
+      if (requestRenderRef.current === requestRender) requestRenderRef.current = null;
+    };
+  }, [invalidate, requestRenderRef]);
+
+  useEffect(() => {
+    invalidate();
+  }, [invalidate, progress, reducedMotion]);
+
+  useFrame(() => {
+    const liveProgress = progressRef?.current ?? progress;
+    const cameraProgress = reducedMotion ? progress : liveProgress;
+    sampleKeyframes(cameraProgress, sampledPosition.current, sampledTarget.current);
+    camera.position.copy(sampledPosition.current);
+    camera.lookAt(sampledTarget.current);
   });
 
-  return <MemoizedTreeModel groupRef={groupRef} />;
+  return <MemoizedTreeModel />;
 }
 
 function StaticTreeFallback() {
@@ -561,13 +567,13 @@ class WebGLBoundary extends Component<
 export function NarrativeTreeScene({
   progress,
   progressRef,
+  requestRenderRef,
   reducedMotion,
-  active,
 }: {
   progress: number;
   progressRef?: { current: number };
+  requestRenderRef: RenderRequestRef;
   reducedMotion: boolean;
-  active: boolean;
 }) {
   const webglSupported = useSyncExternalStore(subscribeToWebgl, getWebglSupport, () => false);
 
@@ -580,9 +586,8 @@ export function NarrativeTreeScene({
         <WebGLBoundary fallback={<StaticTreeFallback />}>
           <Canvas
             aria-hidden="true"
-            dpr={[1, 1.5]}
-            frameloop={active && !reducedMotion ? "always" : "demand"}
-            shadows
+            dpr={[1, 1.25]}
+            frameloop="demand"
             gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
             camera={{ position: [0, 2.2, 16], fov: 40, near: 0.1, far: 100 }}
             fallback={<StaticTreeFallback />}
@@ -594,9 +599,6 @@ export function NarrativeTreeScene({
               position={[-7, 11, 7]}
               intensity={2.6}
               color="#fff0c8"
-              castShadow
-              shadow-mapSize={[1024, 1024]}
-              shadow-bias={-0.0002}
             />
             <pointLight position={[4, 5, 5]} intensity={1.15} color="#d5edbf" />
             <pointLight
@@ -606,7 +608,12 @@ export function NarrativeTreeScene({
               distance={40}
               decay={1}
             />
-            <SceneRig progress={progress} progressRef={progressRef} reducedMotion={reducedMotion} />
+            <SceneRig
+              progress={progress}
+              progressRef={progressRef}
+              requestRenderRef={requestRenderRef}
+              reducedMotion={reducedMotion}
+            />
           </Canvas>
         </WebGLBoundary>
       ) : <StaticTreeFallback />}
