@@ -20,6 +20,7 @@ import type { LucideIcon } from "lucide-react";
 import type { CSSProperties } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { LandingPresentation } from "@/src/lib/siteProfile";
+import { resolveTreeScrollState } from "./landingScroll";
 import { NarrativeTreeScene } from "./NarrativeTreeScene";
 
 type RevealAnimation = { pause: () => void };
@@ -211,6 +212,7 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
   const activeChapterRef = useRef(0);
   const treeChapterRef = useRef(0);
   const treeProgressRef = useRef(0);
+  const treeStopTopsRef = useRef<number[]>([]);
   const scrolledRef = useRef(false);
   const treeStoryRef = useRef<HTMLElement | null>(null);
   const dilemmaRef = useRef<HTMLElement | null>(null);
@@ -407,6 +409,28 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
   }, [reducedMotion, seedPlanted]);
 
   useEffect(() => {
+    let disposed = false;
+    const refreshTreeStopTops = () => {
+      const scrollTop = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop;
+      treeStopTopsRef.current = Array.from(
+        document.querySelectorAll<HTMLElement>(".landing-tree-scroll-stop"),
+        (stop) => stop.getBoundingClientRect().top + scrollTop,
+      );
+    };
+
+    refreshTreeStopTops();
+    window.addEventListener("resize", refreshTreeStopTops);
+    void document.fonts?.ready.then(() => {
+      if (!disposed) refreshTreeStopTops();
+    });
+
+    return () => {
+      disposed = true;
+      window.removeEventListener("resize", refreshTreeStopTops);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!seedPlanted) return;
 
     let programmaticReleaseTimer = 0;
@@ -457,18 +481,14 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
         scrolledRef.current = nextScrolled;
         setScrolled(nextScrolled);
       }
+      const treeScrollState = resolveTreeScrollState(scrollTop, treeStopTopsRef.current);
+      treeProgressRef.current = treeScrollState.progress;
       const storyRect = treeStoryRef.current?.getBoundingClientRect();
       if (storyRect && storyRect.top <= window.innerHeight * 0.78) {
-        const available = Math.max(1, storyRect.height - window.innerHeight);
-        const progress = Math.min(1, Math.max(0, -storyRect.top / available));
-        treeProgressRef.current = progress;
         // Switch copy and masks only when the camera reaches the next 1080px
         // story stop. Midpoint rounding changed overlays while the camera was
         // still between two compositions, which produced visible seams.
-        const nextTreeChapter = Math.min(
-          TREE_STORIES.length - 1,
-          Math.max(0, Math.floor(progress * (TREE_STORIES.length - 1) + 0.0001)),
-        );
+        const nextTreeChapter = treeScrollState.chapter;
         if (storyRect.bottom <= window.innerHeight * 0.72) {
           commitActiveChapter(CHAPTERS.length - 1);
         } else {

@@ -206,6 +206,36 @@ describe("LandingPage seed transition", () => {
     expect(markers.filter((marker) => marker.matches(".landing-tree-scroll-stop"))).toHaveLength(5);
   });
 
+  test("caches tree stop geometry between scroll frames and refreshes it on resize", () => {
+    const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+    let treeStopMeasurements = 0;
+    let pendingFrame: FrameRequestCallback | undefined;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.matches(".landing-tree-scroll-stop")) {
+        treeStopMeasurements += 1;
+      }
+      return originalGetBoundingClientRect.call(this);
+    });
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      pendingFrame = callback;
+      return 1;
+    });
+
+    const { unmount } = render(<LandingPage profile={PUBLIC_PROFILE} />);
+    expect(treeStopMeasurements).toBe(5);
+
+    fireEvent.scroll(window);
+    act(() => pendingFrame?.(0));
+    expect(treeStopMeasurements).toBe(5);
+
+    fireEvent.resize(window);
+    expect(treeStopMeasurements).toBe(10);
+
+    unmount();
+    fireEvent.resize(window);
+    expect(treeStopMeasurements).toBe(10);
+  });
+
   test("marks both document roots while the landing narrative is mounted", () => {
     const { unmount } = render(<LandingPage profile={PUBLIC_PROFILE} />);
 
