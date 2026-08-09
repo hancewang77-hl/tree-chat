@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { animate } from "animejs";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { LandingPage } from "./LandingPage";
 import { resolveLandingPresentation } from "@/src/lib/siteProfile";
 
@@ -322,5 +324,67 @@ describe("LandingPage seed transition", () => {
     expect(screen.queryByRole("link", { name: /GitHub/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /MIT License/i })).not.toBeInTheDocument();
     expect(document.body.textContent).not.toContain("hancewang77-hl");
+  });
+
+  test("pairs the five tree scenes with the approved prospect narrative", () => {
+    render(<LandingPage profile={PUBLIC_PROFILE} />);
+
+    const landingSource = readFileSync(resolve(process.cwd(), "src/components/landing/LandingPage.tsx"), "utf8");
+    const pageText = document.body.textContent ?? "";
+    const treeStories = [
+      [
+        "让复杂思考长成一棵树",
+        "把每轮提问与回答放进父子路径，把不同方案留在并列枝条。你可以沿一条路线深入，也能退回主干比较、整理，让复杂任务始终保有全貌。",
+      ],
+      [
+        "每一根枝条，都是可继续的思路",
+        "从当前节点展开新分支，用 Leaf 留下判断，用 Graft 调整归属，再以 Prune 清理失效路径。思路可以先发散，随后收束成可继续加工的结构。",
+      ],
+      [
+        "让规划成为主线，让历史保留年轮",
+        "Auxo 先把根任务拆成可审阅的任务树，Rings 记录移动、扩展和修剪的变化。规划沿主线推进，试错也有可撤销、可重做的回路。",
+      ],
+      [
+        "让资料扎根，让成果被收获",
+        "将课程讲义、论文摘要和项目材料纳入当前上下文，再把整理后的整棵树导出为 Markdown 或 JSON。资料有归属，成果也能带走。",
+      ],
+      [
+        "从局部回答，回到全局知识地图",
+        "分支、批注、资料、历史与导出在树冠视角重新汇合。你可以从单个节点回到全局结构，看清问题如何展开、判断如何形成、成果如何沉淀。",
+      ],
+    ] as const;
+
+    treeStories.forEach(([title, body]) => {
+      expect(landingSource).toContain(`title: "${title}"`);
+      expect(landingSource).toContain(`body: "${body}"`);
+    });
+    expect(screen.getByRole("heading", { level: 2, name: treeStories[0][0] })).toBeInTheDocument();
+    expect(screen.getByText(treeStories[0][1])).toBeInTheDocument();
+
+    expect(screen.getByText("Prospect / 应用前景")).toBeInTheDocument();
+    expect(screen.getByRole("heading", {
+      level: 2,
+      name: "让每一次提问都有位置，让每一次探索都有路径",
+    })).toBeInTheDocument();
+    ["深度学习", "研究与方案", "公共治理", "负责任智能"].forEach((title) => {
+      expect(screen.getByRole("heading", { level: 3, name: title })).toBeInTheDocument();
+    });
+    expect(screen.getByRole("heading", {
+      level: 3,
+      name: "SCENARIO PROOF / 场景验证",
+    })).toBeInTheDocument();
+    expect(screen.getByRole("heading", {
+      level: 3,
+      name: "SOCIAL RESPONSIBILITY / 社会责任",
+    })).toBeInTheDocument();
+    expect(pageText).toContain("暴雨内涝居民疏散与安置");
+    expect(pageText).toContain("海姆立克急救法");
+    expect(pageText).toContain(
+      "项目承担的社会责任，是让 AI 增强人的判断力、知识组织能力和数字素养，并让有价值的探索沉淀为可复用成果。",
+    );
+    expect(pageText).not.toContain("开放与反思");
+    expect(pageText).not.toContain("需要模型连接");
+    expect(pageText).not.toContain("状态不跨设备");
+    expect(document.querySelector(".landing-limitation-grid")).toBeNull();
   });
 });

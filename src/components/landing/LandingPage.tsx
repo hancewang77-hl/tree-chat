@@ -51,7 +51,7 @@ const CHAPTERS = [
   "树干功能",
   "树根功能",
   "树冠回顾",
-  "开放与反思",
+  "应用前景",
 ];
 
 const TREE_STORIES: Array<{
@@ -65,8 +65,8 @@ const TREE_STORIES: Array<{
   {
     chapter: "主干",
     kicker: "One workspace, many directions",
-    title: "让思考拥有空间",
-    body: "Tree Chat 把每一对 prompt / response 变成树上的节点，让发散、回溯和比较都留在同一张思考地图里。",
+    title: "让复杂思考长成一棵树",
+    body: "把每轮提问与回答放进父子路径，把不同方案留在并列枝条。你可以沿一条路线深入，也能退回主干比较、整理，让复杂任务始终保有全貌。",
     accent: "var(--landing-moss-light)",
     facts: [
       { label: "树状结构", text: "从任意节点继续探索", icon: Network },
@@ -76,8 +76,8 @@ const TREE_STORIES: Array<{
   {
     chapter: "枝条",
     kicker: "Branch · Graft · Prune · Leaf",
-    title: "一根枝条，四种动作",
-    body: "分支追问、挂载笔记、嫁接子树、修剪枯枝，让结构跟随你的判断持续生长。",
+    title: "每一根枝条，都是可继续的思路",
+    body: "从当前节点展开新分支，用 Leaf 留下判断，用 Graft 调整归属，再以 Prune 清理失效路径。思路可以先发散，随后收束成可继续加工的结构。",
     accent: "var(--landing-moss-light)",
     facts: [
       { label: "Branch", text: "从同一问题展开另一条路径", icon: GitBranch },
@@ -89,8 +89,8 @@ const TREE_STORIES: Array<{
   {
     chapter: "树干",
     kicker: "Auxo · Rings",
-    title: "看见一棵树的时间",
-    body: "Auxo 将根任务规划为可审阅的任务树，Rings 保留工作区的变化轨迹，让复杂探索仍然可回到现场。",
+    title: "让规划成为主线，让历史保留年轮",
+    body: "Auxo 先把根任务拆成可审阅的任务树，Rings 记录移动、扩展和修剪的变化。规划沿主线推进，试错也有可撤销、可重做的回路。",
     accent: "var(--landing-moss-light)",
     facts: [
       { label: "Auxo", text: "先规划，再逐项回答", icon: BrainCircuit },
@@ -100,8 +100,8 @@ const TREE_STORIES: Array<{
   {
     chapter: "树根",
     kicker: "Nutrient · Harvest",
-    title: "让资料成为根系",
-    body: "上传的资料可以作为可追溯的营养来源，相关上下文进入回答；完成后再把整棵思考树收获为可携带的文件。",
+    title: "让资料扎根，让成果被收获",
+    body: "将课程讲义、论文摘要和项目材料纳入当前上下文，再把整理后的整棵树导出为 Markdown 或 JSON。资料有归属，成果也能带走。",
     accent: "var(--landing-moss-light)",
     facts: [
       { label: "Nutrient", text: "关联本地资料与搜索", icon: Upload },
@@ -111,8 +111,8 @@ const TREE_STORIES: Array<{
   {
     chapter: "树冠",
     kicker: "A canopy of connected ideas",
-    title: "从局部回答回到全局",
-    body: "在树冠视角下，所有分支、批注、历史和资料重新汇聚成一张可回望的知识地图。",
+    title: "从局部回答，回到全局知识地图",
+    body: "分支、批注、资料、历史与导出在树冠视角重新汇合。你可以从单个节点回到全局结构，看清问题如何展开、判断如何形成、成果如何沉淀。",
     accent: "var(--landing-moss-light)",
     facts: [
       { label: "Canopy", text: "一眼浏览完整树结构", icon: Waves },
@@ -740,13 +740,27 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
         <div className="landing-container">
           <div className="landing-footer-reflection">
             <div className="landing-footer-reflection__intro">
-              <p className="landing-kicker">Reflection / 开放与反思</p>
-              <h2 id="footer-title">一棵树，也要知道自己的边界。</h2>
+              <p className="landing-kicker">Prospect / 应用前景</p>
+              <h2 id="footer-title">让每一次提问都有位置，让每一次探索都有路径</h2>
+              <p className="landing-footer-reflection__lede">Tree Chat（智构树语）面向课程学习、研究资料整理、竞赛方案推演与公共治理，把 AI 回答、用户判断和资料上下文组织成可浏览、可调整、可导出的知识树，降低回看、比较和整理成本。</p>
             </div>
-            <div className="landing-limitation-grid">
-              <article><span>依赖</span><h3>需要模型连接</h3><p>回答依赖服务端配置的 DeepSeek API Key。</p></article>
-              <article><span>存储</span><h3>工作区在浏览器里</h3><p>项目与进度由本地浏览器存储承载。</p></article>
-              <article><span>同步</span><h3>状态不跨设备</h3><p>项目由浏览器 localStorage 承载，当前仓库未提供账号或云端同步。</p></article>
+            <div className="landing-prospect-content">
+              <div className="landing-prospect-grid">
+                <article><span>LEARNING PATH</span><h3>深度学习</h3><p>围绕一个知识点展开定义、推导、例题、易错点和个人笔记。学习者可以沿路径深入，也能回到上层补充分支，形成可复习的个人知识树。</p></article>
+                <article><span>RESEARCH &amp; PLANNING</span><h3>研究与方案</h3><p>把文献观点、实验方法、需求分析与技术路线放在可比较的枝条上，结合项目资料推进论证，再以 Markdown 或 JSON 导出结果。</p></article>
+                <article><span>PUBLIC GOVERNANCE</span><h3>公共治理</h3><p>围绕风险地图、预警触发、分层疏散、物资调配与临时安置拆解复杂预案，让总体目标和执行细节在同一结构中接受复盘。</p></article>
+                <article><span>RESPONSIBLE AI</span><h3>负责任智能</h3><p>AI 提供内容，用户负责比较、取舍与校正。树状路径保留问题来源和人工批注，让智能工具服务于人的判断与数字素养。</p></article>
+              </div>
+              <div className="landing-prospect-notes">
+                <article>
+                  <h3>SCENARIO PROOF / 场景验证</h3>
+                  <p>在“暴雨内涝居民疏散与安置”演示中，风险地图、预警触发、物资调配、过程监管和临时安置分别落在对应枝条；在“海姆立克急救法”学习中，概念、适用情形、原理、操作要领与记忆口诀形成可回溯路径。两类场景分别验证复杂方案推演与递进学习。</p>
+                </article>
+                <article>
+                  <h3>SOCIAL RESPONSIBILITY / 社会责任</h3>
+                  <p>教育数字化带来了充足内容，也把整理、辨别和复盘能力推到前台。Tree Chat 以低门槛、高可视的树状交互帮助学习者保存自己的理解路径，帮助方案制定者保留依据与分歧。项目承担的社会责任，是让 AI 增强人的判断力、知识组织能力和数字素养，并让有价值的探索沉淀为可复用成果。</p>
+                </article>
+              </div>
             </div>
           </div>
           <footer className="landing-footer">

@@ -1537,16 +1537,31 @@ body.landing-scroll-root::-webkit-scrollbar-track {
 .landing-footer-reflection {
   align-items: start;
   display: grid;
-  gap: 96px;
-  grid-template-columns: minmax(0, .9fr) minmax(620px, 1.1fr);
+  gap: 72px;
+  grid-template-columns: minmax(0, .78fr) minmax(720px, 1.22fr);
   max-width: none;
 }
 
-.landing-limitation-grid { display: grid; gap: 0 36px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 10px; }
-.landing-limitation-grid article { border-top: 1px solid var(--landing-border); padding: 17px 0 0; }
-.landing-limitation-grid article > span { color: var(--landing-moss); font-family: var(--font-geist-mono); font-size: 10px; letter-spacing: .12em; }
-.landing-limitation-grid h3 { color: var(--landing-cream); font-size: 14px; margin: 18px 0 8px; }
-.landing-limitation-grid p { color: var(--landing-silver-muted); font-size: 13px; line-height: 1.7; margin: 0; }
+.landing-footer-reflection__lede {
+  color: var(--landing-silver-muted);
+  font-size: 15px;
+  line-height: 1.85;
+  margin: 28px 0 0;
+  max-width: 590px;
+}
+
+.landing-prospect-content { display: grid; gap: 28px; }
+.landing-prospect-grid { display: grid; gap: 24px 32px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.landing-prospect-grid article { border-top: 1px solid var(--landing-border); padding: 16px 0 0; }
+.landing-prospect-grid article > span,
+.landing-prospect-notes article > h3 { color: var(--landing-moss); font-family: var(--font-geist-mono); font-size: 10px; letter-spacing: .12em; }
+.landing-prospect-grid h3 { color: var(--landing-cream); font-size: 15px; margin: 14px 0 7px; }
+.landing-prospect-grid p,
+.landing-prospect-notes p { color: var(--landing-silver-muted); font-size: 12px; line-height: 1.7; margin: 0; }
+.landing-prospect-notes { display: grid; gap: 28px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.landing-prospect-notes article { border-left: 1px solid rgba(184, 214, 160, .28); padding-left: 18px; }
+.landing-prospect-notes article > h3 { font-weight: 400; margin: 0; }
+.landing-prospect-notes p { margin-top: 10px; }
 
 .landing-footer { align-items: flex-end; border-top: 1px solid var(--landing-border); display: flex; gap: 28px; justify-content: space-between; margin-top: auto; padding-top: 24px; }
 .landing-footer > div:first-child p { color: var(--landing-silver-muted); font-size: 11px; margin: 10px 0 0; }
