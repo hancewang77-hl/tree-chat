@@ -57,21 +57,21 @@ export function HarvestDialog({
           <button
             onClick={exportMarkdown}
             className="rounded-lg px-4 py-2.5 text-[14px] font-medium transition-all hover:opacity-90"
-            style={{ background: "var(--accent-bark)", color: "#FBF7F0" }}
+            style={{ background: "var(--accent-bark)", color: "var(--on-primary)" }}
           >
             导出 Markdown
           </button>
           <button
             onClick={exportJSON}
             className="rounded-lg px-4 py-2.5 text-[14px] font-medium transition-all hover:opacity-90"
-            style={{ background: "var(--accent-sage)", color: "#FBF7F0" }}
+            style={{ background: "var(--accent-sage)", color: "var(--on-primary)" }}
           >
             导出 JSON
           </button>
           <button
             onClick={onClose}
             className="rounded-lg px-4 py-2.5 text-[14px] transition-all"
-            style={{ border: "1px solid var(--border-warm)", color: "var(--text-muted)" }}
+            style={{ border: "1px solid var(--control-border)", color: "var(--text-muted)" }}
           >
             取消
           </button>

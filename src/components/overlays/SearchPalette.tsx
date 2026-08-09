@@ -107,7 +107,7 @@ export function SearchPalette() {
                   setOpen(false);
                   setQuery("");
                 }}
-                className="w-full px-4 py-3 text-left transition-all hover:bg-white/60 flex items-start gap-3"
+                    className="w-full px-4 py-3 text-left transition-all hover:opacity-85 flex items-start gap-3"
               >
                 <div className="flex-1 min-w-0">
                   <p

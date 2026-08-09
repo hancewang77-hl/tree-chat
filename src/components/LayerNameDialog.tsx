@@ -76,7 +76,7 @@ export function LayerNameDialog({
             className="w-full rounded-xl px-4 py-3 text-[14px] outline-none transition-all"
             style={{
               background: "var(--bg-cream)",
-              border: "1px solid var(--border-warm)",
+              border: "1px solid var(--control-border)",
               color: "var(--text-charcoal)",
             }}
           />
@@ -86,7 +86,7 @@ export function LayerNameDialog({
               type="button"
               onClick={onCancel}
               className="rounded-xl px-4 py-2 text-[14px] transition-all hover:opacity-80"
-              style={{ border: "1px solid var(--border-warm)", color: "var(--text-muted)" }}
+              style={{ border: "1px solid var(--control-border)", color: "var(--text-muted)" }}
             >
               取消
             </button>
@@ -94,7 +94,7 @@ export function LayerNameDialog({
             <button
               type="submit"
               className="rounded-xl px-4 py-2 text-[14px] font-medium transition-all hover:opacity-90"
-              style={{ background: "var(--accent-bark)", color: "#FBF7F0" }}
+              style={{ background: "var(--accent-bark)", color: "var(--on-primary)" }}
             >
               确定
             </button>

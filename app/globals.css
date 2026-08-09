@@ -133,22 +133,58 @@ body::before {
   opacity: 0.6;
 }
 
-/* The workbench keeps its existing layout and behavior while inheriting the
-   landing page's deeper natural palette through semantic tokens. */
-.workbench-shell {
+/* The workbench uses its own warm-paper palette so the landing narrative can
+   continue to evolve independently. */
+:where(.workbench-shell, .workbench-theme-scope) {
+  --bg-cream: #fbf7ed;
+  --bg-paper: #e9dfcf;
+  --text-charcoal: #2c2416;
+  --text-muted: #62584a;
+  --accent-bark: #3d2e1c;
+  --accent-sage: #5e6942;
+  --accent-olive-deep: #565b3d;
+  --accent-olive-soft: rgba(94, 105, 66, 0.1);
+  --accent-amber: #805817;
+  --on-primary: #fbf7f0;
+  --border-warm: #c7b89d;
+  --control-border: #887961;
+  --shadow-warm: rgba(61, 46, 28, 0.13);
+  --workbench-raised: #fffdf7;
+  --workbench-control-fill: rgba(255, 253, 247, 0.72);
+  --workbench-canvas-background: radial-gradient(
+    circle at 50% 38%,
+    #fffdf7 0%,
+    #fbf7ed 52%,
+    #e9dfcf 100%
+  );
+  --workbench-panel-glass: rgba(233, 223, 207, 0.92);
+  background: var(--bg-cream);
+  color: var(--text-charcoal);
+}
+
+[data-theme="dark"] :where(.workbench-shell, .workbench-theme-scope) {
   --bg-cream: #102f22;
   --bg-paper: #173d2a;
   --text-charcoal: #edf3e7;
   --text-muted: #b5c6b1;
   --accent-bark: #d9e6cf;
   --accent-sage: #9fbd78;
-  --accent-olive-deep: #75965e;
+  --accent-olive-deep: #b5c6b1;
   --accent-olive-soft: rgba(159, 189, 120, 0.18);
   --accent-amber: #d5b87b;
+  --on-primary: #173d2a;
   --border-warm: rgba(222, 237, 216, 0.22);
+  --control-border: #75965e;
   --shadow-warm: rgba(2, 14, 8, 0.38);
-  background: var(--bg-cream);
-  color: var(--text-charcoal);
+  --workbench-raised: #234b36;
+  --workbench-control-fill: #2f5438;
+  --workbench-canvas-background: radial-gradient(
+    circle at 50% 38%,
+    #173d2a 0%,
+    #102f22 52%,
+    #081b14 100%
+  );
+  --workbench-panel-glass: rgba(23, 61, 42, 0.92);
 }
 
 /* -------------------------------------------------------------------------- */

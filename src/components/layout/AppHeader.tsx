@@ -28,7 +28,7 @@ export function AppHeader() {
             className="flex h-9 w-9 items-center justify-center rounded-lg text-lg"
             style={{
               background: "var(--accent-sage)",
-              color: "#FBF7F0",
+              color: "var(--on-primary)",
               border: "1px solid rgba(255, 253, 247, 0.24)",
               boxShadow: "0 4px 10px rgba(86, 91, 61, 0.22)",
             }}
@@ -60,14 +60,14 @@ export function AppHeader() {
           style={{
             background: "var(--accent-olive-soft)",
             color: "var(--accent-olive-deep)",
-            border: "1px solid rgba(116, 122, 85, 0.28)",
+            border: "1px solid var(--control-border)",
           }}
         >
           <Search size={14} />
           <span className="hidden sm:inline">搜索节点</span>
           <kbd
             className="ml-1 hidden rounded px-1.5 py-0.5 text-[10px] sm:inline"
-            style={{ background: "var(--border-warm)" }}
+            style={{ background: "var(--workbench-raised)" }}
           >
             ⌘K
           </kbd>
@@ -84,7 +84,7 @@ export function AppHeader() {
           style={{
             background: "var(--accent-olive-soft)",
             color: "var(--accent-olive-deep)",
-            border: "1px solid rgba(116, 122, 85, 0.24)",
+            border: "1px solid var(--control-border)",
           }}
           title={state.is3DMode ? "切换至 2D" : "切换至 3D"}
         >
@@ -102,8 +102,8 @@ export function AppHeader() {
           className="rounded-lg p-2 transition-all hover:opacity-85"
           style={{
             background: state.isCanopyOpen ? "var(--accent-sage)" : "var(--accent-olive-soft)",
-            color: state.isCanopyOpen ? "#FBF7F0" : "var(--accent-olive-deep)",
-            border: "1px solid rgba(116, 122, 85, 0.24)",
+            color: state.isCanopyOpen ? "var(--on-primary)" : "var(--accent-olive-deep)",
+            border: "1px solid var(--control-border)",
           }}
           title="树冠 — 全局视图"
         >
@@ -118,8 +118,8 @@ export function AppHeader() {
           className="rounded-lg p-2 transition-all hover:opacity-85"
           style={{
             background: state.isRingsOpen ? "var(--accent-sage)" : "var(--accent-olive-soft)",
-            color: state.isRingsOpen ? "#FBF7F0" : "var(--accent-olive-deep)",
-            border: "1px solid rgba(116, 122, 85, 0.24)",
+            color: state.isRingsOpen ? "var(--on-primary)" : "var(--accent-olive-deep)",
+            border: "1px solid var(--control-border)",
           }}
           title="年轮 — 操作历史"
         >
@@ -137,7 +137,7 @@ export function AppHeader() {
           style={{
             background: "var(--accent-olive-soft)",
             color: "var(--accent-olive-deep)",
-            border: "1px solid rgba(116, 122, 85, 0.24)",
+            border: "1px solid var(--control-border)",
           }}
           title="帮助 — 功能指南"
         >
@@ -182,7 +182,7 @@ function ThemeToggle() {
       style={{
         background: "var(--accent-olive-soft)",
         color: "var(--accent-olive-deep)",
-        border: "1px solid rgba(116, 122, 85, 0.24)",
+        border: "1px solid var(--control-border)",
       }}
       title={isDark ? "浅色模式" : "深色模式"}
     >
@@ -203,7 +203,7 @@ function HarvestButton() {
         style={{
           background: "var(--accent-olive-soft)",
           color: "var(--accent-olive-deep)",
-          border: "1px solid rgba(116, 122, 85, 0.24)",
+          border: "1px solid var(--control-border)",
         }}
         title="收获 — 导出项目"
       >

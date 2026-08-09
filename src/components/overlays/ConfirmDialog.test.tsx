@@ -133,7 +133,7 @@ describe("ConfirmDialog", () => {
     renderDialog();
 
     const backdrop = screen.getByRole("alertdialog").parentElement;
-    expect(backdrop).toHaveClass("fixed", "inset-0");
+    expect(backdrop).toHaveClass("fixed", "inset-0", "workbench-theme-scope");
     expect(backdrop?.parentElement).toBe(document.body);
   });
 

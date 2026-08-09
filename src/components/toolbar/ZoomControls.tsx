@@ -20,14 +20,14 @@ export function ZoomControls({
         aria-label="缩放控制"
         className="flex flex-col items-center gap-1 rounded-2xl px-1.5 py-1.5 shadow-lg"
         style={{
-          background: "rgba(216, 204, 184, 0.92)",
+          background: "var(--workbench-panel-glass)",
           border: "1px solid var(--border-warm)",
         }}
       >
         <button
           onClick={onZoomIn}
           aria-label="放大 — 靠近树冠"
-          className="flex h-9 w-9 items-center justify-center rounded-xl transition-all hover:bg-white/80"
+          className="flex h-9 w-9 items-center justify-center rounded-xl transition-all hover:opacity-75"
           style={{ color: "var(--text-charcoal)" }}
           title="放大 — 靠近树冠"
         >
@@ -48,7 +48,7 @@ export function ZoomControls({
         <button
           onClick={onZoomOut}
           aria-label="缩小 — 俯瞰全景"
-          className="flex h-9 w-9 items-center justify-center rounded-xl transition-all hover:bg-white/80"
+          className="flex h-9 w-9 items-center justify-center rounded-xl transition-all hover:opacity-75"
           style={{ color: "var(--text-charcoal)" }}
           title="缩小 — 俯瞰全景"
         >

@@ -85,7 +85,7 @@ export function InspectorSidebar({
             className="flex h-8 w-8 items-center justify-center rounded-lg"
             style={{
               background: "var(--accent-sage)",
-              color: "#FBF7F0",
+              color: "var(--on-primary)",
               border: "1px solid rgba(255, 253, 247, 0.24)",
               boxShadow: "0 4px 10px rgba(86, 91, 61, 0.22)",
             }}
@@ -107,7 +107,7 @@ export function InspectorSidebar({
         {selectedNode && (
           <span
             className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-            style={{ background: "var(--border-warm)", color: "var(--text-muted)" }}
+            style={{ background: "var(--workbench-raised)", color: "var(--text-muted)" }}
           >
             z = {selectedNode.layer}
           </span>
@@ -128,7 +128,7 @@ export function InspectorSidebar({
               <span
                 className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
                 style={{
-                  background: selectedNode.kind === "leaf" ? "var(--accent-olive-soft)" : "var(--border-warm)",
+                  background: selectedNode.kind === "leaf" ? "var(--accent-olive-soft)" : "var(--workbench-raised)",
                   color: selectedNode.kind === "leaf" ? "var(--accent-sage)" : "var(--text-muted)",
                 }}
               >
@@ -277,21 +277,21 @@ export function InspectorSidebar({
               key={node.id}
               onClick={() => dispatch({ type: "SELECT_NODE", nodeId: node.id })}
               className={`w-full rounded-xl p-3.5 text-left transition-all ${
-                isSelected ? "" : "hover:bg-white/60"
+                isSelected ? "" : "hover:opacity-90"
               }`}
               style={{
                 background: isSelected
                   ? `${CARD_BOTTOM_LEAF_VEIN_PATTERN} no-repeat right -30px bottom -24px / 250px 94px, var(--accent-olive-soft)`
-                  : `${CARD_BOTTOM_LEAF_VEIN_PATTERN} no-repeat right -30px bottom -24px / 250px 94px, rgba(232, 223, 208, 0.34)`,
-                border: isSelected ? "1px solid rgba(116, 122, 85, 0.38)" : "1px solid transparent",
+                  : `${CARD_BOTTOM_LEAF_VEIN_PATTERN} no-repeat right -30px bottom -24px / 250px 94px, var(--workbench-control-fill)`,
+                border: "1px solid var(--control-border)",
               }}
             >
               <div className="flex items-center gap-2 mb-1.5">
                 <span
                   className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
                   style={{
-                    background: isSelected ? "var(--accent-sage)" : "var(--border-warm)",
-                    color: isSelected ? "#FBF7F0" : "var(--text-muted)",
+                    background: isSelected ? "var(--accent-sage)" : "var(--workbench-raised)",
+                    color: isSelected ? "var(--on-primary)" : "var(--text-muted)",
                   }}
                 >
                   {isLeafNote
@@ -422,7 +422,7 @@ function NodeContextPanel({
         <span
           className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
           style={{
-            background: "rgba(232, 223, 208, 0.72)",
+            background: "var(--workbench-raised)",
             color: contextStateColor(node),
           }}
         >
@@ -443,8 +443,8 @@ function NodeContextPanel({
             className="shrink-0 rounded-lg px-2.5 py-1.5 text-[10px] font-semibold transition-opacity hover:opacity-80"
             style={{
               background: node.includeInContext ? "var(--accent-sage)" : "var(--bg-paper)",
-              color: node.includeInContext ? "#FBF7F0" : "var(--accent-bark)",
-              border: "1px solid var(--border-warm)",
+              color: node.includeInContext ? "var(--on-primary)" : "var(--accent-bark)",
+              border: "1px solid var(--control-border)",
             }}
           >
             {node.includeInContext ? "已纳入" : "作为上下文"}
@@ -473,7 +473,7 @@ function NodeContextPanel({
               style={{
                 background: "var(--bg-paper)",
                 color: "var(--accent-bark)",
-                border: "1px solid var(--border-warm)",
+                border: "1px solid var(--control-border)",
               }}
             >
               <RefreshCw size={11} className={isStructuring ? "animate-spin" : ""} />
@@ -627,8 +627,8 @@ function ActionButton({
       className="flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-medium transition-all hover:opacity-85"
       style={{
         background: danger ? "rgba(180, 60, 40, 0.07)" : active ? "var(--accent-sage)" : "var(--bg-cream)",
-        color: danger ? "#B43C28" : active ? "#FBF7F0" : "var(--text-charcoal)",
-        border: `1px solid ${danger ? "rgba(180, 60, 40, 0.18)" : active ? "rgba(86, 91, 61, 0.42)" : "var(--border-warm)"}`,
+        color: danger ? "#B43C28" : active ? "var(--on-primary)" : "var(--text-charcoal)",
+        border: `1px solid ${danger ? "rgba(180, 60, 40, 0.18)" : "var(--control-border)"}`,
         boxShadow: active && !danger ? "0 5px 12px rgba(86, 91, 61, 0.14)" : "none",
       }}
     >

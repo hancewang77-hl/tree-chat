@@ -143,8 +143,8 @@ export function TreeToolbar({
           aria-label="树编辑工具"
           className="flex flex-col gap-0.5 rounded-2xl px-1.5 py-1.5 shadow-lg backdrop-blur-sm"
           style={{
-            background: "rgba(216, 204, 184, 0.90)",
-            border: "1px solid rgba(116, 122, 85, 0.22)",
+            background: "var(--workbench-panel-glass)",
+            border: "1px solid var(--border-warm)",
             boxShadow: "0 10px 24px rgba(61, 46, 28, 0.14)",
           }}
         >
@@ -160,9 +160,9 @@ export function TreeToolbar({
                 btn.disabled ? "opacity-25 cursor-not-allowed" : "hover:opacity-85"
               }`}
               style={{
-                background: btn.active ? "var(--accent-sage)" : "rgba(255, 253, 247, 0.46)",
-                color: btn.active ? "#FBF7F0" : "var(--text-muted)",
-                border: `1px solid ${btn.active ? "rgba(86, 91, 61, 0.42)" : "rgba(199, 184, 157, 0.54)"}`,
+                background: btn.active ? "var(--accent-sage)" : "var(--workbench-control-fill)",
+                color: btn.active ? "var(--on-primary)" : "var(--accent-olive-deep)",
+                border: "1px solid var(--control-border)",
                 boxShadow: btn.active ? "0 5px 12px rgba(86, 91, 61, 0.20)" : "none",
               }}
             >
@@ -172,7 +172,7 @@ export function TreeToolbar({
                 className="pointer-events-none absolute left-11 rounded-lg px-2.5 py-1.5 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50"
                 style={{
                   background: "var(--accent-olive-deep)",
-                  color: "#FBF7F0",
+                  color: "var(--on-primary)",
                 }}
               >
                 {btn.label}
@@ -183,7 +183,7 @@ export function TreeToolbar({
           {state.toolMode === "graft" && state.graftSourceId && (
             <div
               className="mt-0.5 rounded-lg px-2 py-1 text-center text-[10px] font-medium"
-              style={{ background: "var(--accent-sage)", color: "#FBF7F0" }}
+              style={{ background: "var(--accent-sage)", color: "var(--on-primary)" }}
             >
               点击目标父节点
             </div>
@@ -192,7 +192,7 @@ export function TreeToolbar({
           {state.toolMode === "layerMove" && state.movingNodeId && (
             <div
               className="mt-0.5 rounded-lg px-2 py-1 text-center text-[10px] font-medium"
-              style={{ background: "var(--accent-sage)", color: "#FBF7F0" }}
+              style={{ background: "var(--accent-sage)", color: "var(--on-primary)" }}
             >
               滚轮选层，点 ✓ 确认
             </div>

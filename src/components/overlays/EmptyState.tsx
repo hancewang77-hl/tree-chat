@@ -21,7 +21,7 @@ export function EmptyState() {
       <div className="text-center max-w-sm animate-fade-up">
         <div
           className="mx-auto mb-8 flex h-20 w-20 items-center justify-center rounded-3xl"
-          style={{ background: "var(--border-warm)" }}
+          style={{ background: "var(--accent-olive-soft)" }}
         >
           <Trees size={36} style={{ color: "var(--accent-sage)" }} />
         </div>
@@ -44,7 +44,7 @@ export function EmptyState() {
         <button
           onClick={handleSeed}
           className="inline-flex items-center gap-2 rounded-xl px-6 py-3 text-[15px] font-medium transition-all hover:opacity-90 shadow-lg"
-          style={{ background: "var(--accent-sage)", color: "#FBF7F0" }}
+          style={{ background: "var(--accent-sage)", color: "var(--on-primary)" }}
         >
           <Plus size={17} />
           Seed · 播种
