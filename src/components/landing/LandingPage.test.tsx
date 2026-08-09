@@ -248,6 +248,52 @@ describe("LandingPage seed transition", () => {
     expect(document.body).not.toHaveClass("landing-scroll-root");
   });
 
+  test("releases scroll snap when Page 9 enters the viewport and restores it above the tail", () => {
+    const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+    let footerTop = window.innerHeight;
+    let pendingFrame: FrameRequestCallback | undefined;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.matches('.landing-footer-section')) {
+        return {
+          ...originalGetBoundingClientRect.call(this),
+          top: footerTop,
+          bottom: footerTop + 1080,
+        };
+      }
+      return originalGetBoundingClientRect.call(this);
+    });
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      pendingFrame = callback;
+      return 1;
+    });
+
+    const { unmount } = render(<LandingPage profile={PUBLIC_PROFILE} />);
+    expect(document.documentElement).not.toHaveClass("landing-scroll-tail-free");
+    expect(document.body).not.toHaveClass("landing-scroll-tail-free");
+
+    footerTop = window.innerHeight * 0.8;
+    fireEvent.scroll(window);
+    act(() => pendingFrame?.(0));
+    expect(document.documentElement).toHaveClass("landing-scroll-tail-free");
+    expect(document.body).toHaveClass("landing-scroll-tail-free");
+
+    footerTop = window.innerHeight * 0.9;
+    fireEvent.scroll(window);
+    act(() => pendingFrame?.(16));
+    expect(document.documentElement).not.toHaveClass("landing-scroll-tail-free");
+    expect(document.body).not.toHaveClass("landing-scroll-tail-free");
+
+    footerTop = 0;
+    fireEvent.scroll(window);
+    act(() => pendingFrame?.(32));
+    expect(document.documentElement).toHaveClass("landing-scroll-tail-free");
+    expect(document.body).toHaveClass("landing-scroll-tail-free");
+
+    unmount();
+    expect(document.documentElement).not.toHaveClass("landing-scroll-tail-free");
+    expect(document.body).not.toHaveClass("landing-scroll-tail-free");
+  });
+
   test("does not retain chapter animations after their effect cleanup", () => {
     const animations: Array<{ pause: ReturnType<typeof vi.fn> }> = [];
     vi.mocked(animate).mockImplementation(() => {

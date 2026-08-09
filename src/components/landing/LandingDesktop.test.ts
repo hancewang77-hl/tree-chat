@@ -30,16 +30,22 @@ describe("1920 × 1080 landing composition contract", () => {
     expect(css).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*scroll-snap-type:\s*y mandatory;/);
   });
 
-  test("applies the snap contract to either document root", () => {
+  test("lets native CSS own snapping and releases the Page 9 tail", () => {
     expect(landingPage).toContain('document.documentElement.classList.add("landing-scroll-root")');
     expect(landingPage).toContain('document.body.classList.add("landing-scroll-root")');
     expect(landingPage).toContain('document.documentElement.classList.remove("landing-scroll-root")');
     expect(landingPage).toContain('document.body.classList.remove("landing-scroll-root")');
-    expect(landingPage).toContain('window.addEventListener("scrollend"');
-    expect(landingPage).toContain("settleToNearestPage");
-    expect(landingPage).toContain('window.setTimeout(settleToNearestPage, 180)');
-    expect(landingPage).toContain("programmaticScrollRef.current = true");
-    expect(landingPage).toContain("if (programmaticScrollRef.current) return;");
+    expect(landingPage).not.toContain("settleToNearestPage");
+    expect(landingPage).not.toContain("window.scrollTo({ top: targetTop");
+    expect(landingPage).not.toContain("programmaticScrollRef");
+    expect(landingPage).toContain("const footerRef = useRef<HTMLElement | null>(null)");
+    expect(landingPage).toContain('<section ref={footerRef} data-page="9"');
+    expect(landingPage).toContain('classList.toggle("landing-scroll-tail-free"');
+    expect(landingPage).toContain('classList.remove("landing-scroll-tail-free")');
+
+    expect(css).toMatch(/html\.landing-scroll-root\.landing-scroll-tail-free,\s*body\.landing-scroll-root\.landing-scroll-tail-free\s*\{[\s\S]*?scroll-snap-type:\s*none;/);
+    expect(css).toMatch(/\.landing-footer-section\s*\{[\s\S]*?height:\s*auto;[\s\S]*?min-height:\s*100svh;[\s\S]*?overflow:\s*visible;[\s\S]*?scroll-snap-align:\s*none;[\s\S]*?scroll-snap-stop:\s*normal;/);
+    expect(css).toMatch(/\.landing-footer-section\s*>\s*\.landing-container\s*\{[\s\S]*?min-height:\s*calc\(100svh - 200px\);/);
   });
 
   test("marks the nine landing pages and five sticky stops explicitly", () => {

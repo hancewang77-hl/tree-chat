@@ -198,6 +198,11 @@ body.landing-scroll-root {
   scrollbar-color: rgba(159, 189, 120, .58) var(--landing-scroll-track, #081b14);
 }
 
+html.landing-scroll-root.landing-scroll-tail-free,
+body.landing-scroll-root.landing-scroll-tail-free {
+  scroll-snap-type: none;
+}
+
 html.landing-scroll-root::-webkit-scrollbar-track {
   background: #081b14;
 }
@@ -1515,15 +1520,18 @@ body.landing-scroll-root::-webkit-scrollbar-track {
 .landing-footer-section {
   background: linear-gradient(160deg, #091c15 0%, #0f3222 58%, #1d4030 100%);
   display: flex;
-  height: 1080px;
-  min-height: 1080px;
+  height: auto;
+  min-height: 100svh;
+  overflow: visible;
+  scroll-snap-align: none;
+  scroll-snap-stop: normal;
   padding: 152px 0 48px;
 }
 
 .landing-footer-section > .landing-container {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  min-height: calc(100svh - 200px);
 }
 
 .landing-footer-reflection {
