@@ -95,6 +95,15 @@ describe("1920 × 1080 landing composition contract", () => {
     expect(css).toMatch(/\.landing-title-line\s*\{[^}]*display:\s*block;/);
   });
 
+  test("uses a light-to-deep green Page 1 gradient and removes the old metal branch", () => {
+    const heroRule = css.match(/\.landing-hero\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+    expect(heroRule).toMatch(/linear-gradient\([^)]*(?:var\(--landing-moss-light\)|#d9e8bc)[^)]*(?:var\(--landing-forest-950\)|#081b14)/i);
+    expect(landingPage).not.toContain("landing-hero__mountain");
+    expect(landingPage).not.toContain("hero-branch-metal");
+    expect(css).not.toContain("landing-hero__mountain");
+    expect(css).not.toContain("hero-branch-metal");
+  });
+
   test("updates continuous camera progress without scroll-frame React state", () => {
     expect(landingPage).toContain("progressRef={treeProgressRef}");
     expect(landingPage).not.toContain("setTreeProgress");

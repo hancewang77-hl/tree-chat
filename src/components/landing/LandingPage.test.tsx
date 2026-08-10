@@ -121,6 +121,38 @@ describe("LandingPage seed transition", () => {
     ]);
   });
 
+  test("exposes the Page 1 knowledge tree and anchors every background word to a branch target", () => {
+    render(<LandingPage profile={PUBLIC_PROFILE} />);
+
+    const tree = document.querySelector<HTMLElement>(".landing-hero-tree");
+    expect(tree).toBeTruthy();
+    expect(tree?.tagName.toLowerCase()).toBe("svg");
+    expect(tree).toHaveAttribute("aria-hidden", "true");
+    expect(tree?.querySelector(".landing-hero-tree__trunk")).toBeTruthy();
+    expect(tree?.querySelectorAll(".landing-hero-tree__primary")).toHaveLength(3);
+
+    const expectedTargets = [
+      "灵感",
+      "问题",
+      "证据",
+      "比较",
+      "假设",
+      "回溯",
+      "路径",
+      "知识",
+      "为什么",
+      "下一步",
+      "可能性",
+      "连接",
+    ];
+    const targets = [...(tree?.querySelectorAll<HTMLElement>("[data-tree-target]") ?? [])];
+    const targetValues = targets.map((target) => target.dataset.treeTarget);
+
+    expect(targets).toHaveLength(expectedTargets.length);
+    expect(new Set(targetValues).size).toBe(expectedTargets.length);
+    expect(new Set(targetValues)).toEqual(new Set(expectedTargets));
+  });
+
   test("fades the seed above the growing tree and disables it after planting", () => {
     render(<LandingPage profile={PUBLIC_PROFILE} />);
 
