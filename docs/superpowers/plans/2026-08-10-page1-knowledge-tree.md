@@ -76,7 +76,7 @@ npm run build
 
 - [x] **Step 3: Run the CDP QA script and inspect Page 1 screenshots at both viewports.** Expected: `failures: []`, no browser errors, no horizontal overflow, all twelve words visibly associated with the tree, and Page 2–9 unchanged.
 
-- [ ] **Step 4: Commit the implementation and plan together, then push the existing feature branch.**
+- [x] **Step 4: Commit the implementation and plan together, then push the existing feature branch.**
 
 ```text
 git add docs/superpowers/plans/2026-08-10-page1-knowledge-tree.md src/components/landing/LandingPage.tsx src/components/landing/LandingPage.test.tsx src/components/landing/LandingDesktop.test.ts app/globals.css
