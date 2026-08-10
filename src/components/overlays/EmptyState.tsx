@@ -1,6 +1,7 @@
 "use client";
 
-import { Trees, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
+import { BrandLogo } from "@/src/components/brand/BrandLogo";
 import { useTreeDispatch } from "@/src/state/TreeContext";
 
 export function EmptyState() {
@@ -23,7 +24,7 @@ export function EmptyState() {
           className="mx-auto mb-8 flex h-20 w-20 items-center justify-center rounded-3xl"
           style={{ background: "var(--accent-olive-soft)" }}
         >
-          <Trees size={36} style={{ color: "var(--accent-sage)" }} />
+          <BrandLogo markOnly decorative className="brand-logo--empty" />
         </div>
 
         <h1

@@ -43,6 +43,7 @@ describe("LandingPage seed transition", () => {
     } else {
       Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
     }
+    vi.unstubAllGlobals();
     vi.useRealTimers();
   });
 
@@ -96,6 +97,84 @@ describe("LandingPage seed transition", () => {
     expect(matureTree?.querySelector(".landing-seed-tree__root")).toBeTruthy();
   });
 
+  test("scatters the Page 1 background words across an explicit, stratified layout", () => {
+    render(<LandingPage profile={PUBLIC_PROFILE} />);
+
+    const fragments = [...document.querySelectorAll<HTMLElement>(".landing-hero-words > span")];
+    expect(fragments).toHaveLength(12);
+    expect(fragments.map((fragment) => ({
+      left: fragment.style.left,
+      top: fragment.style.top,
+    }))).toEqual([
+      { left: "8%", top: "18%" },
+      { left: "33%", top: "11%" },
+      { left: "58%", top: "25%" },
+      { left: "86%", top: "15%" },
+      { left: "16%", top: "45%" },
+      { left: "43%", top: "52%" },
+      { left: "69%", top: "40%" },
+      { left: "92%", top: "55%" },
+      { left: "7%", top: "76%" },
+      { left: "29%", top: "67%" },
+      { left: "57%", top: "82%" },
+      { left: "82%", top: "72%" },
+    ]);
+  });
+
+  test("fades the seed above the growing tree and disables it after planting", () => {
+    render(<LandingPage profile={PUBLIC_PROFILE} />);
+
+    const seedButton = screen.getByRole("button", { name: "点击播下 Tree Chat 种子" });
+    fireEvent.click(seedButton);
+
+    const seedAnimation = vi.mocked(animate).mock.calls.find(([target]) => target === seedButton);
+    expect(seedAnimation?.[1]).toMatchObject({ opacity: [1, 0] });
+    expect(seedButton).toBeDisabled();
+  });
+
+  test("shows three concrete Page 3 LLM prompts and retains placeholder detail", () => {
+    render(<LandingPage profile={PUBLIC_PROFILE} />);
+
+    [
+      "大语言模型是什么？",
+      "大语言模型有什么优点？",
+      "大语言模型有什么缺点？",
+    ].forEach((prompt) => {
+      expect(screen.getByText(prompt)).toBeVisible();
+    });
+
+    const placeholder = document.querySelector(".landing-linear-placeholder");
+    expect(placeholder).toHaveAttribute("aria-hidden", "true");
+    expect(placeholder?.querySelectorAll("span")).toHaveLength(3);
+  });
+
+  test("renders the large Chinese headlines on deliberate semantic lines", () => {
+    render(<LandingPage profile={PUBLIC_PROFILE} />);
+
+    const expectedRenderedHeadings = [
+      ["seed-title", ["每一次探索，", "都从一个问题开始。"]],
+      ["dilemma-title", ["思考，", "不是一条线"]],
+      ["tree-story-title", ["让复杂思考", "长成一棵树"]],
+      ["footer-title", ["让每一次提问都有位置，", "让每一次探索都有路径"]],
+    ] as const;
+
+    expectedRenderedHeadings.forEach(([id, lines]) => {
+      const heading = document.getElementById(id);
+      expect(heading).toHaveAccessibleName(lines.join(""));
+      expect(heading?.textContent).toBe(lines.join(""));
+      expect([...heading!.querySelectorAll(":scope > .landing-title-line")].map((line) => line.textContent)).toEqual(lines);
+    });
+
+    const landingSource = readFileSync(resolve(process.cwd(), "src/components/landing/LandingPage.tsx"), "utf8");
+    [
+      'titleLines: ["让复杂思考", "长成一棵树"]',
+      'titleLines: ["每一根枝条，", "都是可继续的思路"]',
+      'titleLines: ["让规划成为主线，", "让历史保留年轮"]',
+      'titleLines: ["让资料扎根，", "让成果被收获"]',
+      'titleLines: ["从局部回答，", "回到全局知识地图"]',
+    ].forEach((lineContract) => expect(landingSource).toContain(lineContract));
+  });
+
   test("renders Page 3 as a three-level tree without rejoining branches", () => {
     render(<LandingPage profile={PUBLIC_PROFILE} />);
 
@@ -109,7 +188,11 @@ describe("LandingPage seed transition", () => {
 
     const comparison = document.querySelector(".landing-linear-stack");
     expect(comparison).toHaveAttribute("data-tree-role", "comparison-only");
-    expect(comparison).toHaveAttribute("aria-label", "线性对话弊端的独立对照示意，不属于左侧树结构");
+    expect(comparison).toHaveAttribute("role", "group");
+    expect(comparison).toHaveAttribute(
+      "aria-label",
+      "线性对话示意：大语言模型是什么、有什么优点、有什么缺点",
+    );
     expect(map.contains(comparison)).toBe(false);
 
     const expectedNodeIds = [

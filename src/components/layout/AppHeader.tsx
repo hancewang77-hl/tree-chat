@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Search, Box, Layers, LayoutGrid, History, Download, Trees, HelpCircle, Sun, Moon } from "lucide-react";
+import { Search, Box, Layers, LayoutGrid, History, Download, HelpCircle, Sun, Moon } from "lucide-react";
+import { BrandLogo } from "@/src/components/brand/BrandLogo";
 import { useTreeState, useTreeDispatch } from "@/src/state/TreeContext";
 import { HelpDialog } from "@/src/components/overlays/HelpDialog";
 import { HarvestDialog } from "@/src/components/overlays/HarvestDialog";
@@ -24,17 +25,7 @@ export function AppHeader() {
     >
       <div className="flex items-center gap-5">
         <div className="flex items-center gap-3">
-          <div
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-lg"
-            style={{
-              background: "var(--accent-sage)",
-              color: "var(--on-primary)",
-              border: "1px solid rgba(255, 253, 247, 0.24)",
-              boxShadow: "0 4px 10px rgba(86, 91, 61, 0.22)",
-            }}
-          >
-            <Trees size={20} />
-          </div>
+          <BrandLogo compact decorative markOnly className="brand-logo--app-header" />
           <div>
             <h1
               className="text-[15px] font-semibold tracking-[0.02em]"

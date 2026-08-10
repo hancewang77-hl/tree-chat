@@ -82,6 +82,19 @@ describe("1920 × 1080 landing composition contract", () => {
     expect(css).not.toContain(".landing-tree-progress");
   });
 
+  test("keeps the planted seed visible above the tree until its fade completes", () => {
+    expect(css).toMatch(/\.landing-seed-button\s*\{[^}]*z-index:\s*4;/);
+    expect(css).toMatch(/\.landing-seed-stage\.is-planted \.landing-seed-button\s*\{[^}]*pointer-events:\s*none;/);
+    expect(css).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.landing-seed-stage\.is-planted \.landing-seed-button\s*\{[^}]*opacity:\s*0;/);
+  });
+
+  test("uses deterministic fragment positions and block-level editorial title lines", () => {
+    expect(landingPage).not.toContain("Math.random");
+    expect(landingPage).not.toContain("8 + ((index * 19) % 84)");
+    expect(landingPage).not.toContain("14 + ((index * 29) % 64)");
+    expect(css).toMatch(/\.landing-title-line\s*\{[^}]*display:\s*block;/);
+  });
+
   test("updates continuous camera progress without scroll-frame React state", () => {
     expect(landingPage).toContain("progressRef={treeProgressRef}");
     expect(landingPage).not.toContain("setTreeProgress");
@@ -95,12 +108,23 @@ describe("1920 × 1080 landing composition contract", () => {
     expect(landingPage).toContain('{ label: "Leaf"');
   });
 
+  test("keeps the Page 8 and Page 9 editorial titles on their two intended lines", () => {
+    expect(css).toMatch(/\.landing-tree-copy--chapter-8 \.landing-tree-copy__intro\s*\{[^}]*width:\s*560px;/);
+    expect(css).toMatch(/\.landing-tree-copy--chapter-8 \.landing-tree-copy__intro h2\s*\{[^}]*font-size:\s*58px;/);
+    expect(css).toMatch(/\.landing-footer-reflection h2\s*\{[^}]*font-size:\s*52px;/);
+  });
+
+  test("keeps Page 6 and Page 8 fact cards inside shorter desktop viewports", () => {
+    expect(css).toMatch(/\.landing-tree-copy--chapter-6 \.landing-tree-facts\s*\{[^}]*bottom:\s*max\(148px,\s*calc\(1104px - 100svh\)\);/);
+    expect(css).toMatch(/\.landing-tree-copy--chapter-8 \.landing-tree-facts\s*\{[^}]*bottom:\s*max\(126px,\s*calc\(1104px - 100svh\)\);/);
+  });
+
   test("keeps the compact header on one CSS-owned, contrast-safe transition", () => {
     expect(css).not.toMatch(/\.landing-header\s*\{[\s\S]*?transition:[^;]*height/);
     expect(landingPage).not.toContain("animate(header");
     expect(landingPage).not.toContain("headerRef");
-    expect(css).toContain(".landing-header.is-scrolled .landing-logo__metal--light");
-    expect(css).toContain(".landing-header.is-scrolled .landing-logo__leaf");
+    expect(css).toContain(".brand-logo--light .brand-logo__mark");
+    expect(css).toContain(".landing-header.is-scrolled .brand-logo--light .brand-logo__mark");
   });
 
   test("keeps public identity constants out of the shared client module", () => {

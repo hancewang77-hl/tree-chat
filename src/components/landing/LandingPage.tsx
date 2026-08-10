@@ -18,7 +18,8 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { CSSProperties } from "react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { BrandLogo } from "@/src/components/brand/BrandLogo";
 import type { LandingPresentation } from "@/src/lib/siteProfile";
 import { resolveTreeScrollState } from "./landingScroll";
 import { NarrativeTreeScene } from "./NarrativeTreeScene";
@@ -58,6 +59,7 @@ const TREE_STORIES: Array<{
   chapter: string;
   kicker: string;
   title: string;
+  titleLines: readonly [string, string];
   body: string;
   accent: string;
   facts: Array<{ label: string; text: string; icon: LucideIcon }>;
@@ -66,6 +68,7 @@ const TREE_STORIES: Array<{
     chapter: "主干",
     kicker: "One workspace, many directions",
     title: "让复杂思考长成一棵树",
+    titleLines: ["让复杂思考", "长成一棵树"],
     body: "把每轮提问与回答放进父子路径，把不同方案留在并列枝条。你可以沿一条路线深入，也能退回主干比较、整理，让复杂任务始终保有全貌。",
     accent: "var(--landing-moss-light)",
     facts: [
@@ -77,6 +80,7 @@ const TREE_STORIES: Array<{
     chapter: "枝条",
     kicker: "Branch · Graft · Prune · Leaf",
     title: "每一根枝条，都是可继续的思路",
+    titleLines: ["每一根枝条，", "都是可继续的思路"],
     body: "从当前节点展开新分支，用 Leaf 留下判断，用 Graft 调整归属，再以 Prune 清理失效路径。思路可以先发散，随后收束成可继续加工的结构。",
     accent: "var(--landing-moss-light)",
     facts: [
@@ -90,6 +94,7 @@ const TREE_STORIES: Array<{
     chapter: "树干",
     kicker: "Auxo · Rings",
     title: "让规划成为主线，让历史保留年轮",
+    titleLines: ["让规划成为主线，", "让历史保留年轮"],
     body: "Auxo 先把根任务拆成可审阅的任务树，Rings 记录移动、扩展和修剪的变化。规划沿主线推进，试错也有可撤销、可重做的回路。",
     accent: "var(--landing-moss-light)",
     facts: [
@@ -101,6 +106,7 @@ const TREE_STORIES: Array<{
     chapter: "树根",
     kicker: "Nutrient · Harvest",
     title: "让资料扎根，让成果被收获",
+    titleLines: ["让资料扎根，", "让成果被收获"],
     body: "将课程讲义、论文摘要和项目材料纳入当前上下文，再把整理后的整棵树导出为 Markdown 或 JSON。资料有归属，成果也能带走。",
     accent: "var(--landing-moss-light)",
     facts: [
@@ -112,6 +118,7 @@ const TREE_STORIES: Array<{
     chapter: "树冠",
     kicker: "A canopy of connected ideas",
     title: "从局部回答，回到全局知识地图",
+    titleLines: ["从局部回答，", "回到全局知识地图"],
     body: "分支、批注、资料、历史与导出在树冠视角重新汇合。你可以从单个节点回到全局结构，看清问题如何展开、判断如何形成、成果如何沉淀。",
     accent: "var(--landing-moss-light)",
     facts: [
@@ -120,20 +127,20 @@ const TREE_STORIES: Array<{
   },
 ];
 
-const FRAGMENT_WORDS = [
-  "灵感",
-  "问题",
-  "证据",
-  "比较",
-  "假设",
-  "回溯",
-  "路径",
-  "知识",
-  "为什么",
-  "下一步",
-  "可能性",
-  "连接",
-];
+const BACKGROUND_FRAGMENTS = [
+  { word: "灵感", left: "8%", top: "18%" },
+  { word: "问题", left: "33%", top: "11%" },
+  { word: "证据", left: "58%", top: "25%" },
+  { word: "比较", left: "86%", top: "15%" },
+  { word: "假设", left: "16%", top: "45%" },
+  { word: "回溯", left: "43%", top: "52%" },
+  { word: "路径", left: "69%", top: "40%" },
+  { word: "知识", left: "92%", top: "55%" },
+  { word: "为什么", left: "7%", top: "76%" },
+  { word: "下一步", left: "29%", top: "67%" },
+  { word: "可能性", left: "57%", top: "82%" },
+  { word: "连接", left: "82%", top: "72%" },
+] as const;
 
 // Page 3 is intentionally an arborescence, not a conversation graph with
 // re-joins: one question root, two branch choices, and four terminal answers.
@@ -158,47 +165,20 @@ const TREE_MAP_EDGES = [
   { id: "branch-b-leaf-2", parent: "page3-branch-b", child: "page3-leaf-b2", d: "M300 280C350 280 386 325 476 325" },
 ] as const;
 
-function BranchLogo({ compact = false }: { compact?: boolean }) {
-  const id = useId().replace(/:/g, "");
-  const metalGradientId = `landing-logo-metal-${id}`;
-
-  return (
-    <span className={`landing-logo ${compact ? "landing-logo--compact" : ""}`}>
-      <svg viewBox="0 0 104 42" role="img" aria-label="Tree Chat branch logo">
-        <defs>
-          <linearGradient id={metalGradientId} x1="0" x2="1" y1="0" y2="1">
-            <stop className="landing-logo__metal--light" offset="0" />
-            <stop className="landing-logo__metal--mid" offset="0.38" />
-            <stop className="landing-logo__metal--highlight" offset="0.6" />
-            <stop className="landing-logo__metal--deep" offset="1" />
-          </linearGradient>
-        </defs>
-        <path
-          d="M6 31C22 30 26 20 37 19c10-1 15 8 25 5 9-2 13-15 31-17"
-          fill="none"
-          stroke={`url(#${metalGradientId})`}
-          strokeLinecap="round"
-          strokeWidth="3.4"
-        />
-        <path className="landing-logo__twig" d="M35 20 25 10M57 24 52 12M75 19 78 7" fill="none" strokeLinecap="round" strokeWidth="2" />
-        <path className="landing-logo__leaf" d="M23 10c-2-4 4-7 8-4-1 4-4 6-8 4ZM49 11c0-4 6-6 9-2-2 4-5 5-9 2ZM75 7c1-4 7-4 9 0-3 3-6 3-9 0Z" opacity=".94" />
-      </svg>
-      {!compact && (
-        <span className="landing-logo__wordmark">
-          <strong>Tree Chat</strong>
-          <small>智构树语</small>
-        </span>
-      )}
-    </span>
-  );
-}
-
 function FeaturePill({ icon: Icon, label, text }: { icon: LucideIcon; label: string; text: string }) {
   return (
     <div className="landing-feature-pill">
       <span className="landing-feature-pill__icon"><Icon size={16} strokeWidth={1.7} /></span>
       <span><strong>{label}</strong><small>{text}</small></span>
     </div>
+  );
+}
+
+function EditorialTitle({ id, title, lines }: { id: string; title: string; lines: readonly string[] }) {
+  return (
+    <h2 id={id} aria-label={title}>
+      {lines.map((line) => <span key={line} className="landing-title-line" aria-hidden="true">{line}</span>)}
+    </h2>
   );
 }
 
@@ -480,6 +460,7 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
       translateY: [0, 92],
       scale: [1, 0.58],
       rotate: [0, 18],
+      opacity: [1, 0],
       duration: LANDING_MOTION.seed.duration,
       ease: LANDING_MOTION.seed.ease,
     });
@@ -510,24 +491,13 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
     }
   }
 
-  const backgroundFragments = useMemo(
-    () => FRAGMENT_WORDS.map((word, index) => ({
-      word,
-      left: `${8 + ((index * 19) % 84)}%`,
-      top: `${14 + ((index * 29) % 64)}%`,
-      delay: `${index * 0.25}s`,
-      opacity: 0.28 + (index % 4) * 0.13,
-    })),
-    [],
-  );
-
   return (
     <main className="landing-page" data-site-profile={profile.id}>
       <a className="landing-skip-link" href="#seed">跳到产品叙事</a>
       <header className={`landing-header ${scrolled ? "is-scrolled" : ""}`}>
         <nav className="landing-header__nav" aria-label="产品介绍导航">
           <a href="#top" className="landing-header__brand" aria-label="回到 Tree Chat 介绍页开头">
-            <BranchLogo compact />
+            <BrandLogo compact decorative markOnly tone="light" />
             <span>Tree Chat</span>
           </a>
           <div className="landing-progress" role="status" aria-live="polite" aria-label={`当前章节：${CHAPTERS[activeChapter]}`}>
@@ -544,8 +514,8 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
       <section id="top" data-page="1" className="landing-section landing-hero" aria-labelledby="landing-title">
         <div className="landing-hero__mountain" aria-hidden="true" />
         <div className="landing-hero-words" aria-hidden="true">
-          {backgroundFragments.map((fragment) => (
-            <span key={fragment.word} style={{ left: fragment.left, top: fragment.top, opacity: fragment.opacity, animationDelay: fragment.delay }}>{fragment.word}</span>
+          {BACKGROUND_FRAGMENTS.map((fragment, index) => (
+            <span key={fragment.word} style={{ left: fragment.left, top: fragment.top, opacity: 0.28 + (index % 4) * 0.13, animationDelay: `${index * 0.25}s` }}>{fragment.word}</span>
           ))}
         </div>
         <div className="landing-hero__branch" aria-hidden="true">
@@ -579,7 +549,7 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
         <div className={`landing-container landing-seed-layout ${seedPlanted ? "is-planted" : ""}`}>
           <div className="landing-seed-copy">
             <p className="landing-kicker">Seed / 播种</p>
-            <h2 id="seed-title">每一次探索，都从一个问题开始。</h2>
+            <EditorialTitle id="seed-title" title="每一次探索，都从一个问题开始。" lines={["每一次探索，", "都从一个问题开始。"]} />
             <p>Tree Chat 把你的灵感化为种子，置于 AI 智能的温床。先把问题种下，让它在可回望的上下文里长出下一条路径。</p>
           </div>
           <div ref={seedStageRef} className={`landing-seed-stage ${seedPlanted ? "is-planted" : ""} ${seedInView ? "is-in-view" : ""}`}>
@@ -619,7 +589,7 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
               </g>
               <path className="landing-seed-tree__twig" d="M98 207c-11-16-22-25-35-31M340 207c12-17 24-25 38-31M145 145c-15-13-25-25-32-40M294 145c15-13 26-25 33-40" />
             </svg>
-            <button ref={seedRef} type="button" className="landing-seed-button" onClick={plantSeed} aria-pressed={seedPlanted} aria-label={seedPlanted ? "种子已播下" : "点击播下 Tree Chat 种子"}>
+            <button ref={seedRef} type="button" className="landing-seed-button" onClick={plantSeed} disabled={seedPlanted} aria-pressed={seedPlanted} aria-label={seedPlanted ? "种子已播下" : "点击播下 Tree Chat 种子"}>
               <svg className="landing-seed" viewBox="0 0 88 110" aria-hidden="true">
                 <defs><radialGradient id="seed-shell" cx="34%" cy="27%"><stop offset="0" stopColor="#e9d4a0" /><stop offset="0.5" stopColor="#a9773f" /><stop offset="1" stopColor="#563a2a" /></radialGradient></defs>
                 <path d="M43 7C20 12 9 34 16 57c6 22 25 38 41 42 19-15 29-37 22-59C73 22 61 11 43 7Z" fill="url(#seed-shell)" stroke="#f0ddad" strokeOpacity=".42" strokeWidth="2" />
@@ -663,21 +633,22 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
           <div className="landing-linear-visual">
             <div
               className="landing-linear-stack"
-              role="img"
-              aria-label="线性对话弊端的独立对照示意，不属于左侧树结构"
+              role="group"
+              aria-label="线性对话示意：大语言模型是什么、有什么优点、有什么缺点"
               data-tree-role="comparison-only"
             >
               <div className="landing-linear-line" aria-hidden="true"><span /><span /><span /><span /><span /></div>
-              <div className="landing-linear-thread" aria-hidden="true">
-                <span className="landing-linear-thread__segment landing-linear-thread__segment--one" />
-                <span className="landing-linear-thread__segment landing-linear-thread__segment--two" />
-                <span className="landing-linear-thread__segment landing-linear-thread__segment--three" />
+              <div className="landing-linear-thread">
+                <p className="landing-linear-thread__prompt landing-linear-thread__prompt--one"><span>01</span>大语言模型是什么？</p>
+                <p className="landing-linear-thread__prompt landing-linear-thread__prompt--two"><span>02</span>大语言模型有什么优点？</p>
+                <p className="landing-linear-thread__prompt landing-linear-thread__prompt--three"><span>03</span>大语言模型有什么缺点？</p>
+                <div className="landing-linear-placeholder" aria-hidden="true"><span /><span /><span /></div>
               </div>
               <div className="landing-linear-break" aria-hidden="true"><Waves size={17} /></div>
             </div>
             <div className="landing-dilemma-copy">
               <p className="landing-kicker">Dilemma / Solution</p>
-              <h2 id="dilemma-title">思考不是一条线。</h2>
+              <EditorialTitle id="dilemma-title" title="思考，不是一条线" lines={["思考，", "不是一条线"]} />
               <p>线性对话只能把你带向下一句。</p>
               <p>Tree Chat 让每一个分岔都留下来。</p>
             </div>
@@ -698,7 +669,7 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
             <div ref={treeCopyRef} className={`landing-tree-copy landing-tree-copy--chapter-${treeChapter + 4}`} key={story.chapter}>
               <div className="landing-tree-copy__intro">
                 <p className="landing-tree-copy__kicker" style={{ color: story.accent }}>{story.chapter} <span aria-hidden="true">·</span> {story.kicker}</p>
-                <h2 id="tree-story-title">{story.title}</h2>
+                <EditorialTitle id="tree-story-title" title={story.title} lines={story.titleLines} />
                 <p>{story.body}</p>
               </div>
               <div className="landing-tree-facts">
@@ -742,7 +713,7 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
           <div className="landing-footer-reflection">
             <div className="landing-footer-reflection__intro">
               <p className="landing-kicker">Prospect / 应用前景</p>
-              <h2 id="footer-title">让每一次提问都有位置，让每一次探索都有路径</h2>
+              <EditorialTitle id="footer-title" title="让每一次提问都有位置，让每一次探索都有路径" lines={["让每一次提问都有位置，", "让每一次探索都有路径"]} />
               <p className="landing-footer-reflection__lede">Tree Chat（智构树语）面向课程学习、研究资料整理、竞赛方案推演与公共治理，把 AI 回答、用户判断和资料上下文组织成可浏览、可调整、可导出的知识树，降低回看、比较和整理成本。</p>
             </div>
             <div className="landing-prospect-content">
@@ -765,7 +736,7 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
             </div>
           </div>
           <footer className="landing-footer">
-            <div><BranchLogo /><p>让思考拥有枝叶。</p></div>
+            <div><BrandLogo tone="light" /><p>让思考拥有枝叶。</p></div>
             {profile.repositoryUrl && profile.licenseUrl && profile.repositoryLabel && profile.licenseLabel && (
               <div className="landing-footer__links">
                 <a href={profile.repositoryUrl} target="_blank" rel="noreferrer"><GitFork size={16} aria-hidden="true" /> {profile.repositoryLabel}</a>
