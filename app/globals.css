@@ -535,14 +535,16 @@ body.landing-scroll-root::-webkit-scrollbar-track {
 
 .landing-hero {
   align-items: center;
-  background: radial-gradient(ellipse at 50% 76%, rgba(125, 77, 56, 0.48), transparent 34%), linear-gradient(135deg, #081b14 0%, #1d2f25 42%, #3d2526 100%);
+  background:
+    radial-gradient(ellipse at 50% 42%, rgba(217, 232, 188, 0.2), transparent 38%),
+    linear-gradient(155deg, var(--landing-moss-light) 0%, #8fb887 18%, #1f5136 48%, #0d2a1e 76%, var(--landing-forest-950) 100%);
   display: flex;
   justify-content: center;
   height: 1080px;
 }
 
-.landing-hero::after {
-  background: linear-gradient(180deg, transparent 60%, var(--landing-forest-950) 100%);
+.landing-hero::before {
+  background: linear-gradient(180deg, rgba(7, 29, 21, 0.46) 0%, rgba(7, 29, 21, 0.16) 48%, rgba(7, 29, 21, 0.52) 100%);
   content: "";
   inset: 0;
   pointer-events: none;
@@ -550,16 +552,13 @@ body.landing-scroll-root::-webkit-scrollbar-track {
   z-index: 1;
 }
 
-.landing-hero__mountain {
-  background: linear-gradient(160deg, transparent 0 26%, rgba(103, 61, 49, 0.75) 27% 54%, rgba(30, 57, 42, 0.95) 55% 100%);
-  bottom: -18%;
-  clip-path: polygon(0 72%, 14% 44%, 28% 66%, 42% 30%, 58% 57%, 72% 22%, 100% 62%, 100% 100%, 0 100%);
-  left: -8%;
-  opacity: 0.7;
+.landing-hero::after {
+  background: linear-gradient(180deg, transparent 54%, rgba(8, 27, 20, 0.16) 74%, var(--landing-forest-950) 100%);
+  content: "";
+  inset: 0;
+  pointer-events: none;
   position: absolute;
-  right: -8%;
-  top: 32%;
-  z-index: 0;
+  z-index: 1;
 }
 
 .landing-hero__content {
@@ -574,7 +573,7 @@ body.landing-scroll-root::-webkit-scrollbar-track {
 .landing-hero__title,
 .landing-hero__subtitle,
 .landing-hero__actions,
-.landing-hero__branch {
+.landing-hero-tree {
   opacity: 1;
 }
 
@@ -619,21 +618,67 @@ body.landing-scroll-root::-webkit-scrollbar-track {
   z-index: 4;
 }
 
-.landing-hero__branch {
+.landing-hero-tree {
   bottom: 0;
-  filter: drop-shadow(0 0 10px rgba(215, 235, 210, 0.35));
-  left: 0;
+  height: 100%;
+  inset: 0;
   pointer-events: none;
   position: absolute;
-  right: 0;
-  transform-origin: 15% 100%;
+  width: 100%;
   z-index: 2;
 }
 
-.landing-hero__branch svg {
-  display: block;
-  height: 500px;
-  width: 100%;
+.landing-hero-tree__silhouette {
+  opacity: 0.94;
+}
+
+.landing-hero-tree__trunk {
+  filter: drop-shadow(0 12px 18px rgba(5, 18, 12, 0.44));
+  stroke-width: 24px;
+}
+
+.landing-hero-tree__trunk-highlight {
+  stroke-width: 4px;
+}
+
+.landing-hero-tree__primary {
+  filter: drop-shadow(0 7px 10px rgba(5, 18, 12, 0.34));
+  stroke-width: 11px;
+}
+
+.landing-hero-tree__secondary path,
+.landing-hero-tree__twig {
+  fill: none;
+  stroke: url("#landing-tree-branch");
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.landing-hero-tree__secondary path {
+  opacity: 0.88;
+  stroke-width: 4px;
+}
+
+.landing-hero-tree__twig {
+  opacity: 0.92;
+  stroke-width: 3px;
+}
+
+.landing-hero-tree__leaves ellipse {
+  fill: #899955;
+  opacity: 0.58;
+  vector-effect: non-scaling-stroke;
+}
+
+.landing-hero-tree__node-halo {
+  fill: url("#landing-tree-node");
+  opacity: 0.72;
+}
+
+.landing-hero-tree__node {
+  fill: #fff8d9;
+  filter: drop-shadow(0 0 5px rgba(255, 249, 204, 0.7));
 }
 
 .landing-hero-words {
@@ -641,7 +686,7 @@ body.landing-scroll-root::-webkit-scrollbar-track {
   overflow: hidden;
   pointer-events: none;
   position: absolute;
-  z-index: 2;
+  z-index: 3;
 }
 
 .landing-hero-words span {
@@ -649,8 +694,18 @@ body.landing-scroll-root::-webkit-scrollbar-track {
   font-family: var(--font-lora);
   font-size: 19px;
   position: absolute;
+  text-shadow: 0 2px 10px rgba(4, 18, 12, 0.58);
   transform: translate(-50%, -50%);
   white-space: nowrap;
+}
+
+.landing-hero-words span[data-landing-word="回溯"] {
+  text-align: right;
+  transform: translate(-220%, -50%);
+}
+
+.landing-hero-words span[data-landing-word="可能性"] {
+  transform: translate(-50%, -68%);
 }
 
 .landing-seed-section {
@@ -1708,7 +1763,7 @@ body.landing-scroll-root::-webkit-scrollbar-track {
   .landing-hero__title,
   .landing-hero__subtitle,
   .landing-hero__actions,
-  .landing-hero__branch {
+  .landing-hero-tree {
     opacity: 1;
     transform: none;
   }
