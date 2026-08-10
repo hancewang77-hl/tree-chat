@@ -46,7 +46,7 @@ export function ForestSidebar() {
             className="flex h-8 w-8 items-center justify-center rounded-lg"
             style={{
               background: "var(--accent-sage)",
-              color: "#FBF7F0",
+              color: "var(--on-primary)",
               border: "1px solid rgba(255, 253, 247, 0.24)",
               boxShadow: "0 4px 10px rgba(86, 91, 61, 0.22)",
             }}
@@ -62,7 +62,7 @@ export function ForestSidebar() {
         </div>
         <span
           className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-          style={{ background: "var(--border-warm)", color: "var(--text-muted)" }}
+          style={{ background: "var(--workbench-raised)", color: "var(--text-muted)" }}
         >
           {projectIds.length}
         </span>
@@ -89,15 +89,15 @@ export function ForestSidebar() {
                 isActive ? "" : "hover:opacity-90"
               }`}
               style={{
-                background: isActive ? "var(--accent-sage)" : "rgba(116, 122, 85, 0.16)",
-                border: isActive ? "1px solid rgba(86, 91, 61, 0.42)" : "1px solid rgba(116, 122, 85, 0.26)",
+                background: isActive ? "var(--accent-sage)" : "var(--workbench-control-fill)",
+                border: "1px solid var(--control-border)",
                 boxShadow: isActive ? "0 6px 14px rgba(86, 91, 61, 0.18)" : "none",
               }}
             >
               <div className="flex items-center justify-between">
                 <span
                   className="text-[13px] font-medium truncate max-w-[140px]"
-                  style={{ color: isActive ? "#FBF7F0" : "var(--accent-olive-deep)" }}
+                  style={{ color: isActive ? "var(--on-primary)" : "var(--accent-olive-deep)" }}
                 >
                   {project.name}
                 </span>
@@ -106,19 +106,19 @@ export function ForestSidebar() {
                     e.stopPropagation();
                     setMenuProjectId(menuProjectId === id ? null : id);
                   }}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity rounded p-0.5 hover:bg-white/60"
+                  className="opacity-0 group-hover:opacity-100 transition-opacity rounded p-0.5 hover:opacity-80"
                 >
                   <MoreHorizontal
                     size={12}
-                    style={{ color: isActive ? "rgba(251, 247, 240, 0.78)" : "var(--accent-olive-deep)" }}
+                    style={{ color: isActive ? "var(--on-primary)" : "var(--accent-olive-deep)" }}
                   />
                 </button>
               </div>
               <div className="mt-1 flex items-center gap-2">
-                <span className="text-[10px]" style={{ color: isActive ? "rgba(244, 235, 215, 0.76)" : "var(--text-muted)" }}>
+                <span className="text-[10px]" style={{ color: isActive ? "var(--on-primary)" : "var(--text-muted)" }}>
                   {Object.keys(project.nodes).length} 节点
                 </span>
-                <span className="text-[10px]" style={{ color: isActive ? "rgba(244, 235, 215, 0.76)" : "var(--text-muted)" }}>
+                <span className="text-[10px]" style={{ color: isActive ? "var(--on-primary)" : "var(--text-muted)" }}>
                   z = {Math.max(...Object.values(project.nodes).map((n) => n.layer))} 层
                 </span>
               </div>
@@ -128,8 +128,8 @@ export function ForestSidebar() {
                 <div
                   className="absolute right-3 mt-1 w-36 rounded-xl py-1 shadow-xl z-30"
                   style={{
-                    background: "#EEE5D1",
-                    border: "1px solid rgba(86, 91, 61, 0.24)",
+                    background: "var(--workbench-raised)",
+                    border: "1px solid var(--control-border)",
                   }}
                   onClick={(e) => e.stopPropagation()}
                 >
@@ -141,7 +141,7 @@ export function ForestSidebar() {
                         dispatch({ type: "RENAME_PROJECT", projectId: id, name: name.trim() });
                       }
                     }}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-[12px] transition-all hover:bg-white/60"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-[12px] transition-all hover:opacity-80"
                     style={{ color: "var(--text-charcoal)" }}
                   >
                     <Pencil size={12} />
@@ -156,7 +156,7 @@ export function ForestSidebar() {
                           dispatch({ type: "DELETE_PROJECT", projectId: id });
                         }
                       }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-[12px] transition-all hover:bg-white/60"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-[12px] transition-all hover:opacity-80"
                       style={{ color: "#B43C28" }}
                     >
                       <Trash2 size={12} />
@@ -189,8 +189,8 @@ export function ForestSidebar() {
           className="flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-[13px] font-medium transition-all hover:opacity-90"
           style={{
             background: "var(--accent-sage)",
-            color: "#FBF7F0",
-            border: "1px solid rgba(86, 91, 61, 0.42)",
+            color: "var(--on-primary)",
+            border: "1px solid var(--control-border)",
             boxShadow: "0 6px 14px rgba(86, 91, 61, 0.18)",
           }}
         >

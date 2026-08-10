@@ -2,7 +2,6 @@
 
 import { buildHarvestMarkdown } from "@/src/lib/harvestMarkdown";
 import { useTreeState } from "@/src/state/TreeContext";
-import { ModalPortal } from "@/src/components/overlays/ModalPortal";
 
 export function HarvestDialog({
   isOpen,
@@ -37,52 +36,48 @@ export function HarvestDialog({
   }
 
   return (
-    <ModalPortal>
+    <div
+      className="absolute inset-0 z-50 flex items-center justify-center"
+      style={{ background: "rgba(44, 36, 22, 0.15)" }}
+    >
       <div
-        className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto p-4 sm:p-6"
-        style={{ background: "rgba(44, 36, 22, 0.15)" }}
-        onClick={onClose}
+        className="w-[340px] rounded-xl p-6 shadow-2xl"
+        style={{ background: "var(--bg-paper)", border: "1px solid var(--border-warm)" }}
       >
-        <div
-          className="my-auto w-[340px] max-w-full rounded-xl p-6 shadow-2xl"
-          style={{ background: "var(--bg-paper)", border: "1px solid var(--border-warm)" }}
-          onClick={(event) => event.stopPropagation()}
+        <h2
+          className="mb-2 text-[17px] font-semibold"
+          style={{ fontFamily: "var(--font-serif)", color: "var(--accent-bark)" }}
         >
-          <h2
-            className="mb-2 text-[17px] font-semibold"
-            style={{ fontFamily: "var(--font-serif)", color: "var(--accent-bark)" }}
+          收获 · Harvest
+        </h2>
+        <p className="mb-5 text-[13px]" style={{ color: "var(--text-muted)" }}>
+          导出当前项目 &ldquo;{activeProject.name}&rdquo;
+        </p>
+        <div className="flex flex-col gap-3">
+          <button
+            onClick={exportMarkdown}
+            className="rounded-lg px-4 py-2.5 text-[14px] font-medium transition-all hover:opacity-90"
+            style={{ background: "var(--accent-bark)", color: "var(--on-primary)" }}
           >
-            收获 · Harvest
-          </h2>
-          <p className="mb-5 text-[13px]" style={{ color: "var(--text-muted)" }}>
-            导出当前项目 &ldquo;{activeProject.name}&rdquo;
-          </p>
-          <div className="flex flex-col gap-3">
-            <button
-              onClick={exportMarkdown}
-              className="rounded-lg px-4 py-2.5 text-[14px] font-medium transition-all hover:opacity-90"
-              style={{ background: "var(--accent-bark)", color: "#FBF7F0" }}
-            >
-              导出 Markdown
-            </button>
-            <button
-              onClick={exportJSON}
-              className="rounded-lg px-4 py-2.5 text-[14px] font-medium transition-all hover:opacity-90"
-              style={{ background: "var(--accent-sage)", color: "#FBF7F0" }}
-            >
-              导出 JSON
-            </button>
-            <button
-              onClick={onClose}
-              className="rounded-lg px-4 py-2.5 text-[14px] transition-all"
-              style={{ border: "1px solid var(--border-warm)", color: "var(--text-muted)" }}
-            >
-              取消
-            </button>
-          </div>
+            导出 Markdown
+          </button>
+          <button
+            onClick={exportJSON}
+            className="rounded-lg px-4 py-2.5 text-[14px] font-medium transition-all hover:opacity-90"
+            style={{ background: "var(--accent-sage)", color: "var(--on-primary)" }}
+          >
+            导出 JSON
+          </button>
+          <button
+            onClick={onClose}
+            className="rounded-lg px-4 py-2.5 text-[14px] transition-all"
+            style={{ border: "1px solid var(--control-border)", color: "var(--text-muted)" }}
+          >
+            取消
+          </button>
         </div>
       </div>
-    </ModalPortal>
+    </div>
   );
 }
 

@@ -46,7 +46,7 @@ export function RingsPanel() {
             className="flex h-8 w-8 items-center justify-center rounded-lg"
             style={{
               background: "var(--accent-sage)",
-              color: "#FBF7F0",
+              color: "var(--on-primary)",
               border: "1px solid rgba(255, 253, 247, 0.24)",
               boxShadow: "0 4px 10px rgba(86, 91, 61, 0.22)",
             }}
@@ -93,7 +93,7 @@ export function RingsPanel() {
             }
             disabled={scopedPast.length === 0}
             className="flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-[13px] font-medium transition-all disabled:opacity-30"
-            style={{ background: "var(--accent-sage)", color: "#FBF7F0" }}
+            style={{ background: "var(--accent-sage)", color: "var(--on-primary)" }}
           >
             <Undo2 size={14} />
             Undo
@@ -106,7 +106,7 @@ export function RingsPanel() {
             }
             disabled={scopedFuture.length === 0}
             className="flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-[13px] font-medium transition-all disabled:opacity-30"
-            style={{ background: "var(--accent-olive-deep)", color: "#FBF7F0" }}
+            style={{ background: "var(--accent-olive-deep)", color: "var(--on-primary)" }}
           >
             <Redo2 size={14} />
             Redo

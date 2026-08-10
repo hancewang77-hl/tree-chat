@@ -174,7 +174,7 @@ export function TreeScene({
       style={{
         background: [
           LEAF_VEIN_PATTERN,
-          "radial-gradient(circle at 50% 38%, rgba(239,232,216,0.92) 0%, rgba(219,209,190,0.96) 48%, rgba(188,177,156,1) 100%)",
+          "var(--workbench-canvas-background)",
         ].join(", "),
         backgroundSize: "260px 210px, auto",
         backgroundPosition: "18px 24px, center",

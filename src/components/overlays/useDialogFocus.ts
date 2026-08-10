@@ -1,8 +1,9 @@
 "use client";
 
 import {
+  cloneElement,
   type KeyboardEvent as ReactKeyboardEvent,
-  type ReactNode,
+  type ReactElement,
   type RefObject,
   useCallback,
   useLayoutEffect,
@@ -89,9 +90,16 @@ export function hasOpenModal() {
   return modalStack.length > 0;
 }
 
-export function DialogPortal({ children }: { children: ReactNode }) {
+export function DialogPortal({
+  children,
+}: {
+  children: ReactElement<{ className?: string }>;
+}) {
   if (typeof document === "undefined") return null;
-  return createPortal(children, document.body);
+  const className = [children.props.className, "workbench-theme-scope"]
+    .filter(Boolean)
+    .join(" ");
+  return createPortal(cloneElement(children, { className }), document.body);
 }
 
 export function useDialogFocus<T extends HTMLElement>({

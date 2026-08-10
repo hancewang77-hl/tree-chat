@@ -90,7 +90,7 @@ export function AuxoDialog({
           <div className="flex items-start gap-3">
             <span
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-              style={{ background: "var(--accent-sage)", color: "#FBF7F0" }}
+              style={{ background: "var(--accent-sage)", color: "var(--on-primary)" }}
             >
               <Sparkles size={19} />
             </span>
@@ -245,7 +245,7 @@ export function AuxoDialog({
             type="button"
             onClick={plan ? onDiscard : onCancel}
             className="rounded-xl px-4 py-2 text-[13px] transition-opacity hover:opacity-80"
-            style={{ border: "1px solid var(--border-warm)", color: "var(--text-muted)" }}
+            style={{ border: "1px solid var(--control-border)", color: "var(--text-muted)" }}
           >
             {plan ? "重新生成" : isGenerating ? "停止" : "取消"}
           </button>
@@ -254,7 +254,7 @@ export function AuxoDialog({
             onClick={() => void (plan ? onConfirm?.() : onGenerate())}
             disabled={isGenerating}
             className="inline-flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-2 text-[13px] font-semibold transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-65"
-            style={{ background: "var(--accent-sage)", color: "#FBF7F0" }}
+            style={{ background: "var(--accent-sage)", color: "var(--on-primary)" }}
           >
             {isGenerating ? (
               <>

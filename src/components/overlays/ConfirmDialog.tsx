@@ -77,7 +77,7 @@ export function ConfirmDialog({
               ref={cancelButtonRef}
               onClick={onCancel}
               className="rounded-xl px-4 py-2 text-[13px] transition-all hover:opacity-80"
-              style={{ border: "1px solid var(--border-warm)", color: "var(--text-muted)" }}
+              style={{ border: "1px solid var(--control-border)", color: "var(--text-muted)" }}
             >
               取消
             </button>

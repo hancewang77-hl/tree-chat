@@ -237,8 +237,8 @@ export function BottomComposer({
                   key={nutrient.id}
                   className="inline-flex max-w-[260px] items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]"
                   style={{
-                    background: isActive ? "var(--accent-olive-soft)" : "rgba(232,223,208,0.78)",
-                    borderColor: isActive ? "rgba(116, 122, 85, 0.42)" : "var(--border-warm)",
+                    background: isActive ? "var(--accent-olive-soft)" : "var(--workbench-control-fill)",
+                    borderColor: "var(--control-border)",
                     color: isReady ? "var(--accent-bark)" : "var(--text-muted)",
                   }}
                   title={nutrient.excerpt}
@@ -264,7 +264,7 @@ export function BottomComposer({
                       await deleteNutrientBlob(nutrient.blobKey).catch(() => undefined);
                       dispatch({ type: "REMOVE_NUTRIENT", nutrientId: nutrient.id });
                     }}
-                    className="rounded-full p-0.5 hover:bg-white/80"
+                    className="rounded-full p-0.5 hover:opacity-70"
                     title="移除养分"
                   >
                     <X size={11} />
@@ -288,7 +288,7 @@ export function BottomComposer({
           {/* Mode toggle — styled as branch segments */}
           <div
             className="flex shrink-0 rounded-xl overflow-hidden"
-            style={{ border: "1px solid rgba(116, 122, 85, 0.28)" }}
+            style={{ border: "1px solid var(--control-border)" }}
           >
             <button
               onClick={() => emitComposerMode("ai")}
@@ -296,8 +296,8 @@ export function BottomComposer({
               aria-pressed={mode === "ai"}
               className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-medium transition-all relative"
               style={{
-                background: mode === "ai" ? "var(--accent-sage)" : "var(--accent-olive-soft)",
-                color: mode === "ai" ? "#FBF7F0" : "var(--accent-olive-deep)",
+                background: mode === "ai" ? "var(--accent-sage)" : "var(--workbench-control-fill)",
+                color: mode === "ai" ? "var(--on-primary)" : "var(--accent-olive-deep)",
               }}
             >
               <GitBranch size={13} />
@@ -305,7 +305,7 @@ export function BottomComposer({
               {mode === "ai" && (
                 <span
                   className="absolute -top-1 right-2 w-1.5 h-1.5 rounded-full animate-pulse-warm"
-                  style={{ background: "#FBF7F0" }}
+                  style={{ background: "var(--on-primary)" }}
                 />
               )}
             </button>
@@ -315,8 +315,8 @@ export function BottomComposer({
               aria-pressed={mode === "note"}
               className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-medium transition-all"
               style={{
-                background: mode === "note" ? "var(--accent-sage)" : "var(--accent-olive-soft)",
-                color: mode === "note" ? "#FBF7F0" : "var(--accent-olive-deep)",
+                background: mode === "note" ? "var(--accent-sage)" : "var(--workbench-control-fill)",
+                color: mode === "note" ? "var(--on-primary)" : "var(--accent-olive-deep)",
               }}
             >
               <StickyNote size={13} />
@@ -339,8 +339,8 @@ export function BottomComposer({
             disabled={isUploading}
             className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl px-3 text-[12px] font-medium transition-all hover:opacity-85 disabled:opacity-50"
             style={{
-              border: "1px solid rgba(116, 122, 85, 0.28)",
-              background: "var(--accent-olive-soft)",
+              border: "1px solid var(--control-border)",
+              background: "var(--workbench-control-fill)",
               color: "var(--accent-olive-deep)",
             }}
             title="Nutrients · 正文在浏览器内转为 Markdown，并尝试将原文件保存在本机"
@@ -359,7 +359,7 @@ export function BottomComposer({
                 "radial-gradient(ellipse at 12% 82%, rgba(116, 122, 85, 0.07) 0%, transparent 60%)",
                 "var(--bg-cream)",
               ].join(", "),
-              border: "1px solid var(--border-warm)",
+              border: "1px solid var(--control-border)",
               boxShadow: "inset 0 2px 8px var(--shadow-warm), 0 1px 0 rgba(224, 216, 200, 0.6)",
             }}
           >
@@ -403,13 +403,9 @@ export function BottomComposer({
                 ? "var(--accent-bark)"
                 : hasActionableText
                 ? "var(--accent-sage)"
-                : "var(--accent-olive-soft)",
-              color: mode === "ai" && isAiTyping || hasActionableText ? "#FBF7F0" : "var(--accent-olive-deep)",
-              border: `1px solid ${
-                mode === "ai" && isAiTyping || hasActionableText
-                  ? "rgba(86, 91, 61, 0.42)"
-                  : "rgba(116, 122, 85, 0.24)"
-              }`,
+                : "var(--workbench-control-fill)",
+              color: mode === "ai" && isAiTyping || hasActionableText ? "var(--on-primary)" : "var(--accent-olive-deep)",
+              border: "1px solid var(--control-border)",
               borderRadius: "60% 40% 50% 50% / 55% 45% 55% 45%",
               transform: mode === "ai" && isAiTyping || hasActionableText ? "scale(1.05)" : "scale(1)",
               boxShadow: mode === "ai" && isAiTyping || hasActionableText
