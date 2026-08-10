@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { animate } from "animejs";
+import { animate, stagger } from "animejs";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { LandingPage } from "./LandingPage";
@@ -13,7 +13,7 @@ const PUBLIC_PROFILE = resolveLandingPresentation("tree-chat.example.workers.dev
 
 vi.mock("animejs", () => ({
   animate: vi.fn(() => ({ pause: vi.fn() })),
-  stagger: vi.fn(() => 0),
+  stagger: vi.fn(() => () => 0),
 }));
 
 vi.mock("./NarrativeTreeScene", () => ({
@@ -97,60 +97,132 @@ describe("LandingPage seed transition", () => {
     expect(matureTree?.querySelector(".landing-seed-tree__root")).toBeTruthy();
   });
 
-  test("scatters the Page 1 background words across an explicit, stratified layout", () => {
+  test("renders exactly one decorative Page 1 background image and accessible keyword layer", () => {
     render(<LandingPage profile={PUBLIC_PROFILE} />);
 
-    const fragments = [...document.querySelectorAll<HTMLElement>(".landing-hero-words > span")];
-    expect(fragments).toHaveLength(12);
-    expect(fragments.map((fragment) => ({
-      left: fragment.style.left,
-      top: fragment.style.top,
-    }))).toEqual([
-      { left: "8%", top: "18%" },
-      { left: "33%", top: "11%" },
-      { left: "58%", top: "25%" },
-      { left: "86%", top: "15%" },
-      { left: "16%", top: "45%" },
-      { left: "43%", top: "52%" },
-      { left: "69%", top: "40%" },
-      { left: "92%", top: "55%" },
-      { left: "7%", top: "76%" },
-      { left: "29%", top: "67%" },
-      { left: "57%", top: "82%" },
-      { left: "82%", top: "72%" },
-    ]);
+    const backgrounds = document.querySelectorAll<HTMLImageElement>("img[data-page1-background]");
+    expect(backgrounds).toHaveLength(1);
+    const background = backgrounds[0];
+    expect(background).toHaveAttribute("alt", "");
+    expect(background).toHaveAttribute("aria-hidden", "true");
+    expect(background).toHaveAttribute("sizes", "100vw");
+    expect(decodeURIComponent(background.getAttribute("src") ?? "")).toContain(
+      "url=/assets/landing/page1-tree-background.png",
+    );
+    expect(document.querySelector(".landing-hero-tree")).toBeNull();
+    expect(document.querySelector(".landing-hero-words")).not.toHaveAttribute("aria-hidden");
   });
 
-  test("exposes the Page 1 knowledge tree and anchors every background word to a branch target", () => {
+  test("maps every Page 1 keyword by name to its exact cover coordinate tuple", () => {
     render(<LandingPage profile={PUBLIC_PROFILE} />);
 
-    const tree = document.querySelector<HTMLElement>(".landing-hero-tree");
-    expect(tree).toBeTruthy();
-    expect(tree?.tagName.toLowerCase()).toBe("svg");
-    expect(tree).toHaveAttribute("aria-hidden", "true");
-    expect(tree?.querySelector(".landing-hero-tree__trunk")).toBeTruthy();
-    expect(tree?.querySelectorAll(".landing-hero-tree__primary")).toHaveLength(3);
+    const expected: Record<string, readonly [number, number, number, number, "left" | "right"]> = {
+      灵感: [8.07, 13.92, 18, -22, "left"],
+      问题: [30.74, 6.48, 16, 20, "left"],
+      假设: [15.25, 42.61, -18, -24, "right"],
+      为什么: [7.12, 77.79, 20, 20, "left"],
+      下一步: [27.93, 79.28, -18, 24, "right"],
+      回溯: [35.41, 53.77, 20, -20, "left"],
+      证据: [62.98, 20.72, -18, -22, "right"],
+      路径: [73.03, 38.26, -18, -22, "right"],
+      比较: [86.48, 9.03, 18, 20, "left"],
+      知识: [93.72, 51.43, -20, -22, "right"],
+      连接: [87.68, 72.79, 18, 20, "left"],
+      可能性: [58.97, 86.72, 18, -24, "left"],
+    };
+    const words = [...document.querySelectorAll<HTMLElement>(".landing-hero-word")];
+    expect(words).toHaveLength(Object.keys(expected).length);
+    expect(words.map((word) => word.dataset.landingWord)).toEqual(Object.keys(expected));
 
-    const expectedTargets = [
-      "灵感",
-      "问题",
-      "证据",
-      "比较",
-      "假设",
-      "回溯",
-      "路径",
-      "知识",
-      "为什么",
-      "下一步",
-      "可能性",
-      "连接",
-    ];
-    const targets = [...(tree?.querySelectorAll<HTMLElement>("[data-tree-target]") ?? [])];
-    const targetValues = targets.map((target) => target.dataset.treeTarget);
+    const actual = Object.fromEntries(words.map((word) => {
+      const name = word.dataset.landingWord ?? "";
+      const value = (property: string, unit: string) =>
+        Number.parseFloat(word.style.getPropertyValue(property).replace(unit, ""));
+      return [name, [
+        value("--x", "%"),
+        value("--y", "%"),
+        value("--dx", "px"),
+        value("--dy", "px"),
+        word.dataset.anchor,
+      ]];
+    }));
+    expect(actual).toEqual(expected);
+    expect(words.map((word) => word.querySelector(".landing-hero-word__reveal")?.textContent)).toEqual(
+      Object.keys(expected),
+    );
+  });
 
-    expect(targets).toHaveLength(expectedTargets.length);
-    expect(new Set(targetValues).size).toBe(expectedTargets.length);
-    expect(new Set(targetValues)).toEqual(new Set(expectedTargets));
+  test("restores the complete Tree Chat Logo in the landing header", () => {
+    render(<LandingPage profile={PUBLIC_PROFILE} />);
+
+    const brand = document.querySelector<HTMLElement>(".landing-header__brand");
+    const logo = brand?.querySelector<HTMLElement>(":scope > .brand-logo");
+    expect(logo).toBeTruthy();
+    expect(logo).not.toHaveClass("brand-logo--compact");
+    expect(logo).not.toHaveClass("brand-logo--mark-only");
+    expect(logo?.querySelector(".brand-logo__wordmark strong")).toHaveTextContent("Tree Chat");
+    expect(logo?.querySelector(".brand-logo__wordmark small")).toHaveTextContent("智构树语");
+    expect(brand?.querySelectorAll(":scope > span")).toHaveLength(1);
+  });
+
+  test("finishes the Page 1 foreground reveal within two seconds", () => {
+    vi.mocked(animate).mockClear();
+    vi.mocked(stagger).mockClear();
+    render(<LandingPage profile={PUBLIC_PROFILE} />);
+
+    const calls = vi.mocked(animate).mock.calls;
+    const chrome = calls.find(([target]) => String(target).includes(".landing-header__brand"));
+    const words = calls.find(([target]) => target === ".landing-hero-word__reveal");
+    const content = calls.find(([target]) => String(target).includes(".landing-hero__eyebrow"));
+
+    expect(chrome?.[1]).toMatchObject({ opacity: [0, 1], translateY: [14, 0], duration: 600 });
+    expect(words?.[1]).toMatchObject({ opacity: [0, 1], translateY: [10, 0], duration: 430 });
+    expect(content?.[1]).toMatchObject({ opacity: [0, 1], translateY: [24, 0], duration: 820 });
+    expect(stagger).toHaveBeenNthCalledWith(1, 80, { start: 0 });
+    expect(stagger).toHaveBeenNthCalledWith(2, 20, { start: 250 });
+    expect(stagger).toHaveBeenNthCalledWith(3, 150, { start: 650 });
+    expect(250 + 20 * 11 + 430).toBe(900);
+    expect(650 + 150 * 3 + 820).toBe(1920);
+    expect(Math.max(900, 1920)).toBeLessThanOrEqual(2000);
+    expect(calls.some(([target]) => String(target).includes("landing-hero__background"))).toBe(false);
+  });
+
+  test("shows Page 1 foreground immediately when reduced motion is requested", () => {
+    vi.mocked(animate).mockClear();
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query.includes("prefers-reduced-motion"),
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(() => false),
+    }));
+
+    render(<LandingPage profile={PUBLIC_PROFILE} />);
+
+    const heroRevealCalls = vi.mocked(animate).mock.calls.filter(([target]) =>
+      /landing-header__brand|landing-header__cta-reveal|landing-hero-word__reveal|landing-hero__eyebrow/.test(
+        String(target),
+      ),
+    );
+    expect(heroRevealCalls).toHaveLength(0);
+    [
+      ".landing-header__brand",
+      ".landing-progress",
+      ".landing-header__cta-reveal",
+      ".landing-hero-word__reveal",
+      ".landing-hero__eyebrow",
+      ".landing-hero__title",
+      ".landing-hero__subtitle",
+      ".landing-hero__actions",
+    ].forEach((selector) => {
+      document.querySelectorAll<HTMLElement>(selector).forEach((target) => {
+        expect(target.style.opacity).toBe("1");
+        expect(target.style.transform).toBe("none");
+      });
+    });
   });
 
   test("fades the seed above the growing tree and disables it after planting", () => {

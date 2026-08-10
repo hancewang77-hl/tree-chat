@@ -1,6 +1,7 @@
 "use client";
 
-import { animate } from "animejs";
+import Image from "next/image";
+import { animate, stagger } from "animejs";
 import {
   ArrowDown,
   ArrowUpRight,
@@ -127,192 +128,22 @@ const TREE_STORIES: Array<{
   },
 ];
 
-const BACKGROUND_FRAGMENTS = [
-  { word: "灵感", left: "8%", top: "18%" },
-  { word: "问题", left: "33%", top: "11%" },
-  { word: "证据", left: "58%", top: "25%" },
-  { word: "比较", left: "86%", top: "15%" },
-  { word: "假设", left: "16%", top: "45%" },
-  { word: "回溯", left: "43%", top: "52%" },
-  { word: "路径", left: "69%", top: "40%" },
-  { word: "知识", left: "92%", top: "55%" },
-  { word: "为什么", left: "7%", top: "76%" },
-  { word: "下一步", left: "29%", top: "67%" },
-  { word: "可能性", left: "57%", top: "82%" },
-  { word: "连接", left: "82%", top: "72%" },
+const PAGE1_BACKGROUND_SRC = "/assets/landing/page1-tree-background.png";
+
+const PAGE1_KEYWORDS = [
+  { word: "灵感", x: 8.07, y: 13.92, dx: 18, dy: -22, anchor: "left" },
+  { word: "问题", x: 30.74, y: 6.48, dx: 16, dy: 20, anchor: "left" },
+  { word: "假设", x: 15.25, y: 42.61, dx: -18, dy: -24, anchor: "right" },
+  { word: "为什么", x: 7.12, y: 77.79, dx: 20, dy: 20, anchor: "left" },
+  { word: "下一步", x: 27.93, y: 79.28, dx: -18, dy: 24, anchor: "right" },
+  { word: "回溯", x: 35.41, y: 53.77, dx: 20, dy: -20, anchor: "left" },
+  { word: "证据", x: 62.98, y: 20.72, dx: -18, dy: -22, anchor: "right" },
+  { word: "路径", x: 73.03, y: 38.26, dx: -18, dy: -22, anchor: "right" },
+  { word: "比较", x: 86.48, y: 9.03, dx: 18, dy: 20, anchor: "left" },
+  { word: "知识", x: 93.72, y: 51.43, dx: -20, dy: -22, anchor: "right" },
+  { word: "连接", x: 87.68, y: 72.79, dx: 18, dy: 20, anchor: "left" },
+  { word: "可能性", x: 58.97, y: 86.72, dx: 18, dy: -24, anchor: "left" },
 ] as const;
-
-const LANDING_TREE_ENDPOINTS = {
-  灵感: { x: 8.5, y: 20, d: "M26 43C21 35 15 27 8.5 20" },
-  问题: { x: 33, y: 14, d: "M31 17C32 16 33 15 33 14" },
-  证据: { x: 58.5, y: 28, d: "M76 45C72 39 66 33 58.5 28" },
-  比较: { x: 86, y: 18, d: "M76 45C80 34 84 24 86 18" },
-  假设: { x: 16, y: 48, d: "M24 56C21 53 18 50 16 48" },
-  回溯: { x: 43, y: 55, d: "M38 73C39 65 41 59 43 55" },
-  路径: { x: 69, y: 43, d: "M76 45C74 44 72 43 69 43" },
-  知识: { x: 92, y: 58, d: "M72 57C79 56 86 57 92 58" },
-  为什么: { x: 8, y: 73, d: "M32 67C24 66 17 68 12 71C10 72 9 73 8 73" },
-  下一步: { x: 29, y: 70, d: "M38 73C35 70 32 69 29 70" },
-  可能性: { x: 57, y: 79, d: "M61 75C59 76 58 78 57 79" },
-  连接: { x: 82, y: 69, d: "M68 65C73 65 78 67 82 69" },
-} as const satisfies Record<string, { x: number; y: number; d: string }>;
-
-function LandingHeroTree() {
-  return (
-    <svg
-      className="landing-hero-tree"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      <defs>
-        <linearGradient id="landing-tree-bark" x1="0" x2="1" y1="0" y2="0">
-          <stop offset="0" stopColor="#241b17" />
-          <stop offset="0.36" stopColor="#725338" />
-          <stop offset="0.58" stopColor="#b08a58" />
-          <stop offset="0.78" stopColor="#503526" />
-          <stop offset="1" stopColor="#211914" />
-        </linearGradient>
-        <linearGradient id="landing-tree-branch" x1="0" x2="1" y1="1" y2="0">
-          <stop offset="0" stopColor="#33251b" />
-          <stop offset="0.5" stopColor="#84603b" />
-          <stop offset="1" stopColor="#b0935a" />
-        </linearGradient>
-        <radialGradient id="landing-tree-node" cx="50%" cy="50%" r="50%">
-          <stop offset="0" stopColor="#fff9d8" />
-          <stop offset="0.35" stopColor="#d9e8bc" />
-          <stop offset="1" stopColor="#9fbd78" stopOpacity="0" />
-        </radialGradient>
-      </defs>
-
-      <g className="landing-hero-tree__silhouette">
-        <path
-          className="landing-hero-tree__trunk"
-          d="M50 108C50 98 50 89 49 82"
-          fill="none"
-          stroke="url(#landing-tree-bark)"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          vectorEffect="non-scaling-stroke"
-        />
-        <path
-          className="landing-hero-tree__trunk-highlight"
-          d="M50 105C50 96 50 88 49 82"
-          fill="none"
-          stroke="#d1ad71"
-          strokeLinecap="round"
-          strokeOpacity="0.28"
-          vectorEffect="non-scaling-stroke"
-        />
-
-        <path
-          className="landing-hero-tree__primary"
-          d="M49 82C43 77 38 72 32 67C26 62 22 56 19 50C17 46 16 42 16 38"
-          fill="none"
-          stroke="url(#landing-tree-branch)"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          vectorEffect="non-scaling-stroke"
-        />
-        <path
-          className="landing-hero-tree__primary"
-          d="M32 67C29 59 27 51 26 43C25 34 27 25 31 17"
-          fill="none"
-          stroke="url(#landing-tree-branch)"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          vectorEffect="non-scaling-stroke"
-        />
-        <path
-          className="landing-hero-tree__primary"
-          d="M49 82C57 77 64 72 68 65C72 58 74 51 76 45C79 37 82 27 85 19"
-          fill="none"
-          stroke="url(#landing-tree-branch)"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          vectorEffect="non-scaling-stroke"
-        />
-
-        <g className="landing-hero-tree__secondary">
-          <path d="M26 62C21 57 18 52 15 48" />
-          <path d="M30 66C24 65 19 63 14 59" />
-          <path d="M24 56C19 55 15 52 11 48" />
-          <path d="M38 73C39 66 40 61 43 57" />
-          <path d="M28 52C23 49 20 46 17 42" />
-          <path d="M26 43C21 38 16 33 12 29" />
-          <path d="M27 34C22 30 18 26 14 23" />
-          <path d="M61 74C60 68 60 63 62 58" />
-          <path d="M68 65C73 63 78 61 82 58" />
-          <path d="M72 57C77 54 82 50 85 46" />
-          <path d="M76 45C80 41 84 36 86 31" />
-          <path d="M68 66C75 68 80 70 85 72" />
-          <path d="M59 77C61 72 63 68 65 64" />
-          <path d="M72 57C79 56 87 53 94 51" />
-        </g>
-
-        <g className="landing-hero-tree__twigs" fill="none">
-          {BACKGROUND_FRAGMENTS.map((fragment) => {
-            const endpoint = LANDING_TREE_ENDPOINTS[fragment.word];
-            return (
-              <path
-                key={fragment.word}
-                className="landing-hero-tree__twig"
-                data-tree-target={fragment.word}
-                d={endpoint.d}
-              />
-            );
-          })}
-        </g>
-
-        <g className="landing-hero-tree__leaves">
-          <ellipse cx="12" cy="31" rx="1.1" ry="0.42" transform="rotate(-36 12 31)" />
-          <ellipse cx="15" cy="36" rx="1.05" ry="0.4" transform="rotate(42 15 36)" />
-          <ellipse cx="20" cy="51" rx="1.15" ry="0.43" transform="rotate(-28 20 51)" />
-          <ellipse cx="23" cy="56" rx="1.15" ry="0.43" transform="rotate(35 23 56)" />
-          <ellipse cx="14" cy="59" rx="1.2" ry="0.45" transform="rotate(-18 14 59)" />
-          <ellipse cx="18" cy="64" rx="1.15" ry="0.42" transform="rotate(38 18 64)" />
-          <ellipse cx="23" cy="70" rx="1.3" ry="0.48" transform="rotate(-32 23 70)" />
-          <ellipse cx="31" cy="66" rx="1.1" ry="0.42" transform="rotate(40 31 66)" />
-          <ellipse cx="35" cy="61" rx="1.2" ry="0.45" transform="rotate(-32 35 61)" />
-          <ellipse cx="37" cy="54" rx="1.1" ry="0.42" transform="rotate(44 37 54)" />
-          <ellipse cx="38" cy="34" rx="1.1" ry="0.42" transform="rotate(-36 38 34)" />
-          <ellipse cx="42" cy="29" rx="1.15" ry="0.43" transform="rotate(34 42 29)" />
-          <ellipse cx="36" cy="23" rx="1.2" ry="0.45" transform="rotate(-26 36 23)" />
-          <ellipse cx="40" cy="18" rx="1.1" ry="0.42" transform="rotate(38 40 18)" />
-          <ellipse cx="51" cy="37" rx="1.05" ry="0.4" transform="rotate(-34 51 37)" />
-          <ellipse cx="55" cy="33" rx="1.1" ry="0.42" transform="rotate(38 55 33)" />
-          <ellipse cx="60" cy="37" rx="1.2" ry="0.45" transform="rotate(-28 60 37)" />
-          <ellipse cx="72" cy="51" rx="1.2" ry="0.45" transform="rotate(36 72 51)" />
-          <ellipse cx="75" cy="45" rx="1.2" ry="0.45" transform="rotate(-32 75 45)" />
-          <ellipse cx="78" cy="39" rx="1.15" ry="0.42" transform="rotate(34 78 39)" />
-          <ellipse cx="82" cy="31" rx="1.25" ry="0.46" transform="rotate(-28 82 31)" />
-          <ellipse cx="83" cy="25" rx="1.1" ry="0.42" transform="rotate(38 83 25)" />
-          <ellipse cx="73" cy="61" rx="1.3" ry="0.48" transform="rotate(-24 73 61)" />
-          <ellipse cx="78" cy="64" rx="1.15" ry="0.42" transform="rotate(35 78 64)" />
-          <ellipse cx="84" cy="66" rx="1.25" ry="0.46" transform="rotate(-31 84 66)" />
-          <ellipse cx="88" cy="61" rx="1.15" ry="0.42" transform="rotate(38 88 61)" />
-          <ellipse cx="89" cy="52" rx="1.2" ry="0.44" transform="rotate(-27 89 52)" />
-          <ellipse cx="93" cy="54" rx="1.15" ry="0.42" transform="rotate(34 93 54)" />
-          <ellipse cx="59" cy="68" rx="1.15" ry="0.42" transform="rotate(-32 59 68)" />
-          <ellipse cx="61" cy="73" rx="1.2" ry="0.44" transform="rotate(36 61 73)" />
-          <ellipse cx="56" cy="76" rx="1.2" ry="0.44" transform="rotate(-24 56 76)" />
-        </g>
-
-        <g className="landing-hero-tree__nodes">
-          {BACKGROUND_FRAGMENTS.map((fragment) => {
-            const endpoint = LANDING_TREE_ENDPOINTS[fragment.word];
-            return (
-              <g key={`${fragment.word}-node`}>
-                <circle className="landing-hero-tree__node-halo" cx={endpoint.x} cy={endpoint.y} r="1.1" />
-                <circle className="landing-hero-tree__node" cx={endpoint.x} cy={endpoint.y} r="0.32" />
-              </g>
-            );
-          })}
-        </g>
-      </g>
-    </svg>
-  );
-}
 
 // Page 3 is intentionally an arborescence, not a conversation graph with
 // re-joins: one question root, two branch choices, and four terminal answers.
@@ -360,7 +191,12 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
   const [seedPlanted, setSeedPlanted] = useState(false);
   const [seedInView, setSeedInView] = useState(true);
   const [scrolled, setScrolled] = useState(false);
-  const [reducedMotion, setReducedMotion] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
   const activeChapterRef = useRef(0);
   const treeChapterRef = useRef(0);
   const treeProgressRef = useRef(0);
@@ -447,29 +283,57 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
   }, []);
 
   useEffect(() => {
-    const initialTargets = [
+    const revealSelectors = [
+      ".landing-header__brand",
+      ".landing-progress",
+      ".landing-header__cta-reveal",
+      ".landing-hero-word__reveal",
       ".landing-hero__eyebrow",
       ".landing-hero__title",
       ".landing-hero__subtitle",
       ".landing-hero__actions",
-      ".landing-hero-tree",
     ];
-    if (reducedMotion) {
-      document.querySelectorAll<HTMLElement>(initialTargets.join(",")).forEach((target) => {
-        target.style.opacity = "1";
-        target.style.transform = "none";
-      });
+    const mediaRequestsReducedMotion =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (reducedMotion || mediaRequestsReducedMotion) {
+      document
+        .querySelectorAll<HTMLElement>(revealSelectors.join(","))
+        .forEach((target) => {
+          target.style.opacity = "1";
+          target.style.transform = "none";
+        });
       return;
     }
-    const animations = initialTargets.map((selector, index) =>
-      animate(selector, {
+
+    const animations = [
+      animate(".landing-header__brand, .landing-progress, .landing-header__cta-reveal", {
         opacity: [0, 1],
-        translateY: [index === 4 ? 18 : 24, 0],
-        duration: LANDING_MOTION.hero.duration,
-        delay: 160 + index * 105,
+        translateY: [14, 0],
+        duration: 600,
+        delay: stagger(80, { start: 0 }),
         ease: LANDING_MOTION.hero.ease,
       }),
-    );
+      animate(".landing-hero-word__reveal", {
+        opacity: [0, 1],
+        translateY: [10, 0],
+        duration: 430,
+        delay: stagger(20, { start: 250 }),
+        ease: LANDING_MOTION.hero.ease,
+      }),
+      animate(
+        ".landing-hero__eyebrow, .landing-hero__title, .landing-hero__subtitle, .landing-hero__actions",
+        {
+          opacity: [0, 1],
+          translateY: [24, 0],
+          duration: LANDING_MOTION.hero.duration,
+          delay: stagger(150, { start: 650 }),
+          ease: LANDING_MOTION.hero.ease,
+        },
+      ),
+    ];
+
     return () => animations.forEach((animation) => animation.pause());
   }, [reducedMotion]);
 
@@ -669,25 +533,50 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
       <header className={`landing-header ${scrolled ? "is-scrolled" : ""}`}>
         <nav className="landing-header__nav" aria-label="产品介绍导航">
           <a href="#top" className="landing-header__brand" aria-label="回到 Tree Chat 介绍页开头">
-            <BrandLogo compact decorative markOnly tone="light" />
-            <span>Tree Chat</span>
+            <BrandLogo className="landing-header__logo" tone="light" />
           </a>
           <div className="landing-progress" role="status" aria-live="polite" aria-label={`当前章节：${CHAPTERS[activeChapter]}`}>
             <span className="landing-progress__line"><span style={{ transform: `scaleX(${(activeChapter + 1) / CHAPTERS.length})` }} /></span>
             <span className="landing-progress__label landing-progress__label--full" aria-hidden="true">{String(activeChapter + 1).padStart(2, "0")} / {CHAPTERS.length} · {CHAPTERS[activeChapter]}</span>
             <span className="landing-progress__label landing-progress__label--compact" aria-hidden="true">{String(activeChapter + 1).padStart(2, "0")}/{CHAPTERS.length}</span>
           </div>
-          <a className="landing-button landing-button--header" href="/app">
-            进入功能页 <ArrowUpRight size={16} aria-hidden="true" />
-          </a>
+          <span className="landing-header__cta-reveal">
+            <a className="landing-button landing-button--header" href="/app">
+              进入功能页 <ArrowUpRight size={16} aria-hidden="true" />
+            </a>
+          </span>
         </nav>
       </header>
 
       <section id="top" data-page="1" className="landing-section landing-hero" aria-labelledby="landing-title">
-        <LandingHeroTree />
-        <div className="landing-hero-words" aria-hidden="true">
-          {BACKGROUND_FRAGMENTS.map((fragment, index) => (
-            <span data-landing-word={fragment.word} key={fragment.word} style={{ left: fragment.left, top: fragment.top, opacity: 0.55 + (index % 4) * 0.1, animationDelay: `${index * 0.25}s` }}>{fragment.word}</span>
+        <div className="landing-hero-art" aria-hidden="true">
+          <Image
+            className="landing-hero__background"
+            src={PAGE1_BACKGROUND_SRC}
+            alt=""
+            aria-hidden="true"
+            fill
+            preload
+            sizes="100vw"
+            data-page1-background="true"
+          />
+        </div>
+        <div className="landing-hero-words">
+          {PAGE1_KEYWORDS.map((fragment) => (
+            <span
+              className="landing-hero-word"
+              data-anchor={fragment.anchor}
+              data-landing-word={fragment.word}
+              key={fragment.word}
+              style={{
+                "--x": `${fragment.x}%`,
+                "--y": `${fragment.y}%`,
+                "--dx": `${fragment.dx}px`,
+                "--dy": `${fragment.dy}px`,
+              } as CSSProperties}
+            >
+              <span className="landing-hero-word__reveal">{fragment.word}</span>
+            </span>
           ))}
         </div>
         <div className="landing-container landing-hero__content">

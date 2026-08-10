@@ -95,13 +95,39 @@ describe("1920 × 1080 landing composition contract", () => {
     expect(css).toMatch(/\.landing-title-line\s*\{[^}]*display:\s*block;/);
   });
 
-  test("uses a light-to-deep green Page 1 gradient and removes the old metal branch", () => {
+  test("uses the approved Page 1 PNG through one fixed-ratio Next Image layer", () => {
     const heroRule = css.match(/\.landing-hero\s*\{([\s\S]*?)\}/)?.[1] ?? "";
-    expect(heroRule).toMatch(/linear-gradient\([^)]*(?:var\(--landing-moss-light\)|#d9e8bc)[^)]*(?:var\(--landing-forest-950\)|#081b14)/i);
-    expect(landingPage).not.toContain("landing-hero__mountain");
-    expect(landingPage).not.toContain("hero-branch-metal");
-    expect(css).not.toContain("landing-hero__mountain");
-    expect(css).not.toContain("hero-branch-metal");
+    const artRule = css.match(/\.landing-hero-art\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+    const imageRule = css.match(/\.landing-hero__background\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+
+    expect(landingPage).toContain(
+      'const PAGE1_BACKGROUND_SRC = "/assets/landing/page1-tree-background.png";',
+    );
+    expect(landingPage).toContain('import Image from "next/image";');
+    expect(landingPage).toContain("preload");
+    expect(landingPage).not.toContain("LANDING_TREE_ENDPOINTS");
+    expect(landingPage).not.toContain("LandingHeroTree");
+    expect(heroRule).toMatch(/background:\s*var\(--landing-forest-950\);/);
+    expect(artRule).toMatch(/aspect-ratio:\s*1672\s*\/\s*941;/);
+    expect(artRule).toMatch(/pointer-events:\s*none;/);
+    expect(artRule).toMatch(/z-index:\s*0;/);
+    expect(imageRule).toMatch(/object-fit:\s*cover;/);
+    expect(imageRule).toMatch(/opacity:\s*1;/);
+    expect(imageRule).toMatch(/pointer-events:\s*none;/);
+    expect(imageRule).toMatch(/z-index:\s*0;/);
+    expect(css).not.toContain("landing-hero-tree");
+  });
+
+  test("raises the Page 1 content and dims the artwork behind it", () => {
+    expect(css).toMatch(/\.landing-hero__content\s*\{[\s\S]*?padding-bottom:\s*86px;/);
+    expect(css).toMatch(/\.landing-hero__content\s*\{[\s\S]*?transform:\s*translateY\(-86px\);/);
+    expect(css).toMatch(/\.landing-hero__content\s*\{[\s\S]*?z-index:\s*4;/);
+    expect(css).toContain("linear-gradient(\n    180deg,\n    rgba(7, 29, 20, .52)");
+    expect(css).toContain("radial-gradient(\n    ellipse at 50% 40%,\n    rgba(4, 18, 12, .52)");
+    expect(css).toMatch(/\.landing-hero-word\s*\{[\s\S]*?opacity:\s*\.48;/);
+    expect(css).toMatch(/\.landing-header__brand \.brand-logo__mark\s*\{[^}]*width:\s*48px;/);
+    expect(css).toMatch(/\.landing-header__brand \.brand-logo__wordmark strong\s*\{[^}]*font-size:\s*15px;/);
+    expect(css).toMatch(/\.landing-header__brand \.brand-logo__wordmark small\s*\{[^}]*font-size:\s*9px;/);
   });
 
   test("updates continuous camera progress without scroll-frame React state", () => {
