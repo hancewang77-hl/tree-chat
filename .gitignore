@@ -50,13 +50,14 @@ next-env.d.ts
 .claude/settings.local.json
 .claude/
 
-# Local research and diagnostic outputs are not part of the product repository.
+# Local research, internal instructions, and diagnostic outputs are not part of
+# the product repository.
 /experiments/
-/docs/phase2/
-/docs/runtime/
-/docs/technical_sampling/
+/docs/
 /runtime/experiments/
 /runtime/phase2/
 /runtime/network/
 /japanese-garden-visual-references/
 /*.local.*.log
+/AGENTS.md
+/CLAUDE.md
