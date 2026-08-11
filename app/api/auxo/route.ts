@@ -16,6 +16,7 @@ import { TASK_PRIORITY } from "@/src/runtime/task";
 const RATE_LIMIT = 6;
 const RATE_WINDOW = 60_000;
 const REQUEST_TIMEOUT = 45_000;
+const MAX_PLAN_ATTEMPTS = 2;
 const auxoRateLimiter = createRateLimiter({
   limit: RATE_LIMIT,
   windowMs: RATE_WINDOW,
@@ -106,26 +107,46 @@ export async function POST(req: Request) {
     controller.abort();
   }, REQUEST_TIMEOUT);
 
-  let content = "";
   const model = process.env.TREECHAT_DEEPSEEK_MODEL?.trim() || "deepseek-chat";
   try {
-    const auxoNodeId = `auxo-${crypto.randomUUID()}`;
-    const task = await runRuntimeTask({
-      session_id: sessionId,
-      node_id: auxoNodeId,
-      task_type: "chat_generation",
-      priority: TASK_PRIORITY.Background,
-      root_node_id: rootNodeId,
-      ancestor_node_ids: [rootNodeId, auxoNodeId],
-      messages: [
-        { role: "system", content: AUXO_SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: JSON.stringify(requestBody),
-        },
-      ],
-    }, controller.signal);
-    content = task.result ?? "";
+    for (let attempt = 1; attempt <= MAX_PLAN_ATTEMPTS; attempt += 1) {
+      const auxoNodeId = `auxo-${crypto.randomUUID()}`;
+      const task = await runRuntimeTask({
+        session_id: sessionId,
+        node_id: auxoNodeId,
+        task_type: "chat_generation",
+        priority: TASK_PRIORITY.Background,
+        generation_profile: "auxo_plan",
+        root_node_id: rootNodeId,
+        ancestor_node_ids: [rootNodeId, auxoNodeId],
+        messages: [
+          {
+            role: "system",
+            content: `${AUXO_SYSTEM_PROMPT}\n\n${auxoBudgetInstruction(requestBody, attempt)}`,
+          },
+          {
+            role: "user",
+            content: JSON.stringify(requestBody),
+          },
+        ],
+      }, controller.signal);
+
+      try {
+        const plan = parseAuxoPlan(task.result ?? "", requestBody, {
+          generatedAt: Date.now(),
+          model,
+        });
+        return json({ plan }, 200);
+      } catch (error) {
+        const canRetry =
+          error instanceof AuxoValidationError &&
+          error.code === "PLAN_TOO_LARGE" &&
+          attempt < MAX_PLAN_ATTEMPTS;
+        if (canRetry) continue;
+        return invalidPlanResponse(error);
+      }
+    }
+    return json({ error: "Auxo 规划未产生可用结果" }, 502);
   } catch (error) {
     if (didTimeout) {
       return json({ error: "Auxo 规划超时，请缩小资料范围后重试" }, 504);
@@ -144,23 +165,31 @@ export async function POST(req: Request) {
     req.signal.removeEventListener("abort", handleClientAbort);
   }
 
-  try {
-    const plan = parseAuxoPlan(content, requestBody, {
-      generatedAt: Date.now(),
-      model,
-    });
-    return json({ plan }, 200);
-  } catch (error) {
-    console.error("Auxo plan validation error:", error);
-    const code = error instanceof AuxoValidationError ? error.code : "INVALID_PLAN";
-    return json(
-      {
-        error: `Auxo 返回的任务计划未通过完整性校验（${code}），本次没有创建任何节点`,
-        code,
-      },
-      502,
-    );
-  }
+}
+
+function auxoBudgetInstruction(
+  requestBody: ReturnType<typeof validateAuxoRequest>,
+  attempt: number,
+): string {
+  const requiredTaskCount = requestBody.sourceUnits.length;
+  const optionalNodeBudget = Math.max(0, AUXO_MAX_NODES - requiredTaskCount);
+  const retryPrefix = attempt > 1
+    ? "这是一次因上次节点超限触发的修正重试。"
+    : "";
+  return `${retryPrefix}本次有 ${requiredTaskCount} 个 sourceUnits，因此至少需要 ${requiredTaskCount} 个引用 sourceUnitId 的 task。整棵计划仍最多 ${AUXO_MAX_NODES} 个节点；全部 task-group 与 sourceUnitId 为 null 的额外 task 合计最多 ${optionalNodeBudget} 个。若分组会超出额度，必须删除分组并把必需 task 直接挂到 root。输出前先自行计数，nodes.length 绝不能超过 ${AUXO_MAX_NODES}。`;
+}
+
+function invalidPlanResponse(error: unknown): Response {
+  console.error("Auxo plan validation error:", error);
+  const code = error instanceof AuxoValidationError ? error.code : "INVALID_PLAN";
+  const detail = error instanceof Error ? error.message : "任务计划无效";
+  return json(
+    {
+      error: `Auxo 返回的任务计划未通过完整性校验（${code}）：${detail} 本次没有创建任何节点`,
+      code,
+    },
+    502,
+  );
 }
 
 function validateAuxoEnvelope(value: unknown): {

@@ -164,6 +164,36 @@ def test_real_worker_streams_identity_and_records_real_timing() -> None:
     asyncio.run(scenario())
 
 
+def test_real_worker_applies_auxo_profile_without_client_generation_knobs() -> None:
+    async def scenario() -> None:
+        received: list[dict[str, object]] = []
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=fake_vllm(received)),
+            base_url="http://vllm",
+        ) as upstream:
+            gateway = create_real_worker_app(config(), client=upstream)
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=gateway),
+                base_url="http://gateway",
+            ) as client:
+                response = await client.post(
+                    "/v1/chat",
+                    json={
+                        "task_id": "task-auxo",
+                        "messages": [{"role": "user", "content": "return JSON"}],
+                        "generation_profile": "auxo_plan",
+                    },
+                )
+
+        assert response.status_code == 200
+        assert received[0]["max_tokens"] == 8_000
+        assert received[0]["temperature"] == 0.1
+        assert received[0]["response_format"] == {"type": "json_object"}
+        assert received[0]["stream"] is True
+
+    asyncio.run(scenario())
+
+
 def test_real_worker_structure_metrics_identity_and_resets() -> None:
     async def scenario() -> None:
         received: list[dict[str, object]] = []

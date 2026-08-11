@@ -10,12 +10,14 @@ from typing import Protocol
 
 import httpx
 
-from .models import ChatMessage, ProviderTelemetry, SemanticCard
+from .models import ChatMessage, GenerationProfile, ProviderTelemetry, SemanticCard
 from .task_registry import epoch_ms
 
 
 CHAT_MODEL = "deepseek-chat"
 CHAT_MAX_TOKENS = 2_048
+AUXO_MAX_TOKENS = 8_000
+AUXO_TEMPERATURE = 0.1
 VLLM_BASE_URL = "http://127.0.0.1:8001/v1"
 VLLM_MODEL = "treechat-qwen2.5-0.5b"
 VLLM_CHAT_MAX_TOKENS = 384
@@ -64,7 +66,9 @@ class ProviderMode(str, Enum):
 
 class TaskProvider(Protocol):
     async def stream_chat(
-        self, messages: list[ChatMessage]
+        self,
+        messages: list[ChatMessage],
+        generation_profile: GenerationProfile = GenerationProfile.INTERACTIVE_CHAT,
     ) -> AsyncIterator[str | ProviderTelemetry]: ...
 
     async def structure(self, prompt: str, response: str) -> SemanticCard: ...
@@ -78,6 +82,7 @@ class DeepSeekProvider:
         api_key: str | None = None,
         model: str | None = None,
         chat_max_tokens: int | None = None,
+        auxo_max_tokens: int | None = None,
         provider_name: str = "DeepSeek",
         api_key_environment: str = "DEEPSEEK_API_KEY",
         api_key_required: bool = True,
@@ -94,6 +99,9 @@ class DeepSeekProvider:
         self._chat_max_tokens = chat_max_tokens or _positive_int_environment(
             "TREECHAT_DEEPSEEK_MAX_TOKENS", CHAT_MAX_TOKENS
         )
+        self._auxo_max_tokens = auxo_max_tokens or _positive_int_environment(
+            "TREECHAT_AUXO_MAX_TOKENS", AUXO_MAX_TOKENS
+        )
         self._provider_name = provider_name
         self._api_key_environment = api_key_environment
         self._api_key_required = api_key_required
@@ -109,7 +117,9 @@ class DeepSeekProvider:
         return self._model
 
     async def stream_chat(
-        self, messages: list[ChatMessage]
+        self,
+        messages: list[ChatMessage],
+        generation_profile: GenerationProfile = GenerationProfile.INTERACTIVE_CHAT,
     ) -> AsyncIterator[str | ProviderTelemetry]:
         payload = {
             "model": self._model,
@@ -118,6 +128,14 @@ class DeepSeekProvider:
             "stream_options": {"include_usage": True},
             "max_tokens": self._chat_max_tokens,
         }
+        if generation_profile is GenerationProfile.AUXO_PLAN:
+            payload.update(
+                {
+                    "response_format": {"type": "json_object"},
+                    "temperature": AUXO_TEMPERATURE,
+                    "max_tokens": self._auxo_max_tokens,
+                }
+            )
         if self._thinking_mode is not None:
             payload["thinking"] = {"type": self._thinking_mode}
         provider_request_id: str | None = None
@@ -126,6 +144,7 @@ class DeepSeekProvider:
         prompt_cache_hit_tokens: int | None = None
         prompt_cache_miss_tokens: int | None = None
         provider_ttft_ms: int | None = None
+        finish_reason: str | None = None
         request_started = time.perf_counter()
         async with self._client_context() as client:
             async with client.stream(
@@ -175,6 +194,9 @@ class DeepSeekProvider:
                     choice = choices[0]
                     if not isinstance(choice, dict):
                         continue
+                    chunk_finish_reason = choice.get("finish_reason")
+                    if isinstance(chunk_finish_reason, str) and chunk_finish_reason:
+                        finish_reason = chunk_finish_reason
                     delta = choice.get("delta")
                     if not isinstance(delta, dict):
                         continue
@@ -192,6 +214,7 @@ class DeepSeekProvider:
             or prompt_cache_hit_tokens is not None
             or prompt_cache_miss_tokens is not None
             or provider_ttft_ms is not None
+            or finish_reason is not None
         ):
             yield ProviderTelemetry(
                 provider_request_id=provider_request_id,
@@ -200,6 +223,7 @@ class DeepSeekProvider:
                 prompt_cache_hit_tokens=prompt_cache_hit_tokens,
                 prompt_cache_miss_tokens=prompt_cache_miss_tokens,
                 provider_ttft_ms=provider_ttft_ms,
+                finish_reason=finish_reason,
             )
 
     async def structure(self, prompt: str, response: str) -> SemanticCard:

@@ -15,6 +15,7 @@ from .execution_registry import ExecutionHandleRegistry
 from .models import (
     CreateTaskRequest,
     CreateTaskResponse,
+    GenerationProfile,
     ProviderTelemetry,
     RouterMode,
     SemanticCard,
@@ -25,6 +26,7 @@ from .models import (
 )
 from .provider import (
     DeepSeekProvider,
+    ProviderError,
     ProviderMode,
     TaskProvider,
     VLLMProvider,
@@ -518,9 +520,15 @@ async def execute_chat_router(
     event_bus: SessionEventBus,
 ) -> str:
     result_chunks: list[str] = []
+    finish_reason: str | None = None
     assert payload.messages is not None
-    async for item in router.stream_chat(decision, payload.messages):
+    generation_profile = payload.effective_generation_profile()
+    async for item in router.stream_chat(
+        decision, payload.messages, generation_profile
+    ):
         if isinstance(item, ProviderTelemetry):
+            if item.finish_reason is not None:
+                finish_reason = item.finish_reason
             registry.record_provider_telemetry(
                 task.task_id,
                 provider_request_id=item.provider_request_id,
@@ -544,6 +552,14 @@ async def execute_chat_router(
             node_id=task.node_id,
             event_type=EventType.TOKEN_DELTA,
             data={"delta": content},
+        )
+    if (
+        generation_profile is GenerationProfile.AUXO_PLAN
+        and finish_reason not in {None, "stop"}
+    ):
+        raise ProviderError(
+            "Auxo structured output ended before completion "
+            f"(finish_reason={finish_reason})"
         )
     return "".join(result_chunks)
 

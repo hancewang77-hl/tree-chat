@@ -13,6 +13,7 @@ from runtime.app.main import create_app
 from runtime.app.models import (
     ChatMessage,
     CreateTaskRequest,
+    GenerationProfile,
     ProviderTelemetry,
     RouterMode,
     SemanticCard,
@@ -44,7 +45,12 @@ class MockProvider:
         self.structure_error = structure_error
         self.received_messages: list[ChatMessage] | None = None
 
-    async def stream_chat(self, messages: list[ChatMessage]) -> AsyncIterator[str]:
+    async def stream_chat(
+        self,
+        messages: list[ChatMessage],
+        generation_profile: GenerationProfile = GenerationProfile.INTERACTIVE_CHAT,
+    ) -> AsyncIterator[str]:
+        del generation_profile
         self.received_messages = messages
         if self.chat_error:
             raise self.chat_error
@@ -72,7 +78,12 @@ class BlockingProvider(MockProvider):
         self.entered = threading.Event()
         self.release = threading.Event()
 
-    async def stream_chat(self, messages: list[ChatMessage]) -> AsyncIterator[str]:
+    async def stream_chat(
+        self,
+        messages: list[ChatMessage],
+        generation_profile: GenerationProfile = GenerationProfile.INTERACTIVE_CHAT,
+    ) -> AsyncIterator[str]:
+        del generation_profile
         self.received_messages = messages
         self.entered.set()
         released = await asyncio.to_thread(self.release.wait, 5)
@@ -83,8 +94,11 @@ class BlockingProvider(MockProvider):
 
 class TelemetryProvider(MockProvider):
     async def stream_chat(
-        self, messages: list[ChatMessage]
+        self,
+        messages: list[ChatMessage],
+        generation_profile: GenerationProfile = GenerationProfile.INTERACTIVE_CHAT,
     ) -> AsyncIterator[str | ProviderTelemetry]:
+        del generation_profile
         self.received_messages = messages
         yield "measured"
         yield ProviderTelemetry(
@@ -95,6 +109,18 @@ class TelemetryProvider(MockProvider):
             prompt_cache_miss_tokens=4,
             provider_ttft_ms=7,
         )
+
+
+class TruncatedAuxoProvider(MockProvider):
+    async def stream_chat(
+        self,
+        messages: list[ChatMessage],
+        generation_profile: GenerationProfile = GenerationProfile.INTERACTIVE_CHAT,
+    ) -> AsyncIterator[str | ProviderTelemetry]:
+        assert generation_profile is GenerationProfile.AUXO_PLAN
+        self.received_messages = messages
+        yield '{"version":1,"nodes":['
+        yield ProviderTelemetry(finish_reason="length")
 
 
 def chat_payload(**overrides: object) -> dict[str, object]:
@@ -151,6 +177,27 @@ def test_provider_telemetry_is_persisted_on_completed_task() -> None:
     assert task["prompt_cache_hit_tokens"] == 8
     assert task["prompt_cache_miss_tokens"] == 4
     assert task["provider_ttft_ms"] == 7
+
+
+def test_truncated_auxo_output_is_authoritatively_failed() -> None:
+    client = TestClient(create_app(provider=TruncatedAuxoProvider()))
+
+    response = client.post(
+        "/v1/tasks",
+        json=chat_payload(generation_profile="auxo_plan", priority=2),
+    )
+    task = client.get(f"/v1/tasks/{response.headers['X-Task-Id']}").json()
+
+    assert task["state"] == "failed"
+    assert task["error_type"] == "provider"
+    assert "finish_reason=length" in task["error"]
+
+
+def test_generation_profile_is_restricted_to_chat_tasks() -> None:
+    with pytest.raises(ValueError, match="does not accept generation_profile"):
+        CreateTaskRequest.model_validate(
+            structure_payload(generation_profile="auxo_plan")
+        )
 
 
 def test_server_task_survives_discarded_client_object() -> None:

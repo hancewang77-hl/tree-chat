@@ -18,8 +18,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from runtime.app.models import ChatMessage
+from runtime.app.models import ChatMessage, GenerationProfile
 from runtime.app.provider import (
+    AUXO_MAX_TOKENS,
+    AUXO_TEMPERATURE,
     STRUCTURE_SYSTEM_PROMPT,
     STRUCTURE_TEMPERATURE,
     parse_semantic_card,
@@ -33,7 +35,9 @@ class RealWorkerConfig:
     model: str = "treechat-qwen2.5-0.5b"
     max_concurrency: int = 4
     max_tokens: int = 32
+    auxo_max_tokens: int = AUXO_MAX_TOKENS
     temperature: float = 0.0
+    auxo_temperature: float = AUXO_TEMPERATURE
     top_p: float = 1.0
     seed: int = 20_260_809
     structure_max_tokens: int = 384
@@ -50,9 +54,18 @@ class RealWorkerConfig:
             raise ValueError("model must be non-empty")
         if self.max_concurrency < 1:
             raise ValueError("max_concurrency must be at least 1")
-        if self.max_tokens < 1 or self.structure_max_tokens < 1:
+        if (
+            self.max_tokens < 1
+            or self.auxo_max_tokens < 1
+            or self.structure_max_tokens < 1
+        ):
             raise ValueError("token limits must be positive")
-        if not math.isfinite(self.temperature) or self.temperature < 0:
+        if (
+            not math.isfinite(self.temperature)
+            or self.temperature < 0
+            or not math.isfinite(self.auxo_temperature)
+            or self.auxo_temperature < 0
+        ):
             raise ValueError("temperature must be finite and non-negative")
         if not math.isfinite(self.top_p) or not 0 < self.top_p <= 1:
             raise ValueError("top_p must be finite and in (0, 1]")
@@ -84,8 +97,20 @@ class RealWorkerConfig:
                 os.getenv("TREECHAT_REAL_WORKER_MAX_CONCURRENCY", "4")
             ),
             max_tokens=int(os.getenv("TREECHAT_REAL_WORKER_MAX_TOKENS", "32")),
+            auxo_max_tokens=int(
+                os.getenv(
+                    "TREECHAT_REAL_WORKER_AUXO_MAX_TOKENS",
+                    str(AUXO_MAX_TOKENS),
+                )
+            ),
             temperature=float(
                 os.getenv("TREECHAT_REAL_WORKER_TEMPERATURE", "0")
+            ),
+            auxo_temperature=float(
+                os.getenv(
+                    "TREECHAT_REAL_WORKER_AUXO_TEMPERATURE",
+                    str(AUXO_TEMPERATURE),
+                )
             ),
             top_p=float(os.getenv("TREECHAT_REAL_WORKER_TOP_P", "1")),
             seed=int(os.getenv("TREECHAT_REAL_WORKER_SEED", "20260809")),
@@ -103,6 +128,7 @@ class WorkerChatRequest(BaseModel):
 
     task_id: str = Field(min_length=1)
     messages: list[ChatMessage] = Field(min_length=1)
+    generation_profile: GenerationProfile = GenerationProfile.INTERACTIVE_CHAT
 
 
 class WorkerStructureRequest(BaseModel):
@@ -126,6 +152,7 @@ class RequestTrace:
     upstream_request_id: str | None = None
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
+    finish_reason: str | None = None
     error: str | None = None
 
 
@@ -212,6 +239,11 @@ class RealWorkerState:
                     trace.prompt_tokens = prompt_tokens
                 if isinstance(completion_tokens, int):
                     trace.completion_tokens = completion_tokens
+            choices = chunk.get("choices")
+            if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+                finish_reason = choices[0].get("finish_reason")
+                if isinstance(finish_reason, str) and finish_reason:
+                    trace.finish_reason = finish_reason
 
     async def finish(
         self,
@@ -305,8 +337,11 @@ class RealWorkerState:
                 )
 
 
-def generation_config(config: RealWorkerConfig) -> dict[str, object]:
-    return {
+def generation_config(
+    config: RealWorkerConfig,
+    generation_profile: GenerationProfile = GenerationProfile.INTERACTIVE_CHAT,
+) -> dict[str, object]:
+    result: dict[str, object] = {
         "model": config.model,
         "max_tokens": config.max_tokens,
         "temperature": config.temperature,
@@ -314,6 +349,15 @@ def generation_config(config: RealWorkerConfig) -> dict[str, object]:
         "seed": config.seed,
         "stream_options": {"include_usage": True},
     }
+    if generation_profile is GenerationProfile.AUXO_PLAN:
+        result.update(
+            {
+                "max_tokens": config.auxo_max_tokens,
+                "temperature": config.auxo_temperature,
+                "response_format": {"type": "json_object"},
+            }
+        )
+    return result
 
 
 def messages_sha256(messages: list[ChatMessage]) -> str:
@@ -430,7 +474,7 @@ def create_real_worker_app(
             messages_sha256=messages_sha256(payload.messages),
         )
         upstream_payload = {
-            **generation_config(config),
+            **generation_config(config, payload.generation_profile),
             "messages": [
                 message.model_dump(mode="json") for message in payload.messages
             ],
@@ -506,23 +550,26 @@ def create_real_worker_app(
                     final_status = "completed"
                     final_error = None
                 if final_status == "completed":
+                    telemetry: dict[str, object] = {
+                        "provider_request_id": trace.upstream_request_id,
+                        "input_tokens": trace.prompt_tokens,
+                        "output_tokens": trace.completion_tokens,
+                        "provider_ttft_ms": (
+                            round(
+                                (trace.first_token_at_ns - trace.started_at_ns)
+                                / 1_000_000
+                            )
+                            if trace.first_token_at_ns is not None
+                            and trace.started_at_ns is not None
+                            else None
+                        ),
+                    }
+                    if trace.finish_reason is not None:
+                        telemetry["finish_reason"] = trace.finish_reason
                     yield json.dumps(
                         {
                             "worker_id": config.worker_id,
-                            "telemetry": {
-                                "provider_request_id": trace.upstream_request_id,
-                                "input_tokens": trace.prompt_tokens,
-                                "output_tokens": trace.completion_tokens,
-                                "provider_ttft_ms": (
-                                    round(
-                                        (trace.first_token_at_ns - trace.started_at_ns)
-                                        / 1_000_000
-                                    )
-                                    if trace.first_token_at_ns is not None
-                                    and trace.started_at_ns is not None
-                                    else None
-                                ),
-                            },
+                            "telemetry": telemetry,
                         },
                         ensure_ascii=False,
                     ) + "\n"

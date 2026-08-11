@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .models import (
     ChatMessage,
+    GenerationProfile,
     ProviderTelemetry,
     RerouteReason,
     RouterMode,
@@ -137,6 +138,7 @@ class TaskRouter(Protocol):
         self,
         decision: RoutingDecision,
         messages: list[ChatMessage],
+        generation_profile: GenerationProfile = GenerationProfile.INTERACTIVE_CHAT,
     ) -> AsyncIterator[str | ProviderTelemetry]: ...
 
     async def structure(
@@ -359,6 +361,7 @@ class HttpTaskRouter:
         self,
         decision: RoutingDecision,
         messages: list[ChatMessage],
+        generation_profile: GenerationProfile = GenerationProfile.INTERACTIVE_CHAT,
     ) -> AsyncIterator[str | ProviderTelemetry]:
         endpoint = self._endpoint_for(decision)
         client = self._client_or_create()
@@ -369,6 +372,7 @@ class HttpTaskRouter:
                 json={
                     "task_id": decision.task_id,
                     "messages": [message.model_dump(mode="json") for message in messages],
+                    "generation_profile": generation_profile.value,
                 },
             ) as response:
                 await self._raise_for_worker_error(response, endpoint)
@@ -867,8 +871,9 @@ class InProcessTaskRouter:
         self,
         decision: RoutingDecision,
         messages: list[ChatMessage],
+        generation_profile: GenerationProfile = GenerationProfile.INTERACTIVE_CHAT,
     ) -> AsyncIterator[str | ProviderTelemetry]:
-        async for item in self._provider.stream_chat(messages):
+        async for item in self._provider.stream_chat(messages, generation_profile):
             yield item
 
     async def structure(

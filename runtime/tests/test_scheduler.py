@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from runtime.app.event_bus import EventType, SessionEventBus
 from runtime.app.main import create_app
-from runtime.app.models import ChatMessage, SemanticCard, TaskState
+from runtime.app.models import ChatMessage, GenerationProfile, SemanticCard, TaskState
 from runtime.app.task_registry import TaskRegistry
 
 
@@ -26,8 +26,11 @@ class GateProvider:
         self.max_active = 0
 
     async def stream_chat(
-        self, messages: list[ChatMessage]
+        self,
+        messages: list[ChatMessage],
+        generation_profile: GenerationProfile = GenerationProfile.INTERACTIVE_CHAT,
     ) -> AsyncIterator[str]:
+        del generation_profile
         key = messages[-1].content
         self.active += 1
         self.max_active = max(self.max_active, self.active)
@@ -50,8 +53,11 @@ class RetryProvider:
         self.release_block = asyncio.Event()
 
     async def stream_chat(
-        self, messages: list[ChatMessage]
+        self,
+        messages: list[ChatMessage],
+        generation_profile: GenerationProfile = GenerationProfile.INTERACTIVE_CHAT,
     ) -> AsyncIterator[str]:
+        del generation_profile
         key = messages[-1].content
         self.calls[key] = self.calls.get(key, 0) + 1
         if key == "RETRY" and self.calls[key] == 1:
@@ -67,8 +73,11 @@ class RetryProvider:
 
 class TimeoutProvider:
     async def stream_chat(
-        self, messages: list[ChatMessage]
+        self,
+        messages: list[ChatMessage],
+        generation_profile: GenerationProfile = GenerationProfile.INTERACTIVE_CHAT,
     ) -> AsyncIterator[str]:
+        del generation_profile
         key = messages[-1].content
         if key == "TIMEOUT-BLOCK":
             await asyncio.sleep(1)
@@ -85,8 +94,11 @@ class ShutdownProvider:
         self.started = threading.Event()
 
     async def stream_chat(
-        self, messages: list[ChatMessage]
+        self,
+        messages: list[ChatMessage],
+        generation_profile: GenerationProfile = GenerationProfile.INTERACTIVE_CHAT,
     ) -> AsyncIterator[str]:
+        del generation_profile
         self.started.set()
         await asyncio.Event().wait()
         yield "unreachable"

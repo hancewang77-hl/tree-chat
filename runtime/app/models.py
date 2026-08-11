@@ -31,6 +31,11 @@ class TaskPriority(IntEnum):
     BACKGROUND = 2
 
 
+class GenerationProfile(str, Enum):
+    INTERACTIVE_CHAT = "interactive_chat"
+    AUXO_PLAN = "auxo_plan"
+
+
 class RouterMode(str, Enum):
     ROUND_ROBIN = "round_robin"
     LEAST_LOAD = "least_load"
@@ -61,6 +66,7 @@ class ProviderTelemetry(BaseModel):
     prompt_cache_hit_tokens: int | None = Field(default=None, ge=0)
     prompt_cache_miss_tokens: int | None = Field(default=None, ge=0)
     provider_ttft_ms: int | None = Field(default=None, ge=0)
+    finish_reason: str | None = Field(default=None, min_length=1, max_length=80)
 
 
 class CreateTaskRequest(BaseModel):
@@ -73,6 +79,7 @@ class CreateTaskRequest(BaseModel):
     root_node_id: str | None = Field(default=None, min_length=1)
     ancestor_node_ids: list[str] | None = None
     messages: list[ChatMessage] | None = None
+    generation_profile: GenerationProfile | None = None
     prompt: str | None = None
     response: str | None = None
 
@@ -105,6 +112,9 @@ class CreateTaskRequest(BaseModel):
                 raise ValueError("chat_generation does not accept prompt/response")
             return self
 
+        if self.generation_profile is not None:
+            raise ValueError("semantic_structure does not accept generation_profile")
+
         if not self.prompt or not self.prompt.strip():
             raise ValueError("semantic_structure requires a non-empty prompt")
         if not self.response or not self.response.strip():
@@ -119,6 +129,9 @@ class CreateTaskRequest(BaseModel):
         if self.ancestor_node_ids is None:
             return None
         return self.ancestor_node_ids[1]
+
+    def effective_generation_profile(self) -> GenerationProfile:
+        return self.generation_profile or GenerationProfile.INTERACTIVE_CHAT
 
 
 class TaskRecord(BaseModel):

@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from runtime.app.models import ChatMessage, SemanticCard
+from runtime.app.models import ChatMessage, GenerationProfile, SemanticCard
 from runtime.app.task_registry import epoch_ms
 
 
@@ -56,6 +56,7 @@ class WorkerChatRequest(BaseModel):
 
     task_id: str = Field(min_length=1)
     messages: list[ChatMessage] = Field(min_length=1)
+    generation_profile: GenerationProfile = GenerationProfile.INTERACTIVE_CHAT
 
 
 class WorkerStructureRequest(BaseModel):

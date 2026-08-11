@@ -143,6 +143,7 @@ describe("POST /api/auxo", () => {
       session_id: "project-1",
       task_type: "chat_generation",
       priority: 2,
+      generation_profile: "auxo_plan",
       root_node_id: "root-1",
     });
     expect(taskBody.node_id).toMatch(/^auxo-/);
@@ -154,9 +155,10 @@ describe("POST /api/auxo", () => {
   });
 
   test("maps invalid Runtime output to 502 without returning partial nodes", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+    const fetchMock = vi.fn(async () => Response.json({
       task: runtimeTask("completed", '{"version":1,"nodes":[]}'),
-    }, { status: 202 })));
+    }, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
 
     const response = await POST(request(validEnvelope()));
     const body = await response.json();
@@ -164,6 +166,72 @@ describe("POST /api/auxo", () => {
     expect(response.status).toBe(502);
     expect(body.plan).toBeUndefined();
     expect(body.error).toContain("没有创建任何节点");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  test("retries one oversized plan with the exact remaining node budget", async () => {
+    const rootTask = "1. 发布正式版本。";
+    const requestBody = {
+      rootTask,
+      nutrientChunks: [],
+      sourceUnits: [{
+        unitId: "source-001",
+        kind: "root",
+        text: rootTask,
+        offset: 0,
+        order: 1,
+      }],
+    };
+    const oversizedPlan = JSON.stringify({
+      version: 1,
+      nodes: Array.from({ length: 41 }, (_, index) => ({
+        planId: `task-${index + 1}`,
+        parentPlanId: "root",
+        nodeRole: "task",
+        title: `任务 ${index + 1}`,
+        order: index + 1,
+        sourceUnitId: null,
+      })),
+    });
+    const correctedPlan = JSON.stringify({
+      version: 1,
+      nodes: [{
+        planId: "task-1",
+        parentPlanId: "root",
+        nodeRole: "task",
+        title: "发布正式版本",
+        order: 1,
+        sourceUnitId: "source-001",
+      }],
+    });
+    let attempt = 0;
+    const fetchMock = vi.fn(async (
+      _input: string | URL | Request,
+      _init?: RequestInit,
+    ) => {
+      void _input;
+      void _init;
+      attempt += 1;
+      return Response.json({
+        task: runtimeTask(
+          "completed",
+          attempt === 1 ? oversizedPlan : correctedPlan,
+        ),
+      }, { status: 202 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await POST(request(validEnvelope(requestBody)));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.plan.nodes).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const firstTask = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    const secondTask = JSON.parse(String(fetchMock.mock.calls[1][1]?.body));
+    expect(firstTask.messages[0].content).toContain("本次有 1 个 sourceUnits");
+    expect(firstTask.messages[0].content).toContain("合计最多 39 个");
+    expect(secondTask.messages[0].content).toContain("节点超限触发的修正重试");
   });
 
   test("rejects a Runtime plan that omits a deterministic source unit", async () => {

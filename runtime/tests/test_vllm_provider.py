@@ -11,7 +11,12 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.testclient import TestClient
 
 from runtime.app.main import create_app, create_configured_app
-from runtime.app.models import ChatMessage, ProviderTelemetry, RouterMode
+from runtime.app.models import (
+    ChatMessage,
+    GenerationProfile,
+    ProviderTelemetry,
+    RouterMode,
+)
 from runtime.app.provider import (
     DeepSeekProvider,
     ProviderMode,
@@ -148,9 +153,47 @@ def test_deepseek_provider_applies_model_limit_and_non_thinking_overrides(
     asyncio.run(scenario())
 
 
+def test_deepseek_provider_uses_server_approved_auxo_json_profile() -> None:
+    async def scenario() -> None:
+        received: list[dict[str, object]] = []
+        transport = httpx.ASGITransport(app=make_openai_compatible_app(received))
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://deepseek"
+        ) as client:
+            provider = DeepSeekProvider(
+                base_url="http://deepseek/v1",
+                api_key="local-test-key",
+                model="deepseek-chat",
+                chat_max_tokens=64,
+                auxo_max_tokens=8_000,
+                client=client,
+            )
+            _ = [
+                item
+                async for item in provider.stream_chat(
+                    [ChatMessage(role="user", content="return JSON")],
+                    GenerationProfile.AUXO_PLAN,
+                )
+            ]
+
+        assert received[0]["payload"] == {
+            "model": "deepseek-chat",
+            "messages": [{"role": "user", "content": "return JSON"}],
+            "stream": True,
+            "stream_options": {"include_usage": True},
+            "max_tokens": 8_000,
+            "response_format": {"type": "json_object"},
+            "temperature": 0.1,
+            "thinking": {"type": "disabled"},
+        }
+
+    asyncio.run(scenario())
+
+
 def test_http_router_forwards_worker_telemetry() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/v1/chat"
+        assert json.loads(request.content)["generation_profile"] == "interactive_chat"
         return httpx.Response(
             200,
             headers={"X-Worker-Id": "worker-1"},
