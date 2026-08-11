@@ -177,7 +177,10 @@ describe("nutrients", () => {
       model: "deepseek-chat",
       compiledAt: 2,
     });
-    const userMessage = compiled.messages.find((message) => message.role === "user")?.content ?? "";
+    const userMessage = compiled.messages
+      .filter((message) => message.role === "user")
+      .map((message) => message.content)
+      .join("\n");
 
     expect(userMessage).toContain("## 第 1 页");
     expect(userMessage).toContain("Sprout source material");

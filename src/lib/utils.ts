@@ -66,5 +66,3 @@ export function drawWrappedText(
     ctx.fillText(line, x, y + lineCount * lineHeight);
   }
 }
-
-export const noRaycast = () => null;

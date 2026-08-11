@@ -1,172 +1,73 @@
-<h1 align="center">🌳 智构树语 · Tree Chat</h1>
-<p align="center"><em>Think in trees, not threads.</em></p>
-<p align="center">
-  <a href="README_CN.md">中文文档</a> ·
-  <a href="#innovation">Innovation</a> ·
-  <a href="#getting-started">Getting Started</a>
-</p>
+# TreeChat
 
----
+TreeChat is a non-linear AI workspace. Each user question and model answer is a node in a 2D conversation tree, so you can branch from any history point, keep multiple directions, return to an earlier branch, and continue working without losing the surrounding structure.
 
-## Why Tree Chat
+## Product capabilities
 
-Every AI conversation tool forces you into a single, linear thread. You branch once, fork the context, and lose the thread you came from. Real thinking doesn't work that way — it fans out, backtracks, explores dead ends, and sprouts in unexpected directions.
+- Branch-local context: a request is compiled from the system prompt, project context, the selected node's root-to-ancestor path, explicitly pinned/quoted material, and the current question. Sibling branches are excluded by default.
+- Task Runtime: every model request is a server-side task with a queued/running/terminal lifecycle, priority scheduling, streaming events, cancellation, retry, timeout, and task telemetry.
+- Worker routing: the Runtime can use a local provider or HTTP workers, with health-aware routing policies and branch topology metadata preserved end to end.
+- Product tools: named leaf notes, graft/prune operations, semantic cards, nutrient files, Auxo task-tree planning, search, minimap, and history rings.
 
-**Tree Chat replaces the chat thread with a mind-map.** Every prompt/response pair becomes a node in a tree. You can branch off any node to explore alternatives, attach leaf notes for manual annotations, graft subtrees to reorganize ideas, and prune dead branches to keep your thinking clean. The entire conversation is visualized in 3D — each layer a glass plane, each node a textured card, the path-to-root highlighted in amber gold.
+## Quick start
 
-It's a **spatial thinking tool** disguised as a chat interface.
-
-## Innovation
-
-| Dimension | Conventional Chat | Tree Chat |
-|-----------|-------------------|-----------|
-| **Structure** | Linear thread — you can only go forward or back | Tree graph — branch, graft, prune at any node |
-| **Navigation** | Scroll up/down through history | 3D spatial canvas with layers, minimap, and path highlighting |
-| **Exploration** | One answer per prompt | Branch multiple AI responses from the same prompt, compare side-by-side |
-| **Annotation** | Mixed with conversation | Named leaf notes — two-step creation (name → content), max 3 per node, isolated from AI context |
-| **History** | Undo a message | Rings system — global or node-specific patch history (max 50) |
-| **Aesthetic** | Blue/purple AI-chatbot generic | Organic editorial — paper textures, serif typography, botanical metaphors |
-
-### Tree-Metaphor Action System
-
-Every action is named after a botanical operation, making the mental model intuitive:
-
-| Action | What it does |
-|--------|-------------|
-| 🌱 **Seed** | Create a new project with a root question |
-| 🌿 **Branch** | Ask AI a follow-up — spawns a new child node |
-| 🍃 **Leaf** | Two-step: name a note, then write content — max 3 per node, isolated from AI context |
-| 🌳 **Graft** | Two-click re-parent: move a subtree to a different parent |
-| ✂️ **Prune** | Delete a node and its entire subtree |
-| 🔆 **Sunlight** | Focus on a node — selects it and jumps to its layer |
-| 🗺️ **Canopy** | SVG minimap overlay showing the full tree structure |
-| 💍 **Rings** | Undo/redo panel — browse through operation history |
-| 📦 **Harvest** | Export as Markdown or JSON |
-
-### Tree-aware context
-
-- Full `response` text remains the source for display, history, and export; subsequent model context reads only lightweight semantic cards whose state is `valid`.
-- The Context Compiler builds one bounded input in this order: root task → valid parent-path semantics → explicitly included Leaf notes (name + content) → current task → relevant nutrient chunks → current question.
-- Leaf notes are isolated from AI context by default and are included only after the user explicitly enables them.
-- Graft preserves every original prompt and response while marking AI semantics in the moved subtree as `stale`, preventing knowledge from the old path from leaking into later requests.
-
-### Visual Design — Organic Editorial
-
-Tree Chat deliberately avoids the generic AI-chatbot aesthetic (neon blues, purple gradients, glowing orbs). Instead it uses a warm, tactile, editorial palette inspired by botanical field guides and print typography:
-
-- **Base tones**: cream paper (`#FBF7F0`), warm parchment (`#F5F0E8`)
-- **Typography**: Lora (serif headings) + Geist (sans-serif UI) + Geist Mono (code)
-- **Texture**: CSS grain overlay on every surface — it feels like paper, not glass
-- **Accents**: bark brown, sage green, amber gold — nothing glows, everything breathes
-
-### 3D Spatial Canvas
-
-Nodes live on stacked glass planes (layers). You view one layer at a time in 2D mode, or all layers in 3D perspective. The camera smoothly tracks to newly created nodes, and you can freely orbit the 3D scene with mouse drag.
-
-- **2D mode**: Orthographic top-down view, pan-enabled for exploring large trees
-- **3D mode**: Perspective isometric view, rotation-enabled for layer inspection
-- **Smooth tracking**: Camera animates to newly created/selected nodes, then releases control for free exploration
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Framework | [Next.js 16](https://nextjs.org) (App Router) |
-| 3D Rendering | [React Three Fiber](https://docs.pmnd.rs/react-three-fiber) + [Drei](https://github.com/pmndrs/drei) on Three.js |
-| Tree Layout | [d3-hierarchy](https://github.com/d3/d3-hierarchy) (`d3.tree()`) |
-| AI | DeepSeek API via OpenAI SDK |
-| Styling | Tailwind CSS 4 + CSS custom properties |
-| Deployment | Cloudflare Workers (OpenNext) |
-| Icons | [Lucide React](https://lucide.dev) |
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 20+
-- A [DeepSeek API key](https://platform.deepseek.com/api_keys)
-
-### Setup
+Requirements: Node.js 20+, Python 3.11+, and an AI provider configuration appropriate for the Runtime mode you choose.
 
 ```bash
-git clone https://github.com/hancewang77-hl/tree-chat.git
-cd tree-chat
 npm ci
+python -m pip install -r runtime/requirements.txt
 ```
 
-Create `.env.local` in the project root:
+Start the Runtime (terminal 1):
 
-```env
-DEEPSEEK_API_KEY=sk-your-key-here
+```bash
+npm run runtime:dev
 ```
 
-The key is read only by server-side Route Handlers. Do not add a `NEXT_PUBLIC_` prefix or commit `.env.local`; restart the development server after changing the key.
-
-### Development
+Start the Next.js application (terminal 2):
 
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000). The public landing page is `/`; the interactive TreeChat workbench is `/app`.
 
-### Production Build
-
-```bash
-npm run build
-npm start
-```
-
-### Deploying to Cloudflare Workers
-
-```bash
-npm run build
-npx @opennextjs/cloudflare build
-npx wrangler deploy
-```
+For a local development setup without an external model worker, the Runtime supports its configured mock/provider modes. The browser talks to the Runtime URL (`http://127.0.0.1:8000` by default); set `NEXT_PUBLIC_TREECHAT_RUNTIME_URL` when it is hosted elsewhere.
 
 ## Architecture
 
-```
+```text
 app/
-├── page.tsx           # TreeProvider shell + app orchestration
-├── layout.tsx         # Root layout (fonts)
-├── globals.css        # CSS vars, grain texture, animations
-└── api/
-    ├── chat/route.ts       # Streaming answer → DeepSeek
-    └── structure/route.ts  # Post-answer semantic-card extraction
+├── page.tsx                 # public landing page
+├── app/page.tsx             # interactive TreeChat workbench
+├── layout.tsx               # root layout and global styles
+└── api/                     # compatibility proxies
+
+runtime/
+├── app/                     # task registry, scheduler, router, SSE events
+├── mock_worker/             # local development worker
+├── real_worker/             # HTTP worker gateway
+└── vllm/                    # optional local vLLM launcher
 
 src/
-├── types/tree.ts                  # MindNode, Project, TreeState, Actions
-├── state/
-│   ├── TreeContext.tsx            # useReducer + Context provider
-│   └── treeReducer.ts            # Tree actions, patch history, localStorage sync
-├── components/
-│   ├── scene/                    # 3D Canvas, nodes, layers, edges, camera
-│   ├── layout/                   # Header, sidebars, composer
-│   ├── toolbar/                  # TreeToolbar, ZoomControls
-│   └── overlays/                 # Minimap, history, search, dialogs, modal portal
-├── hooks/
-│   ├── useTreeLayout.ts          # D3 tree layout + constants (MAX_LEAVES_PER_NODE = 3)
-│   └── useAIChat.ts              # DeepSeek API interaction
-└── lib/
-    ├── contextCompiler.ts        # Tree-aware Context Compiler
-    ├── semanticCard.ts           # Semantic-card validation and formatting
-    ├── nutrients.ts              # Extraction, chunking, lightweight relevance ranking
-    ├── utils.ts                  # Canvas2D helpers, clamp, etc.
-    ├── formatResponse.ts         # Markdown→HTML, Markdown→Plaintext
-    └── storage.ts                # localStorage helpers
+├── state/                   # tree reducer and persisted workspace state
+├── components/              # workbench UI, tree scene, tools, dialogs
+├── product/                 # product action seam into the Runtime
+├── runtime/                 # browser Runtime client and SSE/task handling
+└── lib/                     # branch topology, context compiler, nutrients, Auxo
 ```
 
-## Star History
+## Validation
 
-<a href="https://star-history.com/#hancewang77-hl/tree-chat&Date">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=hancewang77-hl/tree-chat&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=hancewang77-hl/tree-chat&type=Date" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=hancewang77-hl/tree-chat&type=Date" />
-  </picture>
-</a>
+```bash
+npm test
+npm run test:unit
+npm run test:component
+python -m pytest runtime/tests -q
+npm run build
+```
+
+The repository contains the product source and its automated tests. Private research runs and their raw measurements are intentionally kept outside the public source tree.
 
 ## License
 

@@ -83,6 +83,7 @@ describe("workspace schema migration", () => {
     expect((nodes.branch as unknown as { customLegacyField: string }).customLegacyField).toBe("preserve-me");
     expect(nodes.leaf.kind).toBe("leaf");
     expect(nodes.leaf.includeInContext).toBe(false);
+    expect(state.projects.project.contextTransfers).toEqual([]);
     expect(state.selectedNodeId).toBe("branch");
     expect(values.get(STORAGE_KEY)).toBe(legacy);
   });

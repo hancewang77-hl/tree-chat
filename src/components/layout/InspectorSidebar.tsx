@@ -1,8 +1,26 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { GitBranch, MessageSquare, RefreshCw, StickyNote, Trash2, Sun, Sparkles } from "lucide-react";
-import type { MindNode, NodesMap, SemanticCard } from "@/src/types/tree";
+import {
+  GitBranch,
+  GitMerge,
+  MessageSquare,
+  Pin,
+  Quote as QuoteIcon,
+  RefreshCw,
+  Sparkles,
+  StickyNote,
+  Trash2,
+  Sun,
+  X,
+} from "lucide-react";
+import type {
+  ContextTransfer,
+  ContextTransferType,
+  MindNode,
+  NodesMap,
+  SemanticCard,
+} from "@/src/types/tree";
 import { useTreeState, useTreeDispatch } from "@/src/state/TreeContext";
 import { useResizableSidebar } from "@/hooks/useResizableSidebar";
 import { renderMarkdownToHTML } from "@/src/lib/formatResponse";
@@ -10,25 +28,41 @@ import { CARD_BOTTOM_LEAF_VEIN_PATTERN } from "@/src/lib/visualPatterns";
 import { usePruneConfirm } from "@/src/components/overlays/ConfirmDialog";
 
 type ComposerMode = "ai" | "note";
+type TransferDraft = {
+  sourceNodeId: string;
+  transferType: Extract<ContextTransferType, "quote" | "merge">;
+};
 
 export function InspectorSidebar({
   currentPath,
+  onRetryAnswer = () => {},
   onRetrySemantics,
+  retryableAnswerNodeIds = new Set<string>(),
   structuringNodeIds,
 }: {
   currentPath: MindNode[];
+  onRetryAnswer?: (nodeId: string) => void;
   onRetrySemantics: (nodeId: string) => void;
+  retryableAnswerNodeIds?: ReadonlySet<string>;
   structuringNodeIds: ReadonlySet<string>;
 }) {
   const state = useTreeState();
   const dispatch = useTreeDispatch();
   const [composerMode, setComposerMode] = useState<ComposerMode>("ai");
+  const [transferDraft, setTransferDraft] = useState<TransferDraft | null>(null);
 
   const activeProject = state.projects[state.activeProjectId];
   const selectedNode = activeProject?.nodes[state.selectedNodeId];
   const isRoot = selectedNode?.id === activeProject?.rootNodeId;
   const isAuxoTask = selectedNode?.nodeRole === "task" || selectedNode?.nodeRole === "task-group";
   const isStructuring = selectedNode ? structuringNodeIds.has(selectedNode.id) : false;
+  const contextTransfers = activeProject?.contextTransfers ?? [];
+  const selectedPin = selectedNode
+    ? contextTransfers.find(
+        (transfer) =>
+          transfer.transferType === "pin" && transfer.sourceNodeId === selectedNode.id,
+      )
+    : undefined;
   const { requestPrune, pruneConfirmDialog } = usePruneConfirm({ selectedNode, isRoot });
   const { sidebarWidth, isResizingSidebar, startResizing } = useResizableSidebar(340, {
     side: "right",
@@ -231,6 +265,23 @@ export function InspectorSidebar({
               </p>
             )}
 
+            {(selectedNode.status === "failed" || selectedNode.status === "stopped") &&
+              retryableAnswerNodeIds.has(selectedNode.id) && (
+                <button
+                  type="button"
+                  onClick={() => onRetryAnswer(selectedNode.id)}
+                  className="mt-3 inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[10px] font-semibold transition-opacity hover:opacity-80"
+                  style={{
+                    background: "var(--bg-paper)",
+                    color: "var(--accent-bark)",
+                    border: "1px solid var(--border-warm)",
+                  }}
+                >
+                  <RefreshCw size={11} />
+                  重试回答
+                </button>
+              )}
+
             {selectedNode.nutrientRefs && selectedNode.nutrientRefs.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-1">
                 {selectedNode.nutrientRefs.map((id) => {
@@ -256,6 +307,17 @@ export function InspectorSidebar({
               onToggleLeaf={() => dispatch({ type: "TOGGLE_LEAF_CONTEXT", nodeId: selectedNode.id })}
             />
           </section>
+        )}
+
+        {selectedNode && activeProject && (
+          <ContextTransfersPanel
+            selectedNode={selectedNode}
+            nodes={activeProject.nodes}
+            transfers={contextTransfers}
+            onRemove={(transferId) =>
+              dispatch({ type: "REMOVE_CONTEXT_TRANSFER", transferId })
+            }
+          />
         )}
 
         <div className="pt-1">
@@ -348,6 +410,44 @@ export function InspectorSidebar({
       {/* Actions */}
       {selectedNode && (
         <div className="shrink-0 border-t px-4 py-2.5" style={{ borderColor: "var(--border-warm)" }}>
+          {transferDraft && (
+            <div
+              className="mb-2 rounded-lg border px-2.5 py-2 text-[10px]"
+              style={{ background: "var(--accent-olive-soft)", borderColor: "var(--border-warm)" }}
+            >
+              <div className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate" style={{ color: "var(--text-charcoal)" }}>
+                  {transferDraft.transferType === "quote" ? "Quote" : "Merge"}: {activeProject?.nodes[transferDraft.sourceNodeId]?.prompt ?? transferDraft.sourceNodeId}
+                  {" → "}{selectedNode.prompt}
+                </span>
+                <button
+                  type="button"
+                  className="rounded px-2 py-1 font-semibold"
+                  style={{ background: "var(--accent-sage)", color: "var(--on-primary)" }}
+                  onClick={() => {
+                    dispatch({
+                      type: "ADD_CONTEXT_TRANSFER",
+                      sourceNodeId: transferDraft.sourceNodeId,
+                      targetNodeId: selectedNode.id,
+                      transferType: transferDraft.transferType,
+                    });
+                    setTransferDraft(null);
+                  }}
+                >
+                  应用到这里
+                </button>
+                <button
+                  type="button"
+                  aria-label="取消上下文转移"
+                  onClick={() => setTransferDraft(null)}
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-1.5">
             <ActionButton
               icon={<GitBranch size={13} />}
@@ -380,6 +480,47 @@ export function InspectorSidebar({
                 onClick={requestPrune}
               />
             )}
+          </div>
+          <div className="mt-1.5 flex gap-1.5">
+            <ActionButton
+              icon={<Pin size={13} />}
+              label={selectedPin ? "取消 Pin" : "Pin"}
+              active={Boolean(selectedPin)}
+              onClick={() => {
+                if (selectedPin) {
+                  dispatch({ type: "REMOVE_CONTEXT_TRANSFER", transferId: selectedPin.id });
+                } else {
+                  dispatch({
+                    type: "ADD_CONTEXT_TRANSFER",
+                    sourceNodeId: selectedNode.id,
+                    targetNodeId: activeProject?.rootNodeId ?? selectedNode.id,
+                    transferType: "pin",
+                  });
+                }
+              }}
+            />
+            <ActionButton
+              icon={<QuoteIcon size={13} />}
+              label="Quote"
+              active={
+                transferDraft?.sourceNodeId === selectedNode.id &&
+                transferDraft.transferType === "quote"
+              }
+              onClick={() =>
+                setTransferDraft({ sourceNodeId: selectedNode.id, transferType: "quote" })
+              }
+            />
+            <ActionButton
+              icon={<GitMerge size={13} />}
+              label="Merge"
+              active={
+                transferDraft?.sourceNodeId === selectedNode.id &&
+                transferDraft.transferType === "merge"
+              }
+              onClick={() =>
+                setTransferDraft({ sourceNodeId: selectedNode.id, transferType: "merge" })
+              }
+            />
           </div>
         </div>
       )}
@@ -456,9 +597,7 @@ function NodeContextPanel({
             {node.contextState === "valid"
               ? node.kind === "root"
                 ? "后续追问读取根任务原文，根节点无需调用模型整理。"
-                : node.nodeRole === "task" || node.nodeRole === "task-group"
-                  ? "后续追问直接读取经 Auxo 校验的任务原文与规划说明；不会把它误当成已完成答案。"
-                : "后续追问只读取下方语义卡片，不重复拼接完整回答。"
+                : "后续追问读取当前分支的原始问题与回答；语义卡片仅用于查看。"
               : node.contextState === "stale"
                 ? "节点已被嫁接到新路径；原回答保留，但旧语义不再进入模型。"
                 : "当前没有可用语义卡片；完整回答仍保留，但不会被当作后续模型记忆。"}
@@ -505,6 +644,16 @@ function NodeContextPanel({
                     .join("、")}
                 </p>
               )}
+              {(node.contextManifest.contextTransfers?.length ?? 0) > 0 && (
+                <p className="mt-1 break-all leading-relaxed">
+                  转移：{node.contextManifest.contextTransfers
+                    ?.map(
+                      (transfer) =>
+                        `${transfer.transferType}:${transfer.sourceNodeId}→${transfer.targetNodeId}`,
+                    )
+                    .join("、")}
+                </p>
+              )}
               {node.contextManifest.warnings.length > 0 && (
                 <p className="mt-1 leading-relaxed" style={{ color: "#B43C28" }}>
                   {node.contextManifest.warnings.join("；")}
@@ -533,6 +682,71 @@ function NodeContextPanel({
         </>
       )}
     </div>
+  );
+}
+
+function ContextTransfersPanel({
+  selectedNode,
+  nodes,
+  transfers,
+  onRemove,
+}: {
+  selectedNode: MindNode;
+  nodes: NodesMap;
+  transfers: ContextTransfer[];
+  onRemove: (transferId: string) => void;
+}) {
+  const applicable = transfers.filter(
+    (transfer) =>
+      transfer.transferType === "pin" || transfer.targetNodeId === selectedNode.id,
+  );
+  if (applicable.length === 0) return null;
+
+  return (
+    <section
+      className="rounded-xl border p-3"
+      style={{ background: "var(--bg-cream)", borderColor: "var(--border-warm)" }}
+    >
+      <p
+        className="mb-2 text-[10px] font-semibold uppercase tracking-[0.04em]"
+        style={{ color: "var(--text-muted)" }}
+      >
+        Explicit Context Transfers
+      </p>
+      <div className="space-y-1.5">
+        {applicable.map((transfer) => (
+          <div
+            key={transfer.id}
+            className="flex items-center gap-2 rounded-lg px-2.5 py-2"
+            style={{ background: "var(--accent-olive-soft)" }}
+          >
+            <span
+              className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
+              style={{ background: "var(--bg-paper)", color: "var(--accent-bark)" }}
+            >
+              {transfer.transferType}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[10px]" style={{ color: "var(--text-charcoal)" }}>
+                {nodes[transfer.sourceNodeId]?.prompt ?? `[missing] ${transfer.sourceNodeId}`}
+              </p>
+              <p className="truncate text-[9px]" style={{ color: "var(--text-muted)" }}>
+                {transfer.sourceNodeId} → {transfer.targetNodeId} · {new Date(transfer.createdAt).toLocaleString()}
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-label={`移除 ${transfer.transferType}`}
+              onClick={() => onRemove(transfer.id)}
+              className="rounded p-1 hover:opacity-70"
+              style={{ color: "#B43C28" }}
+            >
+              <Trash2 size={11} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

@@ -122,8 +122,8 @@ describe("1920 × 1080 landing composition contract", () => {
     expect(css).toMatch(/\.landing-hero__content\s*\{[\s\S]*?padding-bottom:\s*86px;/);
     expect(css).toMatch(/\.landing-hero__content\s*\{[\s\S]*?transform:\s*translateY\(-86px\);/);
     expect(css).toMatch(/\.landing-hero__content\s*\{[\s\S]*?z-index:\s*4;/);
-    expect(css).toContain("linear-gradient(\n    180deg,\n    rgba(7, 29, 20, .52)");
-    expect(css).toContain("radial-gradient(\n    ellipse at 50% 40%,\n    rgba(4, 18, 12, .52)");
+    expect(css).toMatch(/linear-gradient\(\s*180deg,\s*rgba\(7, 29, 20, \.52\)/);
+    expect(css).toMatch(/radial-gradient\(\s*ellipse at 50% 40%,\s*rgba\(4, 18, 12, \.52\)/);
     expect(css).toMatch(/\.landing-hero-word\s*\{[\s\S]*?opacity:\s*\.48;/);
     expect(css).toMatch(/\.landing-header__brand \.brand-logo__mark\s*\{[^}]*width:\s*48px;/);
     expect(css).toMatch(/\.landing-header__brand \.brand-logo__wordmark strong\s*\{[^}]*font-size:\s*15px;/);

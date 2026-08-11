@@ -489,6 +489,62 @@ describe("treeReducer product functions", () => {
     expect(projectNodes(state)[leaf.id].includeInContext).toBe(true);
   });
 
+  test("adds traceable context transfers, deduplicates them, and removes by id", () => {
+    let state = baseState();
+    state.projects.project.nodes = {
+      root: node({ id: "root", children: ["a", "b"] }),
+      a: node({ id: "a", kind: "branch", parentId: "root" }),
+      b: node({ id: "b", kind: "branch", parentId: "root" }),
+    };
+
+    state = treeReducer(state, {
+      type: "ADD_CONTEXT_TRANSFER",
+      sourceNodeId: "a",
+      targetNodeId: "b",
+      transferType: "quote",
+    });
+    const transfer = state.projects.project.contextTransfers?.[0];
+    expect(transfer).toMatchObject({
+      sourceNodeId: "a",
+      targetNodeId: "b",
+      transferType: "quote",
+    });
+    expect(transfer?.id).toMatch(/^transfer-/);
+    expect(transfer?.createdAt).toEqual(expect.any(Number));
+
+    state = treeReducer(state, {
+      type: "ADD_CONTEXT_TRANSFER",
+      sourceNodeId: "a",
+      targetNodeId: "b",
+      transferType: "quote",
+    });
+    expect(state.projects.project.contextTransfers).toHaveLength(1);
+
+    state = treeReducer(state, {
+      type: "REMOVE_CONTEXT_TRANSFER",
+      transferId: transfer!.id,
+    });
+    expect(state.projects.project.contextTransfers).toEqual([]);
+  });
+
+  test("Pin always records the project root as its global target", () => {
+    let state = baseState();
+    state.projects.project.nodes.a = node({ id: "a", kind: "branch", parentId: "root" });
+
+    state = treeReducer(state, {
+      type: "ADD_CONTEXT_TRANSFER",
+      sourceNodeId: "a",
+      targetNodeId: "a",
+      transferType: "pin",
+    });
+
+    expect(state.projects.project.contextTransfers?.[0]).toMatchObject({
+      sourceNodeId: "a",
+      targetNodeId: "root",
+      transferType: "pin",
+    });
+  });
+
   test("Graft 原子移动结构并将整个 AI 子树标记为 stale", () => {
     const before = graftState();
     const originalA = before.projects.project.nodes.a;

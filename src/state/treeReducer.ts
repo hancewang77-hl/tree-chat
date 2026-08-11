@@ -6,6 +6,7 @@ import type {
   Project,
   MindNode,
   NodesMap,
+  ContextTransfer,
 } from "@/src/types/tree";
 import { loadWorkspace, saveWorkspace } from "@/src/lib/storage";
 import {
@@ -13,6 +14,7 @@ import {
   isUsableSemanticCard,
 } from "@/src/lib/semanticCard";
 import { compileAuxoInput, validateAuxoPlan } from "@/src/lib/auxo";
+import { MAX_LEAVES_PER_NODE, countLeafChildren } from "@/hooks/useTreeLayout";
 
 const MAX_HISTORY = 50;
 
@@ -46,6 +48,8 @@ function createProject(name: string): Project {
   return {
     id,
     name,
+    globalContext: "",
+    contextTransfers: [],
     rootNodeId: rootNode.id,
     nodes: { [rootNode.id]: rootNode },
     nutrients: {},
@@ -143,11 +147,29 @@ function normalizeProject(project: Project): Project {
 
   return {
     ...project,
+    globalContext: typeof project.globalContext === "string" ? project.globalContext : "",
+    contextTransfers: normalizeContextTransfers(project.contextTransfers),
     rootNodeId,
     nodes,
     nutrients: project.nutrients ?? {},
     activeNutrientIds: project.activeNutrientIds ?? [],
   };
+}
+
+function normalizeContextTransfers(value: Project["contextTransfers"]): ContextTransfer[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((transfer): transfer is ContextTransfer =>
+    Boolean(
+      transfer &&
+      typeof transfer.id === "string" &&
+      typeof transfer.sourceNodeId === "string" &&
+      typeof transfer.targetNodeId === "string" &&
+      (transfer.transferType === "pin" ||
+        transfer.transferType === "quote" ||
+        transfer.transferType === "merge") &&
+      typeof transfer.createdAt === "number",
+    ),
+  );
 }
 
 function normalizeProjects(projects: Record<string, Project>): Record<string, Project> {
@@ -1135,12 +1157,17 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
       const parentId = resolveBranchParent(project.nodes, action.parentId);
       const parent = project.nodes[parentId];
       if (!parent) return state;
+      if (countLeafChildren(project.nodes, parentId) >= MAX_LEAVES_PER_NODE) return state;
+
+      const leafName = action.name?.trim();
+      const leafContent = action.content.trim();
+      if (!leafName || !leafContent) return state;
 
       const newNode: MindNode = {
         id: `note-${crypto.randomUUID()}`,
         kind: "leaf",
-        prompt: action.content,
-        response: "",
+        prompt: leafName,
+        response: leafContent,
         children: [],
         parentId,
         timestamp: Date.now(),
@@ -1156,7 +1183,7 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
         parent,
         newNode,
         requestedParentId: action.parentId,
-        label: `Leaf · ${action.content.slice(0, 32)}`,
+        label: `Leaf · ${leafName.slice(0, 32)}`,
       });
     }
 
@@ -1175,6 +1202,55 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
           updateLeafContextSnapshots(entries, state.activeProjectId, action.nodeId, includeInContext),
         ),
       );
+    }
+
+    case "ADD_CONTEXT_TRANSFER": {
+      const project = getActiveProject(state);
+      if (!project || !project.nodes[action.sourceNodeId]) return state;
+
+      const targetNodeId = action.transferType === "pin"
+        ? project.rootNodeId
+        : resolveBranchParent(project.nodes, action.targetNodeId);
+      if (!project.nodes[targetNodeId]) return state;
+
+      const currentTransfers = project.contextTransfers ?? [];
+      const duplicate = currentTransfers.some(
+        (transfer) =>
+          transfer.sourceNodeId === action.sourceNodeId &&
+          transfer.targetNodeId === targetNodeId &&
+          transfer.transferType === action.transferType,
+      );
+      if (duplicate) return state;
+
+      const transfer: ContextTransfer = {
+        id: `transfer-${crypto.randomUUID()}`,
+        sourceNodeId: action.sourceNodeId,
+        targetNodeId,
+        transferType: action.transferType,
+        createdAt: Date.now(),
+      };
+      const next = updateActiveProject(state, (activeProject) => ({
+        ...activeProject,
+        contextTransfers: [...(activeProject.contextTransfers ?? []), transfer],
+        updatedAt: Date.now(),
+      }));
+      return persist(next);
+    }
+
+    case "REMOVE_CONTEXT_TRANSFER": {
+      const project = getActiveProject(state);
+      const currentTransfers = project?.contextTransfers ?? [];
+      if (!project || !currentTransfers.some((transfer) => transfer.id === action.transferId)) {
+        return state;
+      }
+      const next = updateActiveProject(state, (activeProject) => ({
+        ...activeProject,
+        contextTransfers: (activeProject.contextTransfers ?? []).filter(
+          (transfer) => transfer.id !== action.transferId,
+        ),
+        updatedAt: Date.now(),
+      }));
+      return persist(next);
     }
 
     case "GRAFT_START": {

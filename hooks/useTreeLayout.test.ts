@@ -4,10 +4,48 @@ import {
   canAttachLeaf,
   computeLeafWorldPosition,
   countLeafChildren,
+  getContextPath,
   getLeafAttachments,
   getTrunkChildIds,
 } from "./useTreeLayout";
-import type { NodesMap } from "@/src/types/tree";
+import type { MindNode, NodesMap } from "@/src/types/tree";
+
+function branchNode(
+  id: string,
+  parentId: string | null,
+  children: string[] = [],
+): MindNode {
+  return {
+    id,
+    prompt: id,
+    response: `${id} response`,
+    children,
+    parentId,
+    timestamp: 1,
+    layer: 0,
+    kind: parentId === null ? "root" : "branch",
+    contextState: parentId === null ? "valid" : "missing",
+  };
+}
+
+function buildLinearTree(depth: number): { nodes: NodesMap; targetId: string } {
+  if (!Number.isInteger(depth) || depth < 1) {
+    throw new Error("depth must be a positive integer");
+  }
+
+  const linearNodes: NodesMap = {};
+  for (let index = 0; index < depth; index++) {
+    const id = index === 0 ? "root" : `node-${index}`;
+    const parentId = index === 0 ? null : index === 1 ? "root" : `node-${index - 1}`;
+    const childId = index + 1 < depth ? `node-${index + 1}` : undefined;
+    linearNodes[id] = branchNode(id, parentId, childId ? [childId] : []);
+  }
+
+  return {
+    nodes: linearNodes,
+    targetId: depth === 1 ? "root" : `node-${depth - 1}`,
+  };
+}
 
 const nodes: NodesMap = {
   root: {
@@ -79,5 +117,86 @@ describe("tree layout leaf treatment", () => {
     expect(countLeafChildren(nodes, "root")).toBe(1);
     expect(canAttachLeaf(nodes, "root")).toBe(true);
     expect(MAX_LEAVES_PER_NODE).toBe(3);
+  });
+});
+
+describe("getContextPath", () => {
+  test("returns the root as a one-node path", () => {
+    const rootOnly = { root: branchNode("root", null) };
+
+    expect(getContextPath(rootOnly, "root").map((node) => node.id)).toEqual(["root"]);
+  });
+
+  test("returns a deep path in strict root-to-current order", () => {
+    const deepNodes: NodesMap = {
+      root: branchNode("root", null, ["A"]),
+      A: branchNode("A", "root", ["A1"]),
+      A1: branchNode("A1", "A", ["A11"]),
+      A11: branchNode("A11", "A1"),
+    };
+
+    expect(getContextPath(deepNodes, "A11").map((node) => node.id)).toEqual([
+      "root",
+      "A",
+      "A1",
+      "A11",
+    ]);
+  });
+
+  test("never includes a sibling branch", () => {
+    const siblingNodes: NodesMap = {
+      root: branchNode("root", null, ["A", "B"]),
+      A: branchNode("A", "root", ["A1"]),
+      A1: branchNode("A1", "A"),
+      B: branchNode("B", "root"),
+    };
+
+    const ids = getContextPath(siblingNodes, "A1").map((node) => node.id);
+    expect(ids).toEqual(["root", "A", "A1"]);
+    expect(ids).not.toContain("B");
+  });
+
+  test("throws a clear error when a parent node is missing", () => {
+    const brokenNodes = {
+      child: branchNode("child", "missing-parent"),
+    };
+
+    expect(() => getContextPath(brokenNodes, "child")).toThrowError(
+      "Context path parent node not found: missing-parent",
+    );
+  });
+
+  test("detects a parent cycle", () => {
+    const cyclicNodes: NodesMap = {
+      A: branchNode("A", "B"),
+      B: branchNode("B", "A"),
+    };
+
+    expect(() => getContextPath(cyclicNodes, "A")).toThrowError(
+      "Context path cycle detected: A -> B -> A",
+    );
+  });
+
+  test("throws a clear error when the requested node is missing", () => {
+    expect(() => getContextPath({}, "missing-node")).toThrowError(
+      "Context path node not found: missing-node",
+    );
+  });
+
+  test("retrieves paths at depths 10, 100, and 1000", () => {
+    const measurements: Record<number, number> = {};
+
+    for (const depth of [10, 100, 1000]) {
+      const tree = buildLinearTree(depth);
+      const startedAt = performance.now();
+      const path = getContextPath(tree.nodes, tree.targetId);
+      measurements[depth] = performance.now() - startedAt;
+
+      expect(path).toHaveLength(depth);
+      expect(path[0]?.id).toBe("root");
+      expect(path.at(-1)?.id).toBe(tree.targetId);
+    }
+
+    console.info("getContextPath single-run measurements (ms)", measurements);
   });
 });

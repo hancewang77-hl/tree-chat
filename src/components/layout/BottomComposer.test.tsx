@@ -49,12 +49,17 @@ function nutrientProject(): Project {
 }
 
 const AI_PLACEHOLDER_L0 = "在 z = 0 层继续延伸你的思考... (Enter 发送)";
-const NOTE_PLACEHOLDER = "记录一个想法或笔记... (Enter 保存)";
+const NOTE_PLACEHOLDER = "为「测试叶片」写入笔记内容... (Enter 保存)";
 
 function renderComposer({
   isAiTyping = false,
   isContextPreparing = false,
-}: { isAiTyping?: boolean; isContextPreparing?: boolean } = {}) {
+  pendingLeafName = "测试叶片",
+}: {
+  isAiTyping?: boolean;
+  isContextPreparing?: boolean;
+  pendingLeafName?: string | null;
+} = {}) {
   const onSend = vi.fn();
   const onAddLeaf = vi.fn();
   const onStop = vi.fn();
@@ -63,6 +68,10 @@ function renderComposer({
       <BottomComposer
         onSend={onSend}
         onAddLeaf={onAddLeaf}
+        pendingLeafName={pendingLeafName}
+        onRequestLeafName={vi.fn()}
+        onCancelLeafDraft={vi.fn()}
+        canCreateLeaf={true}
         isAiTyping={isAiTyping}
         isContextPreparing={isContextPreparing}
         onStop={onStop}
@@ -194,7 +203,7 @@ describe("BottomComposer", () => {
     await user.type(textarea, "一条笔记{Enter}");
 
     expect(onAddLeaf).toHaveBeenCalledTimes(1);
-    expect(onAddLeaf).toHaveBeenCalledWith("一条笔记");
+    expect(onAddLeaf).toHaveBeenCalledWith("测试叶片", "一条笔记");
     expect(onSend).not.toHaveBeenCalled();
     expect(textarea).toHaveValue("");
   });
@@ -236,7 +245,7 @@ describe("BottomComposer", () => {
     await user.click(screen.getByRole("button", { name: "笔记" }));
     await user.type(textarea, "{Enter}");
     expect(onAddLeaf).toHaveBeenCalledTimes(1);
-    expect(onAddLeaf).toHaveBeenCalledWith("问题");
+    expect(onAddLeaf).toHaveBeenCalledWith("测试叶片", "问题");
   });
 
   it("focuses the textarea when a composer-focus event arrives", async () => {

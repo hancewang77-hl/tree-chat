@@ -6,7 +6,6 @@ import type {
   AuxoSourceUnit,
   Project,
 } from "@/src/types/tree";
-import { DEEPSEEK_MODEL } from "@/src/lib/deepseek";
 import { normalizeDuplicateKey } from "@/src/lib/utils";
 
 /**
@@ -27,7 +26,6 @@ import { normalizeDuplicateKey } from "@/src/lib/utils";
 // Budgets & patterns
 // ---------------------------------------------------------------------------
 
-export const AUXO_MODEL = DEEPSEEK_MODEL;
 export const AUXO_MAX_NODES = 40;
 export const AUXO_MAX_DEPTH = 4;
 export const AUXO_MAX_ROOT_TASK_CHARS = 8_000;

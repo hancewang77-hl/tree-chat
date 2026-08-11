@@ -25,12 +25,20 @@ const SEED_PARTICLES = [
 export function BottomComposer({
   onSend,
   onAddLeaf,
+  pendingLeafName,
+  onRequestLeafName,
+  onCancelLeafDraft,
+  canCreateLeaf,
   isAiTyping,
   isContextPreparing,
   onStop,
 }: {
   onSend: (prompt: string) => void;
-  onAddLeaf: (content: string) => void;
+  onAddLeaf: (name: string, content: string) => void;
+  pendingLeafName: string | null;
+  onRequestLeafName: () => void;
+  onCancelLeafDraft: () => void;
+  canCreateLeaf: boolean;
   isAiTyping: boolean;
   isContextPreparing: boolean;
   onStop: () => void;
@@ -69,19 +77,21 @@ export function BottomComposer({
   }, []);
 
   function emitComposerMode(nextMode: ComposerMode) {
+    if (nextMode === "ai" && pendingLeafName) onCancelLeafDraft();
     window.dispatchEvent(new CustomEvent("composer-mode", { detail: nextMode }));
   }
 
   function handleSubmit() {
     if (!text.trim()) return;
     if (mode === "ai" && (isAiTyping || isContextPreparing || isUploading)) return;
+    if (mode === "note" && !pendingLeafName) return;
     // Seed burst animation
     setBurst(true);
     setTimeout(() => setBurst(false), 500);
     if (mode === "ai") {
       onSend(text);
-    } else {
-      onAddLeaf(text);
+    } else if (pendingLeafName) {
+      onAddLeaf(pendingLeafName, text);
     }
     setText("");
   }
@@ -146,9 +156,12 @@ export function BottomComposer({
         ? "正在本地转换附件为 Markdown，完成后才能发送..."
       : mode === "ai"
       ? `在 z = ${state.selectedLayer} 层继续延伸你的思考... (Enter 发送)`
-      : "记录一个想法或笔记... (Enter 保存)";
+      : pendingLeafName
+        ? `为「${pendingLeafName}」写入笔记内容... (Enter 保存)`
+        : "请先创建并命名叶片";
   const isAiSubmitBlocked = mode === "ai" && (isContextPreparing || isUploading);
-  const hasActionableText = Boolean(text.trim()) && !isAiSubmitBlocked;
+  const hasActionableText = Boolean(text.trim()) && !isAiSubmitBlocked &&
+    (mode === "ai" || Boolean(pendingLeafName));
 
   return (
     <div
@@ -222,6 +235,48 @@ export function BottomComposer({
 
       {/* Main composer body */}
       <div className="px-4 pb-3 pt-0.5">
+        {mode === "note" && !pendingLeafName && (
+          <div
+            className="mb-2 flex items-center justify-between gap-3 rounded-xl px-3 py-2.5"
+            style={{
+              background: "var(--accent-olive-soft)",
+              border: "1px solid var(--control-border)",
+            }}
+          >
+            <span className="text-[12px]" style={{ color: "var(--text-muted)" }}>
+              {canCreateLeaf
+                ? "创建叶片需先命名，再写入内容（每节点最多 3 片）"
+                : "当前节点叶片已满（3/3）"}
+            </span>
+            <button
+              type="button"
+              onClick={onRequestLeafName}
+              disabled={!canCreateLeaf}
+              className="shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
+              style={{ background: "var(--accent-sage)", color: "var(--on-primary)" }}
+            >
+              创建叶片
+            </button>
+          </div>
+        )}
+        {mode === "note" && pendingLeafName && (
+          <div className="mb-2 flex items-center gap-2 text-[11px]" style={{ color: "var(--text-muted)" }}>
+            <span
+              className="rounded-full px-2.5 py-1"
+              style={{ background: "var(--accent-olive-soft)", color: "var(--accent-bark)" }}
+            >
+              正在创建：{pendingLeafName}
+            </span>
+            <button
+              type="button"
+              onClick={onCancelLeafDraft}
+              className="rounded-full px-2 py-1 hover:opacity-80"
+              style={{ border: "1px solid var(--border-warm)" }}
+            >
+              取消
+            </button>
+          </div>
+        )}
         {(nutrients.length > 0 || uploadError || isUploading) && (
           <div className="mb-2 flex flex-wrap items-center gap-1.5">
             {isUploading && (
@@ -320,7 +375,7 @@ export function BottomComposer({
               }}
             >
               <StickyNote size={13} />
-              <span className="hidden sm:inline">笔记</span>
+              <span className="hidden sm:inline">{pendingLeafName ? "笔记内容" : "笔记"}</span>
             </button>
           </div>
 
@@ -370,6 +425,7 @@ export function BottomComposer({
               rows={2}
               placeholder={placeholder}
               value={text}
+              disabled={mode === "note" && !pendingLeafName}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
@@ -395,7 +451,7 @@ export function BottomComposer({
                     : "保存 · Keep"}
             disabled={
               (!(mode === "ai" && isAiTyping) && isAiSubmitBlocked) ||
-              (!(mode === "ai" && isAiTyping) && !text.trim())
+              (!(mode === "ai" && isAiTyping) && !hasActionableText)
             }
             className="flex h-10 w-10 shrink-0 items-center justify-center transition-all relative"
             style={{

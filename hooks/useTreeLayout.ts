@@ -5,8 +5,10 @@ import type {
   HierarchyPointLink,
 } from "d3-hierarchy";
 import type { MindNode, NodesMap } from "@/src/types/tree";
+import { getContextPath } from "@/src/lib/contextPath";
 
 export type { MindNode, NodesMap };
+export { getContextPath };
 
 type HierarchyNodeData = MindNode & {
   children: HierarchyNodeData[];
@@ -63,20 +65,26 @@ export const LAYER_SPACING = 4.2;
 export const X_SPACING = 4.6;
 export const Y_SPACING = 2.4;
 
-export function getContextPath(nodes: NodesMap, nodeId: string): MindNode[] {
-  const path: MindNode[] = [];
-  const seen = new Set<string>();
-  let currentId: string | null = nodeId;
+export function getVisibleIdsForPlane(nodes: NodesMap, layer: number) {
+  const ids = new Set<string>();
+  const planeIds = Object.values(nodes)
+    .filter((node) => node.layer === layer)
+    .map((node) => node.id);
 
-  // The visited guard stops a cyclic parentId chain (e.g. corrupt persisted
-  // state where a → b → a) from looping forever.
-  while (currentId && nodes[currentId] && !seen.has(currentId)) {
-    seen.add(currentId);
-    path.unshift(nodes[currentId]);
-    currentId = nodes[currentId].parentId;
+  if (planeIds.length === 0) {
+    ids.add("root");
+    return ids;
   }
 
-  return path;
+  for (const id of planeIds) {
+    let current: string | null = id;
+    while (current && nodes[current]) {
+      ids.add(current);
+      current = nodes[current].parentId;
+    }
+  }
+
+  return ids;
 }
 
 type TreeLayoutInput = {

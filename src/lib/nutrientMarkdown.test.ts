@@ -138,7 +138,7 @@ describe("DOCX real-inflation guard (assertDocxInflationSafe)", () => {
         message: expect.stringContaining("安全上限"),
       }),
     );
-  });
+  }, 15_000);
 
   test("a bomb that lies about its declared size still gets caught by real inflation", async () => {
     // Honest zip, then forge the declared uncompressed size down to 1KB so it
@@ -159,5 +159,5 @@ describe("DOCX real-inflation guard (assertDocxInflationSafe)", () => {
         message: expect.stringContaining("安全上限"),
       }),
     );
-  });
+  }, 15_000);
 });

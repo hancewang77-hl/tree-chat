@@ -46,19 +46,9 @@ describe("AppHeader", () => {
     }
   });
 
-  test("2D/3D button toggles the view mode label", async () => {
-    const user = userEvent.setup();
+  test("keeps the workbench on the product's 2D tree view", () => {
     renderWithTree(<AppHeader />);
-
-    // Hydrated view state always starts in 2D.
-    const toggle = screen.getByTitle("切换至 3D");
-    expect(toggle).toHaveTextContent("2D");
-
-    await user.click(toggle);
-    expect(screen.getByTitle("切换至 2D")).toHaveTextContent("3D");
-
-    await user.click(screen.getByTitle("切换至 2D"));
-    expect(screen.getByTitle("切换至 3D")).toHaveTextContent("2D");
+    expect(screen.queryByRole("button", { name: "3D 模式" })).not.toBeInTheDocument();
   });
 
   test("Canopy button toggles its active highlight", async () => {
@@ -111,11 +101,9 @@ describe("AppHeader", () => {
     const user = userEvent.setup();
     renderWithTree(<AppHeader />);
 
-    const viewMode = screen.getByRole("button", { name: "3D 模式" });
     const canopy = screen.getByRole("button", { name: "树冠 — 全局视图" });
     const rings = screen.getByRole("button", { name: "年轮 — 操作历史" });
 
-    expect(viewMode).toHaveAttribute("aria-pressed", "false");
     expect(canopy).toHaveAttribute("aria-pressed", "false");
     expect(rings).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: "收获 — 导出项目" })).toBeInTheDocument();
@@ -125,9 +113,6 @@ describe("AppHeader", () => {
       "aria-pressed",
       "false",
     );
-
-    await user.click(viewMode);
-    expect(screen.getByRole("button", { name: "3D 模式" })).toHaveAttribute("aria-pressed", "true");
 
     await user.click(darkMode);
     expect(screen.getByRole("button", { name: "深色模式" })).toHaveAttribute(

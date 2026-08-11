@@ -1,18 +1,14 @@
 import type {
   ContextManifest,
+  ContextTransfer,
   MindNode,
   Project,
 } from "@/src/types/tree";
+import { getContextPath } from "@/src/lib/contextPath";
 import {
   formatNutrientChunks,
   selectRelevantNutrientChunks,
-  type NutrientChunk,
 } from "@/src/lib/nutrients";
-import {
-  isUsableSemanticCard,
-  semanticCardToText,
-} from "@/src/lib/semanticCard";
-import { AUXO_MAX_SOURCE_UNIT_CHARS } from "@/src/lib/auxo";
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
@@ -25,14 +21,21 @@ export type CompileContextInput = {
   prompt: string;
   model: string;
   compiledAt: number;
-  semanticBudget?: number;
   nutrientBudget?: number;
+};
+
+export type ContextDebugInfo = {
+  nodeId: string;
+  ancestorNodeIds: string[];
+  contextMessageCount: number;
+  estimatedInputTokens: number;
 };
 
 export type CompiledContext = {
   anchorNodeId: string;
   messages: ChatMessage[];
   manifest: ContextManifest;
+  debug: ContextDebugInfo;
 };
 
 const SYSTEM_PROMPT =
@@ -49,14 +52,8 @@ const SYSTEM_PROMPT =
   "\n" +
   "风格：像一个博学的思考伙伴，有观点但不武断，严谨但不枯燥。";
 
-const DEFAULT_SEMANTIC_BUDGET = 12_000;
 const DEFAULT_NUTRIENT_BUDGET = 8_000;
-const MAX_ROOT_PROMPT = 3_000;
-const MAX_ANCHOR_PROMPT = 4_000;
 const MAX_INCLUDED_LEAF_TEXT = 3_000;
-
-type ExcludedNodeIds = ContextManifest["excludedNodeIds"];
-type SemanticSection = { node: MindNode; text: string };
 
 /**
  * Compiles the bounded model context for the anchor node.
@@ -78,258 +75,78 @@ type SemanticSection = { node: MindNode; text: string };
  * - "leaf"       leaf note not explicitly included (isolated by default)
  */
 export function compileContext(input: CompileContextInput): CompiledContext {
-  const {
-    project,
-    selectedNodeId,
-    model,
-    compiledAt,
-  } = input;
+  const { project, selectedNodeId, model, compiledAt } = input;
   const prompt = input.prompt.trim();
   if (!prompt) throw new Error("当前问题不能为空");
 
-  const warnings: string[] = [];
-  const excludedNodeIds: ExcludedNodeIds = [];
-  const excluded = new Set<string>();
   const root = project.nodes[project.rootNodeId];
   if (!root) throw new Error("项目根节点不存在");
 
   const selected = project.nodes[selectedNodeId];
-  if (!selected) warnings.push("选中节点不存在，已回退到根节点。");
-  const anchor = resolveAnchorNode(project, selected ?? root, root);
-  const path = collectParentPath(project, anchor, warnings);
-  const pathNodes = path.some((node) => node.id === root.id)
-    ? uniqueNodes([root, ...path])
-    : [root];
+  if (!selected) throw new Error(`Context path node not found: ${selectedNodeId}`);
 
-  // Stage 1 — root task.
-  const rootPrompt = clipWithWarning(
-    root.prompt,
-    MAX_ROOT_PROMPT,
-    "根任务过长，已在上下文中截断。",
-    warnings,
-  );
+  const anchor = resolveAnchorNode(project, selected, root);
+  const path = getContextPath(project.nodes, anchor.id);
+  if (path[0]?.id !== root.id) {
+    throw new Error(
+      `Context path for ${anchor.id} does not terminate at project root ${root.id}`,
+    );
+  }
 
-  // Stage 2 — valid parent-path semantics.
-  const semanticSections = collectParentSemanticSections({
-    pathNodes,
-    root,
-    anchor,
-    budget: input.semanticBudget ?? DEFAULT_SEMANTIC_BUDGET,
-    excluded,
-    excludedNodeIds,
-  });
+  const warnings: string[] = [];
+  const excludedNodeIds: ContextManifest["excludedNodeIds"] = [];
+  const messages: ChatMessage[] = [{ role: "system", content: SYSTEM_PROMPT }];
+  const globalContext = project.globalContext?.trim();
 
-  // Stage 3 — explicitly included Leaf notes.
-  const { leafSections, includedLeafIds } = collectIncludedLeafSections({
+  if (globalContext) {
+    messages.push({
+      role: "user",
+      content: `[Project Global Context]\n${globalContext}`,
+    });
+  }
+
+  const transfers = collectApplicableTransfers(project, anchor.id, warnings);
+  if (transfers.pinnedSections.length > 0) {
+    messages.push({
+      role: "user",
+      content: `[Pinned Project Context]\n${transfers.pinnedSections.join("\n\n")}`,
+    });
+  }
+
+  const rootPrompt = root.prompt.trim();
+  if (rootPrompt) {
+    messages.push({ role: "user", content: rootPrompt });
+  }
+
+  for (const node of path.slice(1)) {
+    appendNodeMessages(messages, node);
+  }
+
+  if (transfers.targetSections.length > 0) {
+    messages.push({
+      role: "user",
+      content: `[Explicit Cross-Branch Context]\n${transfers.targetSections.join("\n\n")}`,
+    });
+  }
+
+  const { sections: leafSections, includedIds: includedLeafIds } = collectIncludedLeaves(
     project,
-    pathNodes,
-    excluded,
+    path,
     excludedNodeIds,
-  });
-
-  // Stage 4 — anchor prompt (the current task's own text).
-  const isAuxoAnchor = anchor.nodeRole === "task" || anchor.nodeRole === "task-group";
-  const anchorPrompt = clipWithWarning(
-    anchor.prompt,
-    isAuxoAnchor ? AUXO_MAX_SOURCE_UNIT_CHARS : MAX_ANCHOR_PROMPT,
-    isAuxoAnchor
-      ? "当前 Auxo 任务超过输入上限，已在上下文中截断。"
-      : "当前父节点问题过长，已在上下文中截断。",
-    warnings,
   );
+  if (leafSections.length > 0) {
+    messages.push({
+      role: "user",
+      content: `[Explicitly Included Leaf Notes]\n${leafSections.join("\n\n")}`,
+    });
+  }
 
-  // Stage 5 — relevant Nutrient chunks.
-  const nutrientChunks = selectAnchorNutrientChunks({
-    project,
-    pathNodes,
-    root,
+  const nutrientQuery = [
     prompt,
-    budget: input.nutrientBudget ?? DEFAULT_NUTRIENT_BUDGET,
-    warnings,
-  });
-
-  // Stage 6 — the current question closes the compiled user message.
-  const sections = [
-    `根任务\n${rootPrompt}`,
-    semanticSections.length > 0
-      ? `有效父路径语义\n${semanticSections.map((section) => section.text).join("\n\n")}`
-      : "",
-    leafSections.length > 0
-      ? `用户显式纳入的笔记\n${leafSections.join("\n\n")}`
-      : "",
-    anchor.id !== root.id ? `当前任务原文\n${anchorPrompt}` : "",
-    formatNutrientChunks(nutrientChunks),
-    `当前问题\n${prompt}`,
-  ].filter(Boolean);
-
-  const manifest: ContextManifest = {
-    compilerVersion: 1,
-    compiledAt,
-    model,
-    selectedNodeId,
-    parentNodeId: anchor.id,
-    includedNodeIds: [
-      root.id,
-      ...semanticSections.map((section) => section.node.id),
-      ...includedLeafIds,
-    ],
-    excludedNodeIds,
-    nutrientChunks: nutrientChunks.map((chunk) => ({
-      nutrientId: chunk.nutrientId,
-      nutrientName: chunk.nutrientName,
-      chunkId: chunk.chunkId,
-    })),
-    warnings,
-  };
-
-  return {
-    anchorNodeId: anchor.id,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: sections.join("\n\n") },
-    ],
-    manifest,
-  };
-}
-
-/**
- * Stage 2 — 有效父路径语义. Walks the path nodes from the anchor toward the
- * root so nearer nodes get budget priority, then restores root→anchor order
- * for assembly. Only compact semantic cards travel — full answers never do.
- */
-function collectParentSemanticSections(params: {
-  pathNodes: MindNode[];
-  root: MindNode;
-  anchor: MindNode;
-  budget: number;
-  excluded: Set<string>;
-  excludedNodeIds: ExcludedNodeIds;
-}): SemanticSection[] {
-  const { pathNodes, root, anchor, excluded, excludedNodeIds } = params;
-  const sections: SemanticSection[] = [];
-  const seenSemantics = new Set<string>();
-  let remaining = params.budget;
-
-  for (const node of [...pathNodes].reverse()) {
-    if (node.id === root.id || node.kind === "leaf") continue;
-
-    if (node.status === "failed") {
-      addExcluded(node.id, "failed", excluded, excludedNodeIds);
-      continue;
-    }
-    if (node.status && node.status !== "complete") {
-      addExcluded(node.id, "incomplete", excluded, excludedNodeIds);
-      continue;
-    }
-    // Auxo task/task-group nodes contribute their immutable source text, not
-    // answer semantics, so graft-induced staleness does not affect them.
-    if (node.nodeRole === "task" || node.nodeRole === "task-group") {
-      const taskParts = [
-        node.id === anchor.id ? "" : `任务原文：${node.prompt.trim()}`,
-        node.taskDescription?.trim()
-          ? `规划说明：${node.taskDescription.trim()}`
-          : "",
-      ].filter(Boolean);
-      const section = `[Auxo ${node.nodeRole === "task-group" ? "任务组" : "原子任务"} ${node.id}]\n${taskParts.join("\n")}`;
-      if (section.length > remaining) {
-        addExcluded(node.id, "budget", excluded, excludedNodeIds);
-        continue;
-      }
-      sections.push({ node, text: section });
-      remaining -= section.length;
-      continue;
-    }
-    if (node.contextState === "stale") {
-      addExcluded(node.id, "stale", excluded, excludedNodeIds);
-      continue;
-    }
-    if (node.contextState !== "valid" || !isUsableSemanticCard(node.semanticCard)) {
-      addExcluded(node.id, "missing", excluded, excludedNodeIds);
-      continue;
-    }
-
-    const semanticText = semanticCardToText(node.semanticCard);
-    const fingerprint = semanticText.replace(/\s+/g, " ").trim();
-    if (seenSemantics.has(fingerprint)) {
-      addExcluded(node.id, "duplicate", excluded, excludedNodeIds);
-      continue;
-    }
-    const section = `[节点 ${node.id} 的有效语义]\n${semanticText}`;
-    if (section.length > remaining) {
-      addExcluded(node.id, "budget", excluded, excludedNodeIds);
-      continue;
-    }
-
-    sections.push({ node, text: section });
-    remaining -= section.length;
-    seenSemantics.add(fingerprint);
-  }
-  sections.reverse();
-  return sections;
-}
-
-/**
- * Stage 3 — 用户显式纳入的 Leaf 笔记. Leaves are isolated by default: only
- * includeInContext leaves enter; the rest are recorded with reason "leaf".
- * Shares the skip-and-continue budget policy.
- */
-function collectIncludedLeafSections(params: {
-  project: Project;
-  pathNodes: MindNode[];
-  excluded: Set<string>;
-  excludedNodeIds: ExcludedNodeIds;
-}): { leafSections: string[]; includedLeafIds: string[] } {
-  const { project, pathNodes, excluded, excludedNodeIds } = params;
-  const leafSections: string[] = [];
-  const includedLeafIds: string[] = [];
-  const seenLeafIds = new Set<string>();
-  let remaining = MAX_INCLUDED_LEAF_TEXT;
-
-  for (const node of pathNodes) {
-    for (const childId of node.children) {
-      const child = project.nodes[childId];
-      if (!child || child.kind !== "leaf") continue;
-      if (seenLeafIds.has(child.id)) continue;
-      seenLeafIds.add(child.id);
-      if (!child.includeInContext) {
-        addExcluded(child.id, "leaf", excluded, excludedNodeIds);
-        continue;
-      }
-      const leafText = child.prompt.trim();
-      if (!leafText) continue;
-      const section = `[用户显式纳入的 Leaf ${child.id}]\n${leafText}`;
-      if (section.length > remaining) {
-        addExcluded(child.id, "budget", excluded, excludedNodeIds);
-        continue;
-      }
-      leafSections.push(section);
-      includedLeafIds.push(child.id);
-      remaining -= section.length;
-    }
-  }
-
-  return { leafSections, includedLeafIds };
-}
-
-/**
- * Stage 5 — 相关 Nutrient 片段. Inside an Auxo subtree the generation-time
- * Nutrient ID snapshot (nearest task/task-group's nutrientRefs) wins over the
- * project's currently active list.
- */
-function selectAnchorNutrientChunks(params: {
-  project: Project;
-  pathNodes: MindNode[];
-  root: MindNode;
-  prompt: string;
-  budget: number;
-  warnings: string[];
-}): NutrientChunk[] {
-  const { project, pathNodes, root, prompt, warnings } = params;
-  const auxoPathQueries = pathNodes
-    .filter((node) => node.nodeRole === "task" || node.nodeRole === "task-group")
-    .map((node) => node.prompt);
-  const nutrientQuery = [prompt, ...auxoPathQueries, root.prompt].join("\n");
-  const auxoPathNode = [...pathNodes]
+    ...path.flatMap((node) => [node.prompt, node.response]),
+    globalContext ?? "",
+  ].join("\n");
+  const auxoPathNode = [...path]
     .reverse()
     .find((node) => node.nodeRole === "task" || node.nodeRole === "task-group");
   const nutrientIds = auxoPathNode
@@ -345,12 +162,55 @@ function selectAnchorNutrientChunks(params: {
       );
     }
   }
-  return selectRelevantNutrientChunks(
+  const nutrientChunks = selectRelevantNutrientChunks(
     Object.values(project.nutrients),
     nutrientIds,
     nutrientQuery,
-    params.budget,
+    input.nutrientBudget ?? DEFAULT_NUTRIENT_BUDGET,
   );
+  const nutrientContext = formatNutrientChunks(nutrientChunks);
+  if (nutrientContext) {
+    messages.push({ role: "user", content: nutrientContext });
+  }
+
+  messages.push({ role: "user", content: prompt });
+
+  const manifest: ContextManifest = {
+    compilerVersion: 4,
+    compiledAt,
+    model,
+    selectedNodeId,
+    parentNodeId: anchor.id,
+    includedNodeIds: [
+      ...path.map((node) => node.id),
+      ...includedLeafIds,
+    ],
+    excludedNodeIds,
+    nutrientChunks: nutrientChunks.map((chunk) => ({
+      nutrientId: chunk.nutrientId,
+      nutrientName: chunk.nutrientName,
+      chunkId: chunk.chunkId,
+    })),
+    contextTransfers: transfers.included,
+    warnings,
+  };
+  const debug: ContextDebugInfo = {
+    nodeId: anchor.id,
+    ancestorNodeIds: path.map((node) => node.id),
+    contextMessageCount: messages.length,
+    estimatedInputTokens: estimateInputTokens(messages),
+  };
+
+  if (process.env.NODE_ENV === "development") {
+    console.debug("[TreeChat Context Debug]", debug);
+  }
+
+  return {
+    anchorNodeId: anchor.id,
+    messages,
+    manifest,
+    debug,
+  };
 }
 
 function resolveAnchorNode(project: Project, selected: MindNode, root: MindNode): MindNode {
@@ -360,62 +220,127 @@ function resolveAnchorNode(project: Project, selected: MindNode, root: MindNode)
   return parent && parent.kind !== "leaf" ? parent : root;
 }
 
-function collectParentPath(
-  project: Project,
-  anchor: MindNode,
-  warnings: string[],
-): MindNode[] {
-  const reversePath: MindNode[] = [];
-  const visited = new Set<string>();
-  let current: MindNode | undefined = anchor;
-
-  while (current) {
-    if (visited.has(current.id)) {
-      warnings.push(`检测到父链循环，已在节点 ${current.id} 停止编译。`);
-      break;
+function appendNodeMessages(messages: ChatMessage[], node: MindNode) {
+  if (node.nodeRole === "task" || node.nodeRole === "task-group") {
+    const parts = [
+      node.prompt.trim() ? `任务原文：${node.prompt.trim()}` : "",
+      node.taskDescription?.trim()
+        ? `规划说明：${node.taskDescription.trim()}`
+        : "",
+    ].filter(Boolean);
+    if (parts.length > 0) {
+      messages.push({
+        role: "user",
+        content: `[Auxo ${node.nodeRole === "task-group" ? "任务组" : "原子任务"} ${node.id}]\n${parts.join("\n")}`,
+      });
     }
-    visited.add(current.id);
-    reversePath.push(current);
-    if (!current.parentId) break;
-    const parentNode: MindNode | undefined = project.nodes[current.parentId];
-    if (!parentNode) {
-      warnings.push(`节点 ${current.id} 的父节点不存在，已保守停止。`);
-      break;
-    }
-    current = parentNode;
+    return;
   }
 
-  return reversePath.reverse();
+  const nodePrompt = node.prompt.trim();
+  if (nodePrompt) messages.push({ role: "user", content: nodePrompt });
+
+  const nodeResponse = node.response.trim();
+  if (nodeResponse) messages.push({ role: "assistant", content: nodeResponse });
 }
 
-function uniqueNodes(nodes: MindNode[]): MindNode[] {
-  const seen = new Set<string>();
-  return nodes.filter((node) => {
-    if (seen.has(node.id)) return false;
-    seen.add(node.id);
-    return true;
-  });
-}
-
-function addExcluded(
-  nodeId: string,
-  reason: ExcludedNodeIds[number]["reason"],
-  seen: Set<string>,
-  output: ExcludedNodeIds,
-) {
-  if (seen.has(nodeId)) return;
-  seen.add(nodeId);
-  output.push({ nodeId, reason });
-}
-
-function clipWithWarning(
-  value: string,
-  maxLength: number,
-  warning: string,
+function collectApplicableTransfers(
+  project: Project,
+  targetNodeId: string,
   warnings: string[],
-): string {
-  const trimmed = value.trim();
-  if (trimmed.length <= maxLength) return trimmed;
-  warnings.push(warning);
-  return `${trimmed.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+): {
+  pinnedSections: string[];
+  targetSections: string[];
+  included: ContextTransfer[];
+} {
+  const pinnedSections: string[] = [];
+  const targetSections: string[] = [];
+  const included: ContextTransfer[] = [];
+
+  for (const transfer of project.contextTransfers ?? []) {
+    const isPin = transfer.transferType === "pin";
+    if (!isPin && transfer.targetNodeId !== targetNodeId) continue;
+
+    const source = project.nodes[transfer.sourceNodeId];
+    if (!source) {
+      warnings.push(`上下文转移 ${transfer.id} 的来源节点不存在，已跳过。`);
+      continue;
+    }
+
+    const sourceContent = formatTransferNodeContent(source);
+    if (!sourceContent) {
+      warnings.push(`上下文转移 ${transfer.id} 的来源节点没有可用内容，已跳过。`);
+      continue;
+    }
+
+    const section = [
+      `[${transfer.transferType.toUpperCase()} ${transfer.id}]`,
+      `source_node_id: ${transfer.sourceNodeId}`,
+      `target_node_id: ${transfer.targetNodeId}`,
+      sourceContent,
+    ].join("\n");
+    if (isPin) pinnedSections.push(section);
+    else targetSections.push(section);
+    included.push({ ...transfer });
+  }
+
+  return { pinnedSections, targetSections, included };
+}
+
+function formatTransferNodeContent(node: MindNode): string {
+  const prompt = node.prompt.trim();
+  const response = node.kind === "root" ? "" : node.response.trim();
+  if (prompt && response) return `user: ${prompt}\nassistant: ${response}`;
+  if (response) return `assistant: ${response}`;
+  return prompt ? `user: ${prompt}` : "";
+}
+
+function collectIncludedLeaves(
+  project: Project,
+  path: MindNode[],
+  excludedNodeIds: ContextManifest["excludedNodeIds"],
+): { sections: string[]; includedIds: string[] } {
+  const sections: string[] = [];
+  const includedIds: string[] = [];
+  const seenLeafIds = new Set<string>();
+  let remaining = MAX_INCLUDED_LEAF_TEXT;
+
+  for (const node of path) {
+    for (const childId of node.children) {
+      const child = project.nodes[childId];
+      if (!child || child.kind !== "leaf" || seenLeafIds.has(child.id)) continue;
+      seenLeafIds.add(child.id);
+
+      if (!child.includeInContext) {
+        excludedNodeIds.push({ nodeId: child.id, reason: "leaf" });
+        continue;
+      }
+
+      const text = formatLeafContextText(child);
+      if (!text) continue;
+      const section = `[Leaf ${child.id}]\n${text}`;
+      if (section.length > remaining) {
+        excludedNodeIds.push({ nodeId: child.id, reason: "budget" });
+        continue;
+      }
+
+      sections.push(section);
+      includedIds.push(child.id);
+      remaining -= section.length;
+    }
+  }
+
+  return { sections, includedIds };
+}
+
+function formatLeafContextText(node: MindNode): string {
+  const name = node.prompt.trim();
+  const content = node.response.trim();
+  if (name && content) return `${name}\n${content}`;
+  return content || name;
+}
+
+function estimateInputTokens(messages: ChatMessage[]): number {
+  const characterCount = messages.reduce((total, message) => total + message.content.length, 0);
+  return Math.ceil(characterCount / 4);
 }

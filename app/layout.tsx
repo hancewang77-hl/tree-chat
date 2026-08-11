@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "katex/dist/katex.min.css";
 import "./globals.css";
+import "./tree-scene-2d.css";
 
 // 字体：本文件不加载任何网络字体。globals.css 中的 --font-lora /
 // --font-geist-* 只是系统回退字体栈（Georgia、Inter/system-ui 等），

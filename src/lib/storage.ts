@@ -3,9 +3,7 @@ import type { Project, TreeState } from "@/src/types/tree";
 // Single localStorage key for the whole workspace. v1 stored the bare
 // projects map; v2 wraps it in StoredWorkspace.
 const STORAGE_KEY = "tree-chat-projects";
-// Stamped on every save. Loading is shape-based, not version-based: this value
-// is written but never read back (see loadWorkspace).
-export const CURRENT_WORKSPACE_SCHEMA_VERSION = 2;
+export const CURRENT_WORKSPACE_SCHEMA_VERSION = 3;
 
 /**
  * Persisted subset of TreeState. Rings history and all other view state are

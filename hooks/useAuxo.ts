@@ -4,6 +4,12 @@ import type { AuxoPlan, AuxoRequest } from "@/src/types/tree";
 
 const CLIENT_TIMEOUT = 55_000;
 
+export type GenerateAuxoPlanInput = {
+  sessionId: string;
+  rootNodeId: string;
+  request: AuxoRequest;
+};
+
 /**
  * Cancelable Auxo plan request. Invariants: at most one request in flight
  * (rejects re-entry), a CLIENT_TIMEOUT abort distinct from user cancellation,
@@ -15,7 +21,7 @@ export function useAuxo() {
   const inFlightRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const generatePlan = useCallback(async (request: AuxoRequest): Promise<AuxoPlan> => {
+  const generatePlan = useCallback(async (input: GenerateAuxoPlanInput): Promise<AuxoPlan> => {
     if (inFlightRef.current) {
       throw new Error("Auxo 正在生成任务树，请勿重复提交。");
     }
@@ -35,7 +41,7 @@ export function useAuxo() {
       const response = await fetch("/api/auxo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(request),
+        body: JSON.stringify(input),
         signal: abortController.signal,
       });
       const body = (await response.json().catch(() => null)) as
@@ -51,7 +57,7 @@ export function useAuxo() {
 
       // The server validates first; this second pass is deliberately client-side.
       // Real tree IDs are created only after this check succeeds.
-      return validateAuxoPlan(body.plan, request);
+      return validateAuxoPlan(body.plan, input.request);
     } catch (error) {
       if (abortController.signal.aborted) {
         throw new Error(didTimeout ? "Auxo 规划超时，请缩小资料范围后重试。" : "Auxo 规划已取消。");

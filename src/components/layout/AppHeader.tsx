@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Search, Box, Layers, LayoutGrid, History, Download, HelpCircle, Sun, Moon } from "lucide-react";
+import { Search, LayoutGrid, History, Download, HelpCircle, Sun, Moon } from "lucide-react";
 import { BrandLogo } from "@/src/components/brand/BrandLogo";
 import { useTreeState, useTreeDispatch } from "@/src/state/TreeContext";
 import { HelpDialog } from "@/src/components/overlays/HelpDialog";
@@ -66,25 +66,6 @@ export function AppHeader() {
       </div>
 
       <div className="flex items-center gap-1.5">
-        {/* 2D/3D toggle */}
-        <button
-          onClick={() => dispatch({ type: "TOGGLE_3D" })}
-          aria-label="3D 模式"
-          aria-pressed={state.is3DMode}
-          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-all hover:opacity-85"
-          style={{
-            background: "var(--accent-olive-soft)",
-            color: "var(--accent-olive-deep)",
-            border: "1px solid var(--control-border)",
-          }}
-          title={state.is3DMode ? "切换至 2D" : "切换至 3D"}
-        >
-          {state.is3DMode ? <Layers size={15} /> : <Box size={15} />}
-          <span className="hidden sm:inline">{state.is3DMode ? "3D" : "2D"}</span>
-        </button>
-
-        <div className="h-5 w-px" style={{ background: "var(--border-warm)" }} />
-
         {/* Canopy */}
         <button
           onClick={() => dispatch({ type: "TOGGLE_CANOPY" })}

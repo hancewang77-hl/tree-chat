@@ -1,19 +1,17 @@
-import OpenAI from "openai";
-import {
-  DEEPSEEK_NON_THINKING,
-  deepSeekClientOptions,
-  type DeepSeekChatParamsNonStreaming,
-} from "@/src/lib/deepseek";
 import { createRateLimiter, getClientIp } from "@/src/lib/rateLimit";
 import {
   AUXO_MAX_BODY_BYTES,
   AUXO_MAX_DEPTH,
   AUXO_MAX_NODES,
-  AUXO_MODEL,
   AuxoValidationError,
   parseAuxoPlan,
   validateAuxoRequest,
 } from "@/src/lib/auxo";
+import {
+  RuntimeTaskExecutionError,
+  runRuntimeTask,
+} from "@/src/runtime/nextProxy";
+import { TASK_PRIORITY } from "@/src/runtime/task";
 
 const RATE_LIMIT = 6;
 const RATE_WINDOW = 60_000;
@@ -76,6 +74,8 @@ export async function POST(req: Request) {
   }
 
   let requestBody: ReturnType<typeof validateAuxoRequest>;
+  let sessionId = "";
+  let rootNodeId = "";
   try {
     const rawBody = await readBoundedBody(req, AUXO_MAX_BODY_BYTES);
     let parsed: unknown;
@@ -84,7 +84,10 @@ export async function POST(req: Request) {
     } catch {
       return json({ error: "请求体格式错误，需要有效的 JSON" }, 400);
     }
-    requestBody = validateAuxoRequest(parsed);
+    const envelope = validateAuxoEnvelope(parsed);
+    sessionId = envelope.sessionId;
+    rootNodeId = envelope.rootNodeId;
+    requestBody = validateAuxoRequest(envelope.request);
   } catch (error) {
     if (error instanceof AuxoValidationError) {
       const status = error.code.includes("BUDGET") || error.code.includes("TOO_LARGE") ? 413 : 400;
@@ -94,12 +97,6 @@ export async function POST(req: Request) {
     return json({ error: "Auxo 请求校验失败" }, 400);
   }
 
-  const apiKey = process.env.DEEPSEEK_API_KEY;
-  if (!apiKey) {
-    return json({ error: "DEEPSEEK_API_KEY 未配置" }, 500);
-  }
-
-  const client = new OpenAI(deepSeekClientOptions(apiKey));
   const controller = new AbortController();
   let didTimeout = false;
   const handleClientAbort = () => controller.abort();
@@ -110,10 +107,16 @@ export async function POST(req: Request) {
   }, REQUEST_TIMEOUT);
 
   let content = "";
-  let model = AUXO_MODEL;
+  const model = process.env.TREECHAT_DEEPSEEK_MODEL?.trim() || "deepseek-chat";
   try {
-    const completionRequest: DeepSeekChatParamsNonStreaming = {
-      model: AUXO_MODEL,
+    const auxoNodeId = `auxo-${crypto.randomUUID()}`;
+    const task = await runRuntimeTask({
+      session_id: sessionId,
+      node_id: auxoNodeId,
+      task_type: "chat_generation",
+      priority: TASK_PRIORITY.Background,
+      root_node_id: rootNodeId,
+      ancestor_node_ids: [rootNodeId, auxoNodeId],
       messages: [
         { role: "system", content: AUXO_SYSTEM_PROMPT },
         {
@@ -121,18 +124,8 @@ export async function POST(req: Request) {
           content: JSON.stringify(requestBody),
         },
       ],
-      response_format: { type: "json_object" },
-      stream: false,
-      thinking: DEEPSEEK_NON_THINKING,
-      temperature: 0.1,
-      max_tokens: 8_000,
-    };
-    const completion = await client.chat.completions.create(
-      completionRequest,
-      { signal: controller.signal },
-    );
-    content = completion.choices[0]?.message?.content ?? "";
-    model = completion.model || AUXO_MODEL;
+    }, controller.signal);
+    content = task.result ?? "";
   } catch (error) {
     if (didTimeout) {
       return json({ error: "Auxo 规划超时，请缩小资料范围后重试" }, 504);
@@ -140,7 +133,11 @@ export async function POST(req: Request) {
     if (req.signal.aborted) {
       return json({ error: "Auxo 规划已取消" }, 499);
     }
-    console.error("DeepSeek Auxo route error:", error);
+    if (error instanceof RuntimeTaskExecutionError) {
+      const status = error.task.error_type === "timeout" ? 504 : 502;
+      return json({ error: `Auxo Runtime Task 失败：${error.message}` }, status);
+    }
+    console.error("Auxo Runtime route error:", error);
     return json({ error: "Auxo 暂时无法生成计划，请稍后重试" }, 502);
   } finally {
     clearTimeout(timeoutId);
@@ -154,7 +151,7 @@ export async function POST(req: Request) {
     });
     return json({ plan }, 200);
   } catch (error) {
-    console.error("DeepSeek Auxo plan validation error:", error);
+    console.error("Auxo plan validation error:", error);
     const code = error instanceof AuxoValidationError ? error.code : "INVALID_PLAN";
     return json(
       {
@@ -164,6 +161,30 @@ export async function POST(req: Request) {
       502,
     );
   }
+}
+
+function validateAuxoEnvelope(value: unknown): {
+  sessionId: string;
+  rootNodeId: string;
+  request: unknown;
+} {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new AuxoValidationError("INVALID_REQUEST", "Auxo 请求体必须是对象");
+  }
+  const envelope = value as Record<string, unknown>;
+  const sessionId = boundedIdentifier(envelope.sessionId, "sessionId");
+  const rootNodeId = boundedIdentifier(envelope.rootNodeId, "rootNodeId");
+  return { sessionId, rootNodeId, request: envelope.request };
+}
+
+function boundedIdentifier(value: unknown, field: string): string {
+  if (typeof value !== "string" || !value.trim() || value.length > 256) {
+    throw new AuxoValidationError(
+      "INVALID_REQUEST",
+      `${field} 必须是长度不超过 256 的非空字符串`,
+    );
+  }
+  return value.trim();
 }
 
 function checkRateLimit(req: Request): Response | null {

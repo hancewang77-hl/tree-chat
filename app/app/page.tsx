@@ -1,16 +1,16 @@
 "use client";
 
-// The interactive workbench lives at /app; the root route is the public narrative.
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getContextPath } from "@/hooks/useTreeLayout";
+import { getContextPath, canAttachLeaf } from "@/hooks/useTreeLayout";
 import { useAIChat } from "@/hooks/useAIChat";
 import { useAuxo } from "@/hooks/useAuxo";
-import { compileContext } from "@/src/lib/contextCompiler";
+import {
+  getBranchTopology,
+  type BranchTopology,
+} from "@/src/lib/branchTopology";
 import { compileAuxoInput, type AuxoInputBundle } from "@/src/lib/auxo";
-import type { AuxoPlan, MindNode, NodesMap, TreeState } from "@/src/types/tree";
-import { DEEPSEEK_MODEL } from "@/src/lib/deepseek";
-import { clamp } from "@/src/lib/utils";
+import { submitTreeChatAction } from "@/src/product/productAction";
+import type { AuxoPlan, TreeState } from "@/src/types/tree";
 import { TreeProvider, useTreeState, useTreeDispatch } from "@/src/state/TreeContext";
 import { TreeScene } from "@/src/components/scene/TreeScene";
 import { AppHeader } from "@/src/components/layout/AppHeader";
@@ -18,66 +18,19 @@ import { ForestSidebar } from "@/src/components/layout/ForestSidebar";
 import { InspectorSidebar } from "@/src/components/layout/InspectorSidebar";
 import { BottomComposer } from "@/src/components/layout/BottomComposer";
 import { TreeToolbar } from "@/src/components/toolbar/TreeToolbar";
-import { ZoomControls } from "@/src/components/toolbar/ZoomControls";
 import { EmptyState } from "@/src/components/overlays/EmptyState";
 import { SearchPalette } from "@/src/components/overlays/SearchPalette";
 import { CanopyMinimap } from "@/src/components/overlays/CanopyMinimap";
 import { RingsPanel } from "@/src/components/overlays/RingsPanel";
 import { LayerNameDialog } from "@/src/components/LayerNameDialog";
+import { LeafNameDialog } from "@/src/components/overlays/LeafNameDialog";
 import { AuxoDialog } from "@/src/components/overlays/AuxoDialog";
+import { TASK_PRIORITY } from "@/src/runtime/task";
 
-const CHAT_MODEL = DEEPSEEK_MODEL;
-
-// ———— Pure helpers (no React state) ————
-
-// Context anchor: leaves never anchor context themselves — they delegate to
-// their parent (falling back to the root). Branch/root nodes anchor directly.
-function resolveContextAnchorId<T extends string | undefined>(
-  node: MindNode | undefined,
-  rootNodeId: T,
-): string | T {
-  if (!node) return rootNodeId;
-  return node.kind === "leaf" ? node.parentId ?? rootNodeId : node.id;
-}
-
-// 3D wheel layer switching: may overshoot the occupied layer range by up to
-// 2 layers in each direction (layer 0 always counts as occupied).
-function wheelTargetLayer(nodes: NodesMap, currentLayer: number, direction: number): number {
-  const allLayers = Object.values(nodes).map((n) => n.layer);
-  const minL = Math.min(...allLayers, currentLayer, 0);
-  const maxL = Math.max(...allLayers, currentLayer, 0);
-  return clamp(currentLayer + direction, minL - 2, maxL + 2);
-}
-
-// Representative node for a layer: shallowest context path wins; ties break
-// to the earliest timestamp.
-function pickLayerRepresentative(nodes: NodesMap, candidates: MindNode[]): MindNode {
-  return candidates.reduce((bestNode, currentNode) => {
-    const bestDepth = getContextPath(nodes, bestNode.id).length;
-    const currentDepth = getContextPath(nodes, currentNode.id).length;
-    if (currentDepth < bestDepth) return currentNode;
-    if (currentDepth > bestDepth) return bestNode;
-    return currentNode.timestamp < bestNode.timestamp ? currentNode : bestNode;
-  });
-}
-
-function isAbortError(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "name" in err &&
-    (err as { name?: unknown }).name === "AbortError"
-  );
-}
+const CHAT_MODEL = "deepseek-chat";
 
 type AuxoRootDrift = "missing-root" | "root-not-empty" | "fingerprint-changed";
 
-// Shared by the double Auxo validation (once when the plan request returns,
-// once again right before the confirmed write). Any drift aborts the merge
-// with zero writes: the project/root was deleted or replaced, the root grew
-// children during the request, or the root task + enabled nutrients no longer
-// match the fingerprint the plan was generated from. Checks run in this
-// order; the fingerprint is only compiled once the root is known to exist.
 function detectAuxoRootDrift(
   state: TreeState,
   projectId: string,
@@ -99,7 +52,14 @@ function detectAuxoRootDrift(
 function App() {
   const state = useTreeState();
   const dispatch = useTreeDispatch();
-  const { isAiTyping, isTypingRef, sendMessage, structureNode, stopStreaming } = useAIChat();
+  const {
+    activeChatNodeIds,
+    tasks,
+    sendMessage,
+    retryMessage,
+    structureNode,
+    stopStreaming,
+  } = useAIChat();
   const {
     generatePlan: generateAuxoPlan,
     isGenerating: isAuxoGenerating,
@@ -110,12 +70,29 @@ function App() {
   const activeProject = state.projects[state.activeProjectId];
   const nodes = useMemo(() => activeProject?.nodes ?? {}, [activeProject]);
   const isEmpty = !activeProject;
+  const retryableAnswerNodeIds = useMemo(
+    () =>
+      new Set(
+        Object.values(tasks)
+          .filter(
+            (task) =>
+              task.session_id === activeProject?.id &&
+              task.task_type === "chat_generation" &&
+              (task.state === "failed" || task.state === "cancelled"),
+          )
+          .map((task) => task.node_id),
+      ),
+    [activeProject?.id, tasks],
+  );
 
   const [error, setError] = useState<string | null>(null);
   const [structuringNodeIds, setStructuringNodeIds] = useState<Set<string>>(() => new Set());
   const structuringNodeIdsRef = useRef<Set<string>>(new Set());
   const [renameLayer, setRenameLayer] = useState<number | null>(null);
   const [planeNameInput, setPlaneNameInput] = useState("");
+  const [leafNameDialogOpen, setLeafNameDialogOpen] = useState(false);
+  const [leafNameInput, setLeafNameInput] = useState("");
+  const [pendingLeafName, setPendingLeafName] = useState<string | null>(null);
   const [isAuxoOpen, setIsAuxoOpen] = useState(false);
   const [auxoError, setAuxoError] = useState<string | null>(null);
   const [auxoPreview, setAuxoPreview] = useState<{
@@ -125,100 +102,24 @@ function App() {
     projectId: string;
   } | null>(null);
 
-  // Ref mirrors of the latest state/nodes, refreshed after every commit.
-  // Stable useCallback handlers and long-running async flows (streaming,
-  // Auxo) read these instead of captured values, so code after an await
-  // always observes the post-dispatch tree rather than a stale closure.
-  const nodesRef = useRef(nodes);
+  // Ref for latest state used in callbacks — avoids stale closures
   const stateRef = useRef(state);
-  useEffect(() => { nodesRef.current = nodes; });
   useEffect(() => { stateRef.current = state; });
-
-  // ———— Layer animation ————
-
-  // Animate displayLayer toward selectedLayer: eased each rAF frame
-  // (factor 0.14) and snapped once within 0.001 to end the loop.
-  const [displayLayer, setDisplayLayer] = useState(state.selectedLayer);
-
-  useEffect(() => {
-    let frame = 0;
-    function animate() {
-      setDisplayLayer((prev) => {
-        const next = prev + (state.selectedLayer - prev) * 0.14;
-        if (Math.abs(next - state.selectedLayer) < 0.001) return state.selectedLayer;
-        return next;
-      });
-      frame = requestAnimationFrame(animate);
-    }
-    frame = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(frame);
-  }, [state.selectedLayer]);
-
-  // Auto-select a node on the current layer when in layerMove + 3D mode
-  useEffect(() => {
-    if (!state.is3DMode || state.toolMode !== "layerMove" || state.movingNodeId !== null) return;
-
-    const selectedNode = nodes[state.selectedNodeId];
-    if (!selectedNode) return;
-    if (selectedNode.layer === state.selectedLayer) return;
-
-    const candidates = Object.values(nodes).filter((n) => n.layer === state.selectedLayer);
-    if (candidates.length === 0) {
-      dispatch({ type: "SELECT_NODE", nodeId: activeProject?.rootNodeId ?? "root" });
-      return;
-    }
-
-    const best = pickLayerRepresentative(nodes, candidates);
-
-    if (best.id !== state.selectedNodeId) {
-      dispatch({ type: "SELECT_NODE", nodeId: best.id });
-    }
-  }, [state.is3DMode, state.toolMode, state.movingNodeId, state.selectedLayer, state.selectedNodeId, nodes, activeProject?.rootNodeId, dispatch]);
 
   const currentPath = useMemo(
     () => getContextPath(nodes, state.selectedNodeId),
     [nodes, state.selectedNodeId],
   );
-  const selectedContextAnchorId = useMemo(
-    () => resolveContextAnchorId(nodes[state.selectedNodeId], activeProject?.rootNodeId),
-    [activeProject?.rootNodeId, nodes, state.selectedNodeId],
-  );
+  const selectedContextAnchorId = useMemo(() => {
+    const selectedNode = nodes[state.selectedNodeId];
+    if (!selectedNode) return activeProject?.rootNodeId;
+    return selectedNode.kind === "leaf"
+      ? selectedNode.parentId ?? activeProject?.rootNodeId
+      : selectedNode.id;
+  }, [activeProject?.rootNodeId, nodes, state.selectedNodeId]);
   const isSelectedContextStructuring = selectedContextAnchorId
     ? structuringNodeIds.has(selectedContextAnchorId)
     : false;
-
-  // ———— Zoom & wheel ————
-
-  const handleZoomIn = useCallback(() => {
-    if (stateRef.current.is3DMode) {
-      dispatch({ type: "SET_ZOOM", zoom3D: clamp(stateRef.current.zoom3D + 0.2, 0.1, 4.0) });
-    } else {
-      dispatch({ type: "SET_ZOOM", zoom2D: clamp(stateRef.current.zoom2D + 14, 10, 260) });
-    }
-  }, [dispatch]);
-
-  const handleZoomOut = useCallback(() => {
-    if (stateRef.current.is3DMode) {
-      dispatch({ type: "SET_ZOOM", zoom3D: clamp(stateRef.current.zoom3D - 0.2, 0.1, 4.0) });
-    } else {
-      dispatch({ type: "SET_ZOOM", zoom2D: clamp(stateRef.current.zoom2D - 14, 10, 260) });
-    }
-  }, [dispatch]);
-
-  // 2D: wheel zooms. 3D: wheel scrolls layers instead.
-  const handleSceneWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const s = stateRef.current;
-    if (!s.is3DMode) {
-      const direction = e.deltaY > 0 ? -1 : 1;
-      dispatch({ type: "SET_ZOOM", zoom2D: clamp(s.zoom2D + direction * 14, 10, 260) });
-      return;
-    }
-    const direction = e.deltaY > 0 ? 1 : -1;
-    dispatch({ type: "SET_LAYER", layer: wheelTargetLayer(nodesRef.current, s.selectedLayer, direction) });
-  }, [dispatch]);
-
-  // ———— Branch flow (streaming answer + semantic card) ————
 
   const finalizeSemanticCard = useCallback(async ({
     projectId,
@@ -226,18 +127,27 @@ function App() {
     parentId,
     prompt,
     response,
+    topology,
   }: {
     projectId: string;
     nodeId: string;
     parentId: string;
     prompt: string;
     response: string;
+    topology: BranchTopology;
   }) => {
     if (!response.trim() || structuringNodeIdsRef.current.has(nodeId)) return;
     structuringNodeIdsRef.current.add(nodeId);
     setStructuringNodeIds((current) => new Set(current).add(nodeId));
     try {
-      const semanticCard = await structureNode(prompt, response);
+      const semanticCard = await structureNode({
+        sessionId: projectId,
+        nodeId,
+        priority: TASK_PRIORITY.Background,
+        prompt,
+        response,
+        topology,
+      });
       dispatch({
         type: "SET_NODE_SEMANTICS",
         projectId,
@@ -278,131 +188,171 @@ function App() {
       parentId: node.parentId,
       prompt: node.prompt,
       response: node.response,
+      topology: getBranchTopology(project.nodes, project.rootNodeId, nodeId),
     });
   }, [finalizeSemanticCard]);
 
   const handleSendMessage = useCallback(async (prompt: string) => {
-    if (!prompt.trim() || isTypingRef.current || !activeProject) return;
+    if (!prompt.trim() || !activeProject) return;
 
     setError(null);
     const s = stateRef.current;
     const projectId = s.activeProjectId;
     const project = s.projects[projectId];
     if (!project) return;
-    const selectedAnchorId = resolveContextAnchorId(project.nodes[s.selectedNodeId], project.rootNodeId);
+    const selectedNode = project.nodes[s.selectedNodeId];
+    const selectedAnchorId = selectedNode?.kind === "leaf"
+      ? selectedNode.parentId ?? project.rootNodeId
+      : selectedNode?.id ?? project.rootNodeId;
     if (structuringNodeIdsRef.current.has(selectedAnchorId)) {
       setError("当前节点的模型上下文正在整理，请稍候再追问。");
       return;
     }
-    let streamingNodeId: string | null = null;
-
     try {
-      const compiled = compileContext({
-        project,
-        selectedNodeId: s.selectedNodeId,
-        prompt: prompt.trim(),
+      const result = await submitTreeChatAction({
+        treeState: s,
+        prompt,
         model: CHAT_MODEL,
-        compiledAt: Date.now(),
+        priority: TASK_PRIORITY.ForegroundInteractive,
+        dispatch,
+        sendChat: sendMessage,
       });
-      const targetParentId = compiled.anchorNodeId;
-      const nodeId = `node-${crypto.randomUUID()}`;
-      streamingNodeId = nodeId;
-      const nutrientRefs = [...project.activeNutrientIds];
-
-      dispatch({
-        type: "STREAM_BRANCH_START",
-        projectId,
-        nodeId,
-        prompt: prompt.trim(),
-        parentId: targetParentId,
-        nutrientRefs,
-        contextManifest: compiled.manifest,
+      if (result.status === "stopped") return;
+      const { prepared, response } = result;
+      await finalizeSemanticCard({
+        projectId: prepared.projectId,
+        nodeId: prepared.nodeId,
+        parentId: prepared.parentNodeId,
+        prompt: prepared.prompt,
+        response,
+        topology: prepared.topology,
       });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "AI 请求失败，请检查网络连接和 API 配置";
+      setError(message);
+    }
+  }, [activeProject, dispatch, finalizeSemanticCard, sendMessage]);
 
-      const response = await sendMessage(
-        compiled.messages,
-        (partialResponse) => {
+  const handleRetryAnswer = useCallback(async (nodeId: string) => {
+    const s = stateRef.current;
+    const project = s.projects[s.activeProjectId];
+    const node = project?.nodes[nodeId];
+    if (!project || !node || node.kind !== "branch" || !node.parentId) return;
+    const sourceTask = Object.values(tasks)
+      .filter(
+        (task) =>
+          task.session_id === project.id &&
+          task.node_id === nodeId &&
+          task.task_type === "chat_generation" &&
+          (task.state === "failed" || task.state === "cancelled"),
+      )
+      .sort((left, right) => right.attempt - left.attempt || right.created_at - left.created_at)[0];
+    if (!sourceTask) {
+      setError("当前浏览器会话中找不到可重试的服务器 Task");
+      return;
+    }
+
+    setError(null);
+    dispatch({
+      type: "STREAM_BRANCH_UPDATE",
+      projectId: project.id,
+      nodeId,
+      response: "",
+    });
+    try {
+      const response = await retryMessage({
+        taskId: sourceTask.task_id,
+        onText: (partialResponse) => {
           dispatch({
             type: "STREAM_BRANCH_UPDATE",
-            projectId,
+            projectId: project.id,
             nodeId,
             response: partialResponse,
           });
         },
-      );
-
+      });
       dispatch({
         type: "STREAM_BRANCH_FINISH",
-        projectId,
+        projectId: project.id,
         nodeId,
         status: "complete",
       });
-
       await finalizeSemanticCard({
-        projectId,
+        projectId: project.id,
         nodeId,
-        parentId: targetParentId,
-        prompt: prompt.trim(),
+        parentId: node.parentId,
+        prompt: node.prompt,
         response,
+        topology: getBranchTopology(project.nodes, project.rootNodeId, nodeId),
       });
-    } catch (err) {
-      if (isAbortError(err) && streamingNodeId) {
+    } catch (retryError) {
+      const aborted =
+        typeof retryError === "object" &&
+        retryError !== null &&
+        "name" in retryError &&
+        (retryError as { name?: unknown }).name === "AbortError";
+      if (aborted) {
         dispatch({
           type: "STREAM_BRANCH_FINISH",
-          projectId,
-          nodeId: streamingNodeId,
+          projectId: project.id,
+          nodeId,
           status: "stopped",
         });
         return;
       }
-
-      const message = err instanceof Error ? err.message : "AI 请求失败，请检查网络连接和 API 配置";
-      if (streamingNodeId) {
-        dispatch({
-          type: "STREAM_BRANCH_FAIL",
-          projectId,
-          nodeId: streamingNodeId,
-          error: message,
-        });
-      }
+      const message = retryError instanceof Error
+        ? retryError.message
+        : "服务器重试失败";
+      dispatch({
+        type: "STREAM_BRANCH_FAIL",
+        projectId: project.id,
+        nodeId,
+        error: message,
+      });
       setError(message);
     }
-  }, [activeProject, dispatch, finalizeSemanticCard, isTypingRef, sendMessage]);
+  }, [dispatch, finalizeSemanticCard, retryMessage, tasks]);
 
-  const handleAddLeaf = useCallback((content: string) => {
-    if (!content.trim() || !activeProject) return;
+  const handleAddLeaf = useCallback((name: string, content: string) => {
+    const leafName = name.trim();
+    const leafContent = content.trim();
+    if (!leafName || !leafContent || !activeProject) return;
     const s = stateRef.current;
-    dispatch({ type: "LEAF", content: content.trim(), parentId: s.selectedNodeId });
+    dispatch({
+      type: "LEAF",
+      name: leafName,
+      content: leafContent,
+      parentId: s.selectedNodeId,
+    });
+    setPendingLeafName(null);
   }, [activeProject, dispatch]);
 
-  // ———— Node selection & layer move ————
-
-  // Arms (or re-arms) a cross-layer move: the wheel then picks the target
-  // layer (SET_LAYER mirrors it into pendingNodeLayer) and the node's ✓
-  // button commits via LAYER_MOVE_CONFIRM. Reducer guards root/leaf again.
-  const handleStartLayerMove = useCallback((nodeId: string) => {
-    const node = nodesRef.current[nodeId];
-    if (!node || node.kind === "root" || node.kind === "leaf") return;
-    dispatch({ type: "LAYER_MOVE_START", nodeId });
-  }, [dispatch]);
-
-  const handleConfirmLayerMove = useCallback(() => {
-    dispatch({ type: "LAYER_MOVE_CONFIRM" });
-  }, [dispatch]);
-
-  const handleSelectNode = useCallback((id: string) => {
+  const handleRequestLeafName = useCallback(() => {
     const s = stateRef.current;
-    if (s.toolMode === "graft" && s.graftSourceId) {
-      dispatch({ type: "GRAFT_CONFIRM", newParentId: id });
-    } else {
-      dispatch({ type: "SELECT_NODE", nodeId: id });
+    const project = s.projects[s.activeProjectId];
+    if (!project) return;
+    if (!canAttachLeaf(project.nodes, s.selectedNodeId)) {
+      setError("每个节点最多只能挂载 3 片叶子");
+      return;
     }
-  }, [dispatch]);
+    setLeafNameInput("");
+    setLeafNameDialogOpen(true);
+  }, []);
 
-  // ———— Auxo choreography ————
-  // Auxo only ever targets an empty root. Guards run at every step — dialog
-  // open, request start, after the plan returns, and on confirmed write; the
-  // latter two share detectAuxoRootDrift (the double fingerprint check).
+  const handleConfirmLeafName = useCallback(() => {
+    const nextName = leafNameInput.trim();
+    if (!nextName) return;
+    setPendingLeafName(nextName);
+    setLeafNameDialogOpen(false);
+    window.dispatchEvent(new CustomEvent("composer-mode", { detail: "note" }));
+    window.dispatchEvent(new CustomEvent("composer-focus"));
+  }, [leafNameInput]);
+
+  useEffect(() => {
+    const handleLeafNameRequest = () => handleRequestLeafName();
+    window.addEventListener("leaf-name-request", handleLeafNameRequest);
+    return () => window.removeEventListener("leaf-name-request", handleLeafNameRequest);
+  }, [handleRequestLeafName]);
 
   const handleOpenAuxo = useCallback(() => {
     const currentState = stateRef.current;
@@ -447,10 +397,17 @@ function App() {
 
     try {
       const input = compileAuxoInput(project);
-      const plan = await generateAuxoPlan(input.request);
-
-      // 第一重校验：计划基于请求时的快照生成，返回后必须对照最新 state。
-      const drift = detectAuxoRootDrift(stateRef.current, project.id, root.id, input.inputFingerprint);
+      const plan = await generateAuxoPlan({
+        sessionId: project.id,
+        rootNodeId: root.id,
+        request: input.request,
+      });
+      const drift = detectAuxoRootDrift(
+        stateRef.current,
+        project.id,
+        root.id,
+        input.inputFingerprint,
+      );
       if (drift === "missing-root") {
         throw new Error("请求期间目标项目已被删除或根节点已变化，本次没有创建节点。");
       }
@@ -463,10 +420,11 @@ function App() {
 
       setAuxoPreview({ plan, request: input, rootNodeId: root.id, projectId: project.id });
     } catch (auxoFailure) {
-      const message = auxoFailure instanceof Error
-        ? auxoFailure.message
-        : "Auxo 生成失败，本次没有创建任何节点。";
-      setAuxoError(message);
+      setAuxoError(
+        auxoFailure instanceof Error
+          ? auxoFailure.message
+          : "Auxo 生成失败，本次没有创建任何节点。",
+      );
     }
   }, [generateAuxoPlan, isAuxoGeneratingRef]);
 
@@ -474,7 +432,6 @@ function App() {
     const preview = auxoPreview;
     if (!preview) return;
 
-    // 第二重校验：预览停留期间树可能继续变化，写入前需再验一次指纹。
     const drift = detectAuxoRootDrift(
       stateRef.current,
       preview.projectId,
@@ -506,14 +463,21 @@ function App() {
     setIsAuxoOpen(false);
   }, [auxoPreview, dispatch]);
 
-  const zoom = state.is3DMode ? state.zoom3D : state.zoom2D;
+  const handleSelectNode = useCallback((id: string) => {
+    const s = stateRef.current;
+    if (s.toolMode === "graft" && s.graftSourceId) {
+      dispatch({ type: "GRAFT_CONFIRM", newParentId: id });
+    } else {
+      dispatch({ type: "SELECT_NODE", nodeId: id });
+    }
+  }, [dispatch]);
+
+  const canCreateLeaf = activeProject
+    ? canAttachLeaf(nodes, state.selectedNodeId)
+    : false;
 
   if (isEmpty) {
-    return (
-      <div className="workbench-shell relative flex h-screen w-full overflow-hidden font-sans">
-        <EmptyState />
-      </div>
-    );
+    return <EmptyState />;
   }
 
   return (
@@ -539,40 +503,23 @@ function App() {
         <AppHeader />
 
         {/* Scene */}
-        <div className="relative flex-1 overflow-hidden" onWheel={handleSceneWheel}>
+        <div className="relative flex-1 overflow-hidden">
           <TreeScene
             nodes={nodes}
             selectedNodeId={state.selectedNodeId}
             selectedLayer={state.selectedLayer}
-            displayLayer={displayLayer}
-            planeNames={state.planeNames}
-            is3DMode={state.is3DMode}
             toolMode={state.toolMode}
             movingNodeId={state.movingNodeId}
             pendingNodeLayer={state.pendingNodeLayer}
             zoom2D={state.zoom2D}
-            zoom3D={state.zoom3D}
             onSelectNode={handleSelectNode}
-            onStartLayerMove={handleStartLayerMove}
-            onSelectLayer={(layer) => dispatch({ type: "SET_LAYER", layer })}
-            onRenameLayer={(layer) => {
-              setRenameLayer(layer);
-              setPlaneNameInput(state.planeNames[layer] ?? "");
-            }}
-            onConfirmLayerMove={handleConfirmLayerMove}
+            onConfirmLayerMove={() => {}}
             onOpenNodeRings={(nodeId) => dispatch({ type: "OPEN_NODE_RINGS", nodeId })}
           />
 
           <TreeToolbar
             onOpenAuxo={handleOpenAuxo}
             isAuxoGenerating={isAuxoGenerating}
-          />
-
-          <ZoomControls
-            zoom={zoom}
-            is3DMode={state.is3DMode}
-            onZoomIn={handleZoomIn}
-            onZoomOut={handleZoomOut}
           />
 
           {state.isCanopyOpen && <CanopyMinimap />}
@@ -582,15 +529,25 @@ function App() {
           key="composer"
           onSend={handleSendMessage}
           onAddLeaf={handleAddLeaf}
-          isAiTyping={isAiTyping}
+          pendingLeafName={pendingLeafName}
+          onRequestLeafName={handleRequestLeafName}
+          onCancelLeafDraft={() => setPendingLeafName(null)}
+          canCreateLeaf={canCreateLeaf}
+          isAiTyping={activeChatNodeIds.has(state.selectedNodeId)}
           isContextPreparing={isSelectedContextStructuring}
-          onStop={stopStreaming}
+          onStop={() => {
+            void stopStreaming(state.selectedNodeId).catch((stopError) => {
+              setError(stopError instanceof Error ? stopError.message : "服务器取消失败");
+            });
+          }}
         />
       </div>
 
       <InspectorSidebar
         currentPath={currentPath}
+        onRetryAnswer={(nodeId) => void handleRetryAnswer(nodeId)}
         onRetrySemantics={handleRetrySemantics}
+        retryableAnswerNodeIds={retryableAnswerNodeIds}
         structuringNodeIds={structuringNodeIds}
       />
 
@@ -631,6 +588,13 @@ function App() {
           onCancel={() => setRenameLayer(null)}
         />
       )}
+      <LeafNameDialog
+        isOpen={leafNameDialogOpen}
+        name={leafNameInput}
+        onNameChange={setLeafNameInput}
+        onConfirm={handleConfirmLeafName}
+        onCancel={() => setLeafNameDialogOpen(false)}
+      />
     </div>
   );
 }

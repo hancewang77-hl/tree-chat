@@ -158,7 +158,7 @@ describe("workbench theme contract", () => {
     const toolbar = read("src/components/toolbar/TreeToolbar.tsx");
 
     expect(header).not.toContain("rgba(116, 122, 85");
-    expect(header.match(/var\(--control-border\)/g)?.length).toBeGreaterThanOrEqual(7);
+    expect(header.match(/var\(--control-border\)/g)?.length).toBeGreaterThanOrEqual(6);
 
     expect(composer).toContain("var(--workbench-control-fill)");
     expect(composer.match(/var\(--control-border\)/g)?.length).toBeGreaterThanOrEqual(5);

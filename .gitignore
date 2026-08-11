@@ -13,6 +13,11 @@
 
 # testing
 /coverage
+.pytest_cache/
+
+# python
+__pycache__/
+*.py[cod]
 
 # next.js
 /.next/
@@ -20,6 +25,7 @@
 
 # production
 /build
+/dist
 
 # misc
 .DS_Store
@@ -43,3 +49,14 @@ next-env.d.ts
 .gstack/
 .claude/settings.local.json
 .claude/
+
+# Local research and diagnostic outputs are not part of the product repository.
+/experiments/
+/docs/phase2/
+/docs/runtime/
+/docs/technical_sampling/
+/runtime/experiments/
+/runtime/phase2/
+/runtime/network/
+/japanese-garden-visual-references/
+/*.local.*.log

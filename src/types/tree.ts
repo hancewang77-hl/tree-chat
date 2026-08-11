@@ -10,17 +10,8 @@
  */
 export type ContextState = "valid" | "missing" | "stale";
 
-/**
- * Branch-only role: "answer" for AI answers, "task"/"task-group" for
- * Auxo-generated immutable task nodes.
- */
 export type NodeRole = "answer" | "task-group" | "task";
 
-// ---------------------------------------------------------------------------
-// Auxo planning — request input, provenance, plan, applied manifest
-// ---------------------------------------------------------------------------
-
-/** One contiguous lossless slice of a nutrient's Markdown, with its offset. */
 export type AuxoNutrientChunk = {
   nutrientId: string;
   nutrientName: string;
@@ -29,14 +20,12 @@ export type AuxoNutrientChunk = {
   text: string;
 };
 
-/** Compiled Auxo input: root task + enabled nutrient chunks + source units. */
 export type AuxoRequest = {
   rootTask: string;
   nutrientChunks: AuxoNutrientChunk[];
   sourceUnits: AuxoSourceUnit[];
 };
 
-/** Provenance of a plan node: the exact quote it was derived from. */
 export type AuxoSourceReference =
   | {
       kind: "root";
@@ -55,7 +44,6 @@ export type AuxoSourceReference =
       order: number;
     };
 
-/** A numbered question extracted from the root task or a nutrient. */
 export type AuxoSourceUnit =
   | {
       unitId: string;
@@ -74,7 +62,6 @@ export type AuxoSourceUnit =
       order: number;
     };
 
-/** One planned node; parentPlanId "root" attaches under the tree root. */
 export type AuxoPlanNode = {
   planId: string;
   parentPlanId: "root" | string;
@@ -85,7 +72,6 @@ export type AuxoPlanNode = {
   source?: AuxoSourceReference;
 };
 
-/** Validated planner output, applied atomically by APPLY_AUXO_PLAN. */
 export type AuxoPlan = {
   version: 1;
   generatedAt: number;
@@ -93,11 +79,6 @@ export type AuxoPlan = {
   nodes: AuxoPlanNode[];
 };
 
-/**
- * Record of an applied Auxo generation, stored on the root node only. The
- * inputFingerprint ties the generation to the exact compiled input it was
- * planned against.
- */
 export type AuxoGenerationManifest = {
   version: 1;
   generationId: string;
@@ -113,16 +94,16 @@ export type AuxoGenerationManifest = {
   }>;
 };
 
-// ---------------------------------------------------------------------------
-// Derived context data — semantic cards & compiled-context manifests
-// ---------------------------------------------------------------------------
+export type ContextTransferType = "pin" | "quote" | "merge";
 
-/**
- * Compact structured summary of a completed answer. Subsequent requests send
- * valid cards instead of replaying full responses. Derived data: updating a
- * card records no Rings entry, but its latest value is synchronized into
- * existing history snapshots (see treeReducer).
- */
+export type ContextTransfer = {
+  id: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  transferType: ContextTransferType;
+  createdAt: number;
+};
+
 export type SemanticCard = {
   version: 1;
   generatedAt: number;
@@ -140,7 +121,7 @@ export type SemanticCard = {
  * prompt was sent. Stored on the node for inspection; never sent to the model.
  */
 export type ContextManifest = {
-  compilerVersion: 1;
+  compilerVersion: 1 | 2 | 3 | 4;
   compiledAt: number;
   model: string;
   selectedNodeId: string;
@@ -155,6 +136,7 @@ export type ContextManifest = {
     nutrientName: string;
     chunkId: string;
   }>;
+  contextTransfers?: ContextTransfer[];
   warnings: string[];
 };
 
@@ -226,6 +208,8 @@ export type ToolMode = "view" | "node" | "layerMove" | "graft";
 export type Project = {
   id: string;
   name: string;
+  globalContext?: string;
+  contextTransfers?: ContextTransfer[];
   rootNodeId: string;
   nodes: NodesMap;
   nutrients: Record<string, NutrientItem>;
@@ -350,6 +334,13 @@ export type TreeAction =
     }
   | { type: "LEAF"; name?: string; content: string; parentId: string }
   | { type: "TOGGLE_LEAF_CONTEXT"; nodeId: string }
+  | {
+      type: "ADD_CONTEXT_TRANSFER";
+      sourceNodeId: string;
+      targetNodeId: string;
+      transferType: ContextTransferType;
+    }
+  | { type: "REMOVE_CONTEXT_TRANSFER"; transferId: string }
   | { type: "GRAFT_START"; nodeId: string }
   | { type: "GRAFT_CONFIRM"; newParentId: string }
   | { type: "GRAFT_CANCEL" }
