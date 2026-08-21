@@ -211,8 +211,14 @@ body::before {
   --landing-duration-nav: 260ms;
   --landing-duration-progress: 360ms;
   --landing-duration-halo: 2400ms;
+  /* 落地页全部英文内容使用 Times New Roman：置于栈首，原栈保留在后方，
+     中文按原样回退（Noto Serif SC / system-ui 等），外观不变。 */
+  --font-lora: "Times New Roman", Georgia, "Noto Serif SC", serif;
+  --font-geist-mono: "Times New Roman", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  --font-geist-sans: "Times New Roman", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: var(--landing-forest-950);
   color: var(--landing-cream);
+  font-family: var(--font-geist-sans);
   min-height: 1080px;
   overflow-x: clip;
   position: relative;
@@ -236,6 +242,14 @@ body.landing-scroll-root {
 
 html.landing-scroll-root.landing-scroll-tail-free,
 body.landing-scroll-root.landing-scroll-tail-free {
+  scroll-snap-type: none;
+}
+
+/* JS 翻页动画期间禁用原生 snap：动画每帧的 scrollTo 会被 mandatory snap
+   按中点规则重新吸附，与动画互相拉扯，导致落点偏离关键帧、文字蒙版
+   停在 moving 半透明状态。 */
+html.landing-scroll-root.landing-scroll-flipping,
+body.landing-scroll-root.landing-scroll-flipping {
   scroll-snap-type: none;
 }
 
@@ -1148,12 +1162,12 @@ body.landing-scroll-root::-webkit-scrollbar-track {
 
 .landing-tree-story {
   background: #0b2419;
-  height: 5400px;
+  height: max(9720px, 900svh);
   position: relative;
 }
 
 .landing-tree-sticky {
-  height: 1080px;
+  height: max(1080px, 100svh);
   overflow: hidden;
   position: sticky;
   top: 0;
@@ -1168,6 +1182,15 @@ body.landing-scroll-root::-webkit-scrollbar-track {
 
 .landing-tree-canvas {
   background: radial-gradient(ellipse at 50% 20%, rgba(142, 197, 214, 0.34), transparent 28%), linear-gradient(180deg, #79b6cb 0%, #295f52 33%, #102f22 75%, #081b14 100%);
+}
+
+/* Seedance 转场视频：铺满 sticky 视口并随滚动 scrubbing。
+   加载期间沿用上方天空渐变作为底衬。 */
+.landing-tree-video {
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  width: 100%;
 }
 
 .landing-tree-webgl-fallback {
@@ -1320,14 +1343,13 @@ body.landing-scroll-root::-webkit-scrollbar-track {
 }
 
 .landing-tree-copy__intro {
-  position: absolute;
-  z-index: 1;
+  position: static;
 }
 
 .landing-tree-copy__kicker {
   color: var(--landing-moss-light);
   font-family: var(--font-geist-mono);
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: .1em;
   line-height: 1.5;
   margin: 0 0 22px;
@@ -1337,172 +1359,107 @@ body.landing-scroll-root::-webkit-scrollbar-track {
 .landing-tree-copy h2 {
   color: var(--landing-cream);
   font-family: var(--font-lora);
-  font-size: 76px;
+  font-size: clamp(66px, 3.05vw, 80px);
   font-weight: 500;
   letter-spacing: -.05em;
   line-height: 1.02;
   margin: 0;
-  max-width: 9em;
+  max-width: none;
+}
+
+.landing-tree-copy .landing-title-line {
+  white-space: nowrap;
 }
 
 .landing-tree-copy__intro > p:last-child {
   color: var(--landing-silver);
-  font-size: 16px;
-  line-height: 1.8;
+  font-size: 18px;
+  line-height: 1.72;
   margin: 27px 0 0;
-  max-width: 32em;
+  max-width: 42em;
 }
 
 .landing-tree-facts {
   display: grid;
-  gap: 0 36px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  grid-template-columns: minmax(0, 1fr);
   margin: 0;
-  max-width: none;
+  margin-top: clamp(56px, 6vh, 72px);
+  max-width: 46%;
+  position: static;
+}
+
+/* 单列靠蒙版边缘：横向蒙版最暗的一侧可读性最好——左栏章节默认靠左，
+   右栏章节贴阅读栏右边缘。 */
+.landing-tree-copy--chapter-5 .landing-tree-facts,
+.landing-tree-copy--chapter-7 .landing-tree-facts {
+  margin-left: auto;
+}
+
+/* Shared reading rail: copy stays in a predictable edge column while the
+   camera moves independently behind it. */
+.landing-tree-copy__rail {
   position: absolute;
+  top: clamp(96px, 10vh, 124px);
+  width: clamp(640px, 38vw, 820px);
   z-index: 1;
 }
-
-/* Page 4 — complete tree at center, editorial notes kept to its edges. */
-.landing-tree-copy--chapter-4::before {
-  background: linear-gradient(90deg, rgba(7, 23, 16, .62), transparent 32%, transparent 68%, rgba(7, 23, 16, .62));
+.landing-tree-copy--chapter-4 .landing-tree-copy__rail,
+.landing-tree-copy--chapter-6 .landing-tree-copy__rail,
+.landing-tree-copy--chapter-8 .landing-tree-copy__rail {
+  left: clamp(96px, 8vw, 210px);
 }
-
-.landing-tree-copy--chapter-4 .landing-tree-copy__intro {
-  left: 96px;
-  top: 132px;
-  width: 410px;
+.landing-tree-copy--chapter-5 .landing-tree-copy__rail,
+.landing-tree-copy--chapter-7 .landing-tree-copy__rail {
+  right: clamp(96px, 8vw, 210px);
 }
-
-.landing-tree-copy--chapter-4 .landing-tree-copy__intro > p:last-child {
-  max-width: 380px;
+.landing-tree-overlay[data-tree-motion="settled"] .landing-tree-copy {
+  opacity: 1;
+  transition: opacity 450ms ease;
 }
-
-.landing-tree-copy--chapter-4 .landing-tree-copy__intro h2 {
-  font-size: 62px;
+.landing-tree-overlay[data-tree-motion="settled"] .landing-tree-copy::before {
+  --landing-tree-mask-opacity: .78;
+  opacity: .78;
+  opacity: var(--landing-tree-mask-opacity);
+  transition: opacity 450ms ease;
 }
-
-.landing-tree-copy--chapter-4 .landing-tree-facts {
-  display: block;
-  inset: 0;
+.landing-tree-overlay[data-tree-motion="moving"] .landing-tree-copy {
+  opacity: .6;
+  transition: opacity 180ms ease;
 }
-
-.landing-tree-copy--chapter-4 .landing-feature-pill {
-  position: absolute;
-  top: 760px;
-  width: 360px;
+.landing-tree-overlay[data-tree-motion="moving"] .landing-tree-copy::before {
+  --landing-tree-mask-opacity: 0;
+  opacity: 0;
+  opacity: var(--landing-tree-mask-opacity);
+  transition: opacity 180ms ease;
 }
-
-.landing-tree-copy--chapter-4 .landing-feature-pill:first-child {
-  left: 96px;
-}
-
-.landing-tree-copy--chapter-4 .landing-feature-pill:last-child {
-  right: 96px;
-}
-
-/* Page 5 — the branch close-up stays in the left two-fifths. */
-.landing-tree-copy--chapter-5::before {
-  background: linear-gradient(90deg, transparent 0%, transparent 45%, rgba(7, 23, 16, .22) 63%, rgba(7, 23, 16, .88) 100%);
-}
-
-.landing-tree-copy--chapter-5 .landing-tree-copy__intro {
-  right: 120px;
-  top: 132px;
-  width: 600px;
-}
-
-.landing-tree-copy--chapter-5 .landing-tree-copy__intro h2 {
-  font-size: 70px;
-}
-
-.landing-tree-copy--chapter-5 .landing-tree-facts {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 32px;
-  right: 120px;
-  top: 650px;
-  width: 560px;
-}
-
-/* Page 6 — trunk detail on the right, Auxo/Rings on the left. */
+.landing-tree-copy--chapter-4::before,
 .landing-tree-copy--chapter-6::before {
-  background: linear-gradient(90deg, rgba(7, 23, 16, .88) 0%, rgba(7, 23, 16, .62) 32%, transparent 61%, rgba(7, 23, 16, .16) 100%);
+  background: linear-gradient(90deg, rgba(7, 23, 16, .82), transparent 72%);
 }
-
-.landing-tree-copy--chapter-6 .landing-tree-copy__intro {
-  left: 120px;
-  top: 132px;
-  width: 620px;
-}
-
-.landing-tree-copy--chapter-6 .landing-tree-facts {
-  bottom: max(148px, calc(1104px - 100svh));
-  left: 120px;
-  width: 620px;
-}
-
-/* Page 7 — roots occupy the lower quarter; the copy remains clear above. */
+.landing-tree-copy--chapter-5::before,
 .landing-tree-copy--chapter-7::before {
-  background: linear-gradient(90deg, rgba(7, 23, 16, .9) 0%, rgba(7, 23, 16, .62) 34%, transparent 65%), linear-gradient(270deg, rgba(7, 23, 16, .3), transparent 34%);
+  background: linear-gradient(270deg, rgba(7, 23, 16, .82), transparent 72%);
 }
-
-.landing-tree-copy--chapter-7 .landing-tree-copy__intro {
-  left: 120px;
-  top: 138px;
-  width: 620px;
-}
-
-.landing-tree-copy--chapter-7 .landing-tree-facts {
-  display: flex;
-  bottom: 260px;
-  left: 120px;
-  width: 620px;
-}
-
-.landing-tree-copy--chapter-7::after {
-  backdrop-filter: blur(10px);
-  background: linear-gradient(90deg, transparent, rgba(7, 23, 16, .16));
-  content: "";
-  inset: 0 0 0 75%;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 48%);
-  mask-image: linear-gradient(90deg, transparent, #000 48%);
-  pointer-events: none;
-  position: absolute;
-  z-index: 0;
-}
-
-/* Page 8 — canopy and orbit share the center of the review frame. */
 .landing-tree-copy--chapter-8::before {
-  background: radial-gradient(circle at 50% 50%, transparent 0 27%, rgba(7, 23, 16, .18) 46%, rgba(7, 23, 16, .76) 100%);
+  background: linear-gradient(90deg, rgba(7, 23, 16, .76), transparent 72%);
 }
-
-.landing-tree-copy--chapter-8 .landing-tree-copy__intro {
-  left: 120px;
-  top: 112px;
-  width: 560px;
+.landing-footer-reflection__keywords {
+  color: rgba(216, 232, 188, .58);
+  font-family: var(--font-geist-mono);
+  font-size: 11px;
+  letter-spacing: .08em;
+  line-height: 1.55;
+  margin-top: 22px;
 }
-
-.landing-tree-copy--chapter-8 .landing-tree-copy__intro h2 {
-  font-size: 58px;
-}
-
-.landing-tree-copy--chapter-8 .landing-tree-facts {
-  display: flex;
-  gap: 32px;
-  bottom: max(126px, calc(1104px - 100svh));
-  right: 120px;
-  width: 500px;
-}
-
 .landing-feature-pill {
   align-items: flex-start;
   background: transparent;
   border: 0;
-  border-top: 1px solid var(--landing-border);
+  border-top: 1px solid rgba(222, 237, 216, 0.28);
   border-radius: 0;
   display: flex;
-  gap: 14px;
+  gap: 15px;
   min-height: 86px;
   padding: 16px 0 14px;
   position: relative;
@@ -1510,32 +1467,39 @@ body.landing-scroll-root::-webkit-scrollbar-track {
 
 .landing-feature-pill__icon {
   align-items: center;
-  background: rgba(159, 189, 120, 0.14);
-  border: 1px solid rgba(216, 232, 188, .24);
+  background: rgba(159, 189, 120, 0.18);
+  border: 1px solid rgba(216, 232, 188, 0.34);
   border-radius: 50%;
   color: var(--landing-moss-light);
   display: inline-flex;
-  flex: 0 0 34px;
-  height: 34px;
+  flex: 0 0 40px;
+  height: 40px;
   justify-content: center;
 }
 
 .landing-feature-pill strong,
 .landing-feature-pill small {
   display: block;
+  /* 视频背景上的一层柔和投影，保证浅色文字始终可读 */
+  text-shadow: 0 1px 12px rgba(4, 13, 8, 0.7);
 }
 
-.landing-feature-pill strong { color: var(--landing-cream); font-size: 13px; margin-bottom: 5px; }
-.landing-feature-pill small { color: var(--landing-silver-muted); font-size: 12px; line-height: 1.5; }
+.landing-feature-pill strong { color: var(--landing-cream); font-size: 17px; margin-bottom: 6px; }
+.landing-feature-pill small { color: var(--landing-silver); font-size: 15px; line-height: 1.6; }
+
+.landing-tree-copy--chapter-4 .landing-tree-copy__intro > p:last-child,
+.landing-tree-copy--chapter-6 .landing-tree-copy__intro > p:last-child,
+.landing-tree-copy--chapter-7 .landing-tree-copy__intro > p:last-child,
+.landing-tree-copy--chapter-4 .landing-feature-pill small,
+.landing-tree-copy--chapter-6 .landing-feature-pill small,
+.landing-tree-copy--chapter-7 .landing-feature-pill small {
+  text-wrap: balance;
+}
 
 .landing-tree-copy--chapter-5 .landing-feature-pill:nth-child(odd),
 .landing-tree-copy--chapter-6 .landing-feature-pill:first-child,
 .landing-tree-copy--chapter-7 .landing-feature-pill:first-child {
   border-top-color: rgba(216, 232, 188, .34);
-}
-
-.landing-tree-copy--chapter-7 .landing-feature-pill {
-  flex: 1;
 }
 
 .landing-tree-copy--chapter-7 .landing-feature-pill:first-child {
@@ -1553,15 +1517,48 @@ body.landing-scroll-root::-webkit-scrollbar-track {
 }
 
 .landing-tree-copy--chapter-8 .landing-feature-pill {
-  flex: 1;
   min-width: 0;
 }
 
 .landing-tree-scroll-track { position: absolute; inset: 0; pointer-events: none; }
 .landing-tree-scroll-stop {
-  height: 1080px;
+  height: max(2160px, 200svh);
   scroll-snap-align: start;
   scroll-snap-stop: always;
+}
+
+/* 最后一段（page 8 停留 + sticky 释放跑道）只需一屏：视频已停在终帧，
+   过长的空滚动会与滑动条进度脱节，让用户误以为卡住。 */
+.landing-tree-scroll-stop:last-child {
+  height: max(1080px, 100svh);
+}
+
+.landing-tree-exit-hint {
+  align-items: center;
+  animation: landing-exit-hint-bob 2.2s ease-in-out infinite;
+  bottom: 36px;
+  color: var(--landing-silver);
+  display: flex;
+  font-family: var(--font-geist-mono);
+  font-size: 12px;
+  gap: 8px;
+  justify-content: center;
+  left: 50%;
+  letter-spacing: .08em;
+  margin: 0;
+  pointer-events: none;
+  position: absolute;
+  transform: translateX(-50%);
+  z-index: 6;
+}
+
+@keyframes landing-exit-hint-bob {
+  0%, 100% { transform: translateX(-50%); }
+  50% { transform: translateX(-50%) translateY(5px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-tree-exit-hint { animation: none; }
 }
 
 .landing-tree-noscript {
@@ -1632,17 +1629,17 @@ body.landing-scroll-root::-webkit-scrollbar-track {
 .landing-canopy-orbit__ring--one { height: 68%; width: 68%; }
 .landing-canopy-orbit__ring--two { border-style: dashed; height: 90%; transform: rotate(22deg); width: 90%; }
 .landing-canopy-orbit__core { align-items: center; background: radial-gradient(circle, #bdd78f, #557c55); border-radius: 50%; box-shadow: 0 0 64px rgba(174, 215, 142, .35); color: #173322; display: flex; height: 108px; justify-content: center; width: 108px; }
-.landing-canopy-orbit > span {
-  background: rgba(7, 23, 16, .72);
-  border: 1px solid rgba(216, 232, 188, .48);
+.landing-tree-canopy-orbit > span {
+  background: rgba(7, 23, 16, .82);
+  border: 1px solid rgba(216, 232, 188, .62);
   border-radius: 999px;
   box-shadow: 0 8px 24px rgba(3, 12, 8, .18);
   color: var(--landing-cream);
   font-family: var(--font-geist-mono);
-  font-size: 10px;
+  font-size: 15px;
   left: calc(50% + var(--x));
   letter-spacing: .04em;
-  padding: 5px 8px;
+  padding: 7px 12px;
   position: absolute;
   top: calc(50% + var(--y));
   transform: translate(-50%, -50%);
@@ -1658,6 +1655,13 @@ body.landing-scroll-root::-webkit-scrollbar-track {
   transform: translate(-50%, -50%);
   width: 390px;
   z-index: 4;
+}
+.landing-tree-overlay[data-tree-composition="chapter-8"] .landing-tree-canopy-orbit {
+  left: calc(66% + 16px);
+  /* 整组轨道 UI（环 + 核心 + 关键词）视为一个整体：SEED 标签相对轨道
+     中心偏移为 (-46%, -6%)，反向平移同等比例，使整体中心落在原本
+     SEED 标签的位置上。 */
+  transform: translate(calc(-50% - 46%), calc(-50% - 6%));
 }
 .landing-tree-canopy-orbit .landing-canopy-orbit__core { height: 72px; width: 72px; }
 
@@ -1687,29 +1691,29 @@ body.landing-scroll-root::-webkit-scrollbar-track {
 }
 
 .landing-footer-reflection h2 {
-  font-size: 52px;
+  font-size: clamp(60px, 2.8vw, 72px);
 }
 
 .landing-footer-reflection__lede {
   color: var(--landing-silver-muted);
-  font-size: 15px;
-  line-height: 1.85;
+  font-size: 17px;
+  line-height: 1.72;
   margin: 28px 0 0;
   max-width: 590px;
 }
 
-.landing-prospect-content { display: grid; gap: 28px; }
-.landing-prospect-grid { display: grid; gap: 24px 32px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.landing-prospect-grid article { border-top: 1px solid var(--landing-border); padding: 16px 0 0; }
+.landing-prospect-content { display: grid; gap: 32px; }
+.landing-prospect-grid { display: grid; gap: 28px 36px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.landing-prospect-grid article { border-top: 1px solid var(--landing-border); padding: 18px 0 0; }
 .landing-prospect-grid article > span,
-.landing-prospect-notes article > h3 { color: var(--landing-moss); font-family: var(--font-geist-mono); font-size: 10px; letter-spacing: .12em; }
-.landing-prospect-grid h3 { color: var(--landing-cream); font-size: 15px; margin: 14px 0 7px; }
-.landing-prospect-grid p,
-.landing-prospect-notes p { color: var(--landing-silver-muted); font-size: 12px; line-height: 1.7; margin: 0; }
-.landing-prospect-notes { display: grid; gap: 28px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.landing-prospect-notes article { border-left: 1px solid rgba(184, 214, 160, .28); padding-left: 18px; }
+.landing-prospect-notes article > h3 { color: var(--landing-moss); font-family: var(--font-geist-mono); font-size: 12px; letter-spacing: .12em; }
+.landing-prospect-grid h3 { color: var(--landing-cream); font-size: 17px; margin: 16px 0 8px; }
+.landing-prospect-grid article p { color: var(--landing-silver-muted); font-size: 15px; line-height: 1.65; margin: 0; }
+.landing-prospect-notes article p { color: var(--landing-silver-muted); font-size: 14px; line-height: 1.7; margin: 0; text-wrap: balance; }
+.landing-prospect-notes { display: grid; gap: 32px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.landing-prospect-notes article { border-left: 1px solid rgba(184, 214, 160, .28); padding-left: 20px; }
 .landing-prospect-notes article > h3 { font-weight: 400; margin: 0; }
-.landing-prospect-notes p { margin-top: 10px; }
+.landing-prospect-notes p { margin-top: 12px; }
 
 .landing-footer { align-items: flex-end; border-top: 1px solid var(--landing-border); display: flex; gap: 28px; justify-content: space-between; margin-top: auto; padding-top: 24px; }
 .landing-footer > div:first-child p { color: var(--landing-silver-muted); font-size: 11px; margin: 10px 0 0; }
@@ -1718,6 +1722,16 @@ body.landing-scroll-root::-webkit-scrollbar-track {
 .landing-footer__links span { align-items: center; color: var(--landing-silver-muted); display: inline-flex; font-size: 12px; gap: 7px; text-decoration: none; }
 .landing-footer__links a { min-height: 44px; padding-inline: 8px; }
 .landing-footer__links a:hover { color: var(--landing-cream); }
+
+@media (min-height: 1100px) {
+  .landing-tree-copy__rail {
+    top: clamp(148px, 12.5vh, 180px);
+  }
+
+  .landing-footer-reflection {
+    transform: translateY(clamp(48px, 7vh, 96px));
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   html.landing-scroll-root,
@@ -1768,6 +1782,12 @@ body.landing-scroll-root::-webkit-scrollbar-track {
   .landing-tree-copy__intro,
   .landing-tree-facts {
     transition: none;
+  }
+
+  .landing-tree-copy,
+  .landing-tree-copy::before {
+    transition: none !important;
+    animation: none !important;
   }
 
   .landing-seed-stage.is-planted .landing-seed-button {
