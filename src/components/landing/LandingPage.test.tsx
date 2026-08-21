@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { animate, stagger } from "animejs";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -16,9 +16,13 @@ vi.mock("animejs", () => ({
   stagger: vi.fn(() => () => 0),
 }));
 
-vi.mock("./NarrativeTreeScene", () => ({
-  NarrativeTreeScene: () => null,
-}));
+vi.mock("./LandingVideoScrub", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./LandingVideoScrub")>();
+  return {
+    LandingVideoScrub: () => null,
+    VIDEO_CHAPTER_TIMES: actual.VIDEO_CHAPTER_TIMES,
+  };
+});
 
 describe("LandingPage seed transition", () => {
   let originalDescriptor: PropertyDescriptor | undefined;
@@ -258,8 +262,8 @@ describe("LandingPage seed transition", () => {
     const expectedRenderedHeadings = [
       ["seed-title", ["每一次探索，", "都从一个问题开始。"]],
       ["dilemma-title", ["思考，", "不是一条线"]],
-      ["tree-story-title", ["让复杂思考", "长成一棵树"]],
-      ["footer-title", ["让每一次提问都有位置，", "让每一次探索都有路径"]],
+      ["tree-story-title", ["一棵树，", "承载一次完整的思考。"]],
+      ["footer-title", ["我们仍在", "生长。"]],
     ] as const;
 
     expectedRenderedHeadings.forEach(([id, lines]) => {
@@ -271,11 +275,11 @@ describe("LandingPage seed transition", () => {
 
     const landingSource = readFileSync(resolve(process.cwd(), "src/components/landing/LandingPage.tsx"), "utf8");
     [
-      'titleLines: ["让复杂思考", "长成一棵树"]',
-      'titleLines: ["每一根枝条，", "都是可继续的思路"]',
-      'titleLines: ["让规划成为主线，", "让历史保留年轮"]',
-      'titleLines: ["让资料扎根，", "让成果被收获"]',
-      'titleLines: ["从局部回答，", "回到全局知识地图"]',
+      'titleLines: ["一棵树，", "承载一次完整的思考。"]',
+      'titleLines: ["让思考自由生长，", "也允许它重新长对方向。"]',
+      'titleLines: ["复杂思考需要支撑，", "也需要留下年轮。"]',
+      'titleLines: ["从资料中汲取养分，", "把思考沉淀成知识。"]',
+      'titleLines: ["从一粒种子，", "到一整片知识树冠。"]',
     ].forEach((lineContract) => expect(landingSource).toContain(lineContract));
   });
 
@@ -425,6 +429,172 @@ describe("LandingPage seed transition", () => {
     expect(treeStopMeasurements).toBe(10);
   });
 
+  test("marks the tree overlay moving during scroll and settles after 220ms of rest", () => {
+    const stopTops = [3240, 4320, 5400, 6480, 7560];
+    const stopSpan = stopTops[1] - stopTops[0];
+    const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+    let scrollTop = 0;
+    let pendingFrame: FrameRequestCallback | undefined;
+    vi.spyOn(window, "scrollY", "get").mockImplementation(() => scrollTop);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.matches(".landing-tree-scroll-stop")) {
+        const index = Number(this.dataset.page) - 4;
+        return { ...originalGetBoundingClientRect.call(this), top: stopTops[index] - scrollTop, bottom: stopTops[index] + stopSpan - scrollTop, height: stopSpan };
+      }
+      if (this.matches(".landing-tree-story")) {
+        return { ...originalGetBoundingClientRect.call(this), top: 0, bottom: stopSpan * 5, height: stopSpan * 5 };
+      }
+      return originalGetBoundingClientRect.call(this);
+    });
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      pendingFrame = callback;
+      return 1;
+    });
+
+    render(<LandingPage profile={PUBLIC_PROFILE} />);
+    const overlay = document.querySelector<HTMLElement>(".landing-tree-overlay");
+    expect(overlay).toHaveAttribute("data-tree-motion", "settled");
+
+    scrollTop = 4320;
+    fireEvent.scroll(window);
+    act(() => pendingFrame?.(0));
+    expect(overlay).toHaveAttribute("data-tree-motion", "moving");
+    act(() => vi.advanceTimersByTime(219));
+    expect(overlay).toHaveAttribute("data-tree-motion", "moving");
+    act(() => vi.advanceTimersByTime(1));
+    expect(overlay).toHaveAttribute("data-tree-motion", "settled");
+
+    scrollTop = 5400;
+    fireEvent.scroll(window);
+    act(() => pendingFrame?.(16));
+    expect(overlay).toHaveAttribute("data-tree-motion", "moving");
+    act(() => vi.advanceTimersByTime(219));
+    scrollTop = 6480;
+    fireEvent.scroll(window);
+    act(() => pendingFrame?.(32));
+    act(() => vi.advanceTimersByTime(1));
+    expect(overlay).toHaveAttribute("data-tree-motion", "moving");
+    act(() => vi.advanceTimersByTime(219));
+    expect(overlay).toHaveAttribute("data-tree-motion", "settled");
+  });
+
+  test("keeps the tree overlay settled when reduced motion is requested", () => {
+    const stopTops = [3240, 4320, 5400, 6480, 7560];
+    const stopSpan = stopTops[1] - stopTops[0];
+    const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query.includes("prefers-reduced-motion"),
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(() => false),
+    }));
+    let scrollTop = 0;
+    let pendingFrame: FrameRequestCallback | undefined;
+    vi.spyOn(window, "scrollY", "get").mockImplementation(() => scrollTop);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.matches(".landing-tree-scroll-stop")) {
+        const index = Number(this.dataset.page) - 4;
+        return { ...originalGetBoundingClientRect.call(this), top: stopTops[index] - scrollTop, bottom: stopTops[index] + stopSpan - scrollTop, height: stopSpan };
+      }
+      if (this.matches(".landing-tree-story")) {
+        return { ...originalGetBoundingClientRect.call(this), top: 0, bottom: stopSpan * 5, height: stopSpan * 5 };
+      }
+      return originalGetBoundingClientRect.call(this);
+    });
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      pendingFrame = callback;
+      return 1;
+    });
+
+    render(<LandingPage profile={PUBLIC_PROFILE} />);
+    const overlay = document.querySelector<HTMLElement>(".landing-tree-overlay");
+    expect(overlay).toHaveAttribute("data-tree-motion", "settled");
+    scrollTop = 4320;
+    fireEvent.scroll(window);
+    act(() => pendingFrame?.(0));
+    expect(overlay).toHaveAttribute("data-tree-motion", "settled");
+    act(() => vi.advanceTimersByTime(500));
+    expect(overlay).toHaveAttribute("data-tree-motion", "settled");
+  });
+
+  test("responds to reduced-motion preference changes during tree scrolling", () => {
+    const stopTops = [3240, 4320, 5400, 6480, 7560];
+    const stopSpan = stopTops[1] - stopTops[0];
+    const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+    const motionListeners = new Set<EventListener>();
+    let prefersReducedMotion = false;
+    const motionQuery = {
+      get matches() {
+        return prefersReducedMotion;
+      },
+      media: "(prefers-reduced-motion: reduce)",
+      onchange: null,
+      addEventListener: vi.fn((type: string, listener: EventListener) => {
+        if (type === "change") motionListeners.add(listener);
+      }),
+      removeEventListener: vi.fn((type: string, listener: EventListener) => {
+        if (type === "change") motionListeners.delete(listener);
+      }),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(() => false),
+    };
+    vi.stubGlobal("matchMedia", vi.fn(() => motionQuery));
+    let scrollTop = 0;
+    let pendingFrame: FrameRequestCallback | undefined;
+    vi.spyOn(window, "scrollY", "get").mockImplementation(() => scrollTop);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.matches(".landing-tree-scroll-stop")) {
+        const index = Number(this.dataset.page) - 4;
+        return { ...originalGetBoundingClientRect.call(this), top: stopTops[index] - scrollTop, bottom: stopTops[index] + stopSpan - scrollTop, height: stopSpan };
+      }
+      if (this.matches(".landing-tree-story")) {
+        return { ...originalGetBoundingClientRect.call(this), top: 0, bottom: stopSpan * 5, height: stopSpan * 5 };
+      }
+      return originalGetBoundingClientRect.call(this);
+    });
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      pendingFrame = callback;
+      return 1;
+    });
+
+    render(<LandingPage profile={PUBLIC_PROFILE} />);
+    const overlay = document.querySelector<HTMLElement>(".landing-tree-overlay");
+    expect(overlay).toHaveAttribute("data-tree-motion", "settled");
+
+    scrollTop = 4320;
+    fireEvent.scroll(window);
+    act(() => pendingFrame?.(0));
+    expect(overlay).toHaveAttribute("data-tree-motion", "moving");
+    act(() => vi.advanceTimersByTime(100));
+
+    act(() => {
+      prefersReducedMotion = true;
+      motionListeners.forEach((listener) => listener(new Event("change")));
+    });
+    expect(overlay).toHaveAttribute("data-tree-motion", "settled");
+
+    act(() => {
+      prefersReducedMotion = false;
+      motionListeners.forEach((listener) => listener(new Event("change")));
+    });
+    scrollTop = 5400;
+    fireEvent.scroll(window);
+    act(() => pendingFrame?.(16));
+    expect(overlay).toHaveAttribute("data-tree-motion", "moving");
+
+    act(() => vi.advanceTimersByTime(120));
+    expect(overlay).toHaveAttribute("data-tree-motion", "moving");
+    act(() => vi.advanceTimersByTime(99));
+    expect(overlay).toHaveAttribute("data-tree-motion", "moving");
+    act(() => vi.advanceTimersByTime(1));
+    expect(overlay).toHaveAttribute("data-tree-motion", "settled");
+  });
+
   test("marks both document roots while the landing narrative is mounted", () => {
     const { unmount } = render(<LandingPage profile={PUBLIC_PROFILE} />);
 
@@ -498,6 +668,108 @@ describe("LandingPage seed transition", () => {
     expect(document.body).not.toHaveClass("landing-scroll-tail-free");
   });
 
+  test("snaps a quarter-segment gesture with native smooth scrolling in the JS-owned zone", () => {
+    const stopTops = [3240, 4320, 5400, 6480, 7560];
+    const stopSpan = stopTops[1] - stopTops[0];
+    const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+    let scrollTop = 0;
+    let pendingFrame: FrameRequestCallback | undefined;
+    const scrollTo = vi.fn();
+    Object.defineProperty(window, "scrollTo", { configurable: true, writable: true, value: scrollTo });
+    vi.spyOn(window, "scrollY", "get").mockImplementation(() => scrollTop);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.matches(".landing-tree-scroll-stop")) {
+        const stopIndex = Number(this.dataset.page) - 4;
+        return {
+          ...originalGetBoundingClientRect.call(this),
+          top: stopTops[stopIndex] - scrollTop,
+          bottom: stopTops[stopIndex] + stopSpan - scrollTop,
+          height: stopSpan,
+        };
+      }
+      if (this.matches(".landing-tree-story")) {
+        return {
+          ...originalGetBoundingClientRect.call(this),
+          top: 0,
+          bottom: stopSpan * 5,
+          height: stopSpan * 5,
+        };
+      }
+      return originalGetBoundingClientRect.call(this);
+    });
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      pendingFrame = callback;
+      return 1;
+    });
+
+    render(<LandingPage profile={PUBLIC_PROFILE} />);
+
+    // 进入树叙事区后原生 snap 关闭（JS 接管）。
+    scrollTop = 4450;
+    fireEvent.scroll(window);
+    act(() => pendingFrame?.(0));
+    expect(document.documentElement).toHaveClass("landing-scroll-flipping");
+
+    // 未滚过 1/4（130px < 270px）：弹回 4320（浏览器原生平滑滚动）。
+    act(() => vi.advanceTimersByTime(200));
+    expect(scrollTo).toHaveBeenCalledWith({ top: 4320, behavior: "smooth" });
+
+    // 原生平滑滚动到达停靠点后结束吸附跟随。
+    scrollTop = 4320;
+    fireEvent.scroll(window);
+    act(() => pendingFrame?.(16));
+
+    // 向下滚过 1/4（580px ≥ 270px）：翻到 5400。
+    scrollTo.mockClear();
+    scrollTop = 4900;
+    fireEvent.scroll(window);
+    act(() => pendingFrame?.(32));
+    act(() => vi.advanceTimersByTime(200));
+    expect(scrollTo).toHaveBeenCalledWith({ top: 5400, behavior: "smooth" });
+    scrollTop = 5400;
+    fireEvent.scroll(window);
+    act(() => pendingFrame?.(48));
+
+    // 微小偏移（≤60px）直接跳回，不做平滑动画。
+    scrollTo.mockClear();
+    scrollTop = 4340;
+    fireEvent.scroll(window);
+    act(() => pendingFrame?.(64));
+    act(() => vi.advanceTimersByTime(200));
+    expect(scrollTo).toHaveBeenCalledWith(0, 4320);
+
+    // 恰好停在关键帧上时不吸附。
+    scrollTo.mockClear();
+    scrollTop = 5400;
+    fireEvent.scroll(window);
+    act(() => pendingFrame?.(80));
+    act(() => vi.advanceTimersByTime(200));
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    // 向上滚过 1/4：翻回 4320。
+    scrollTo.mockClear();
+    scrollTop = 5600;
+    fireEvent.scroll(window);
+    act(() => pendingFrame?.(96));
+    scrollTop = 5000;
+    fireEvent.scroll(window);
+    act(() => pendingFrame?.(112));
+    act(() => vi.advanceTimersByTime(200));
+    expect(scrollTo).toHaveBeenCalledWith({ top: 4320, behavior: "smooth" });
+    scrollTop = 4320;
+    fireEvent.scroll(window);
+    act(() => pendingFrame?.(128));
+
+    // Page 9 尾巴释放区：恢复原生 snap 行为，JS 不吸附。
+    scrollTo.mockClear();
+    scrollTop = 7600;
+    fireEvent.scroll(window);
+    act(() => pendingFrame?.(144));
+    expect(document.documentElement).not.toHaveClass("landing-scroll-flipping");
+    act(() => vi.advanceTimersByTime(200));
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
   test("does not retain chapter animations after their effect cleanup", () => {
     const animations: Array<{ pause: ReturnType<typeof vi.fn> }> = [];
     vi.mocked(animate).mockImplementation(() => {
@@ -528,65 +800,147 @@ describe("LandingPage seed transition", () => {
     expect(document.body.textContent).not.toContain("hancewang77-hl");
   });
 
-  test("pairs the five tree scenes with the approved prospect narrative", () => {
+  test("renders the concise Page 9 prospect narrative and keyword line", () => {
     render(<LandingPage profile={PUBLIC_PROFILE} />);
 
-    const landingSource = readFileSync(resolve(process.cwd(), "src/components/landing/LandingPage.tsx"), "utf8");
-    const pageText = document.body.textContent ?? "";
-    const treeStories = [
-      [
-        "让复杂思考长成一棵树",
-        "把每轮提问与回答放进父子路径，把不同方案留在并列枝条。你可以沿一条路线深入，也能退回主干比较、整理，让复杂任务始终保有全貌。",
-      ],
-      [
-        "每一根枝条，都是可继续的思路",
-        "从当前节点展开新分支，用 Leaf 留下判断，用 Graft 调整归属，再以 Prune 清理失效路径。思路可以先发散，随后收束成可继续加工的结构。",
-      ],
-      [
-        "让规划成为主线，让历史保留年轮",
-        "Auxo 先把根任务拆成可审阅的任务树，Rings 记录移动、扩展和修剪的变化。规划沿主线推进，试错也有可撤销、可重做的回路。",
-      ],
-      [
-        "让资料扎根，让成果被收获",
-        "将课程讲义、论文摘要和项目材料纳入当前上下文，再把整理后的整棵树导出为 Markdown 或 JSON。资料有归属，成果也能带走。",
-      ],
-      [
-        "从局部回答，回到全局知识地图",
-        "分支、批注、资料、历史与导出在树冠视角重新汇合。你可以从单个节点回到全局结构，看清问题如何展开、判断如何形成、成果如何沉淀。",
-      ],
+    const page9 = document.querySelector<HTMLElement>('[data-page="9"]');
+    expect(page9).not.toBeNull();
+    const page9View = within(page9!);
+
+    expect(page9View.getByRole("heading", { level: 2, name: "我们仍在生长。" })).toBeInTheDocument();
+    expect(page9View.getByText("TreeChat 把 AI 回答、人的判断与资料上下文组织成可分支、可回看、可导出的知识树。让学习、研究、治理与责任 AI，都留下清晰的依据与路径。")).toHaveClass("landing-footer-reflection__lede");
+    expect(page9View.getByText("TREE-AWARE CONTEXT · LOCAL-FIRST · MARKDOWN → OBSIDIAN GRAPH")).toHaveClass("landing-footer-reflection__keywords");
+    expect(page9View.getAllByRole("article")).toHaveLength(6);
+
+    const prospectGrid = page9!.querySelector<HTMLElement>(".landing-prospect-grid");
+    const prospectNotes = page9!.querySelector<HTMLElement>(".landing-prospect-notes");
+    expect(prospectGrid).not.toBeNull();
+    expect(prospectNotes).not.toBeNull();
+
+    const prospectArticles = within(prospectGrid!).getAllByRole("article");
+    expect(prospectArticles).toHaveLength(4);
+    [
+      ["LEARNING PATH", "深度学习", "沿路径深入，也能回到上层补充分支。"],
+      ["RESEARCH & PLANNING", "研究与方案", "并列比较路线，保留资料与决策依据。"],
+      ["PUBLIC GOVERNANCE", "公共治理", "拆解复杂预案，复盘风险与执行细节。"],
+      ["RESPONSIBLE AI", "负责任智能", "AI 生成，人在比较、取舍与校正。"],
+    ].forEach(([label, title, copy], index) => {
+      const article = within(prospectArticles[index]);
+      expect(article.getByText(label)).toBeInTheDocument();
+      expect(article.getByRole("heading", { level: 3, name: title })).toBeInTheDocument();
+      expect(article.getByText(copy)).toBeInTheDocument();
+    });
+
+    const noteArticles = within(prospectNotes!).getAllByRole("article");
+    expect(noteArticles).toHaveLength(2);
+    [
+      ["SCENARIO PROOF / 场景验证", "暴雨疏散、急救学习——同一棵树承载不同复杂度的任务。"],
+      ["SOCIAL RESPONSIBILITY / 社会责任", "让 AI 增强判断、组织与复盘，而不是替人决定。"],
+    ].forEach(([title, copy], index) => {
+      const note = within(noteArticles[index]);
+      expect(note.getByRole("heading", { level: 3, name: title })).toBeInTheDocument();
+      expect(note.getByText(copy)).toBeInTheDocument();
+    });
+  });
+
+  test("switches Page 4–8 copy in the real scroll-driven DOM", () => {
+    const stopTops = [3240, 4320, 5400, 6480, 7560];
+    const stopSpan = stopTops[1] - stopTops[0];
+    const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+    let scrollTop = 0;
+    let pendingFrame: FrameRequestCallback | undefined;
+
+    vi.spyOn(window, "scrollY", "get").mockImplementation(() => scrollTop);
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(1080);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.matches(".landing-tree-scroll-stop")) {
+        const stopIndex = Number(this.dataset.page) - 4;
+        return {
+          ...originalGetBoundingClientRect.call(this),
+          top: stopTops[stopIndex] - scrollTop,
+          bottom: stopTops[stopIndex] + stopSpan - scrollTop,
+          height: stopSpan,
+        };
+      }
+      if (this.matches(".landing-tree-story")) {
+        return {
+          ...originalGetBoundingClientRect.call(this),
+          top: 0,
+          bottom: stopSpan * 5,
+          height: stopSpan * 5,
+        };
+      }
+      return originalGetBoundingClientRect.call(this);
+    });
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      pendingFrame = callback;
+      return 1;
+    });
+
+    render(<LandingPage profile={PUBLIC_PROFILE} />);
+
+    const chapters = [
+      {
+        title: "一棵树，承载一次完整的思考。",
+        lines: ["一棵树，", "承载一次完整的思考。"],
+        body: "每轮问答成为一个节点。沿父子路径深入，在并列枝条间比较，再回到主干整理，让复杂思考始终保有全貌。",
+        facts: [["非线性结构", "从任意节点继续探索，关系可以重组、回溯。"], ["树感知上下文", "AI 沿有效路径理解，只带上相关语义、笔记与资料。"]],
+      },
+      {
+        title: "让思考自由生长，也允许它重新长对方向。",
+        lines: ["让思考自由生长，", "也允许它重新长对方向。"],
+        body: "从任意节点继续追问，让不同假设并行生长；用 Leaf 留下判断，用 Graft 重新归位，再以 Prune 收束无效路径。",
+        facts: [["Branch", "同一个问题，长出多条路。"], ["Graft", "保留内容，重组关系。"], ["Prune", "剪掉无效路径，让主干清晰。"], ["Leaf", "留下人的判断，默认不打扰 AI。"]],
+      },
+      {
+        title: "复杂思考需要支撑，也需要留下年轮。",
+        lines: ["复杂思考需要支撑，", "也需要留下年轮。"],
+        body: "Auxo 把长任务拆成任务组与原子任务，先规划，再逐项推进。Rings 保留结构变化，让每次试错都能回看、撤销、重做。",
+        facts: [["Auxo", "先规划，再逐节点推进。"], ["Rings", "撤销、重做，随时回到关键节点。"]],
+      },
+      {
+        title: "从资料中汲取养分，把思考沉淀成知识。",
+        lines: ["从资料中汲取养分，", "把思考沉淀成知识。"],
+        body: "Nutrient 将本地文档转成可用片段，只把与当前问题相关的内容带入上下文。Harvest 导出 Markdown 或 JSON；配合 tree-obs，父子关系还能在 Obsidian 中继续生长。",
+        facts: [["Nutrient", "只把相关片段带入上下文。"], ["Harvest → tree-obs", "导出整棵思考，在 Obsidian 重建双链树。"]],
+      },
+      {
+        title: "从一粒种子，到一整片知识树冠。",
+        lines: ["从一粒种子，", "到一整片知识树冠。"],
+        body: "从 Seed 到 Harvest，发散、整理、回溯、引用与迁移，都在同一套结构里完成。回到树冠，一眼看见问题如何展开、判断如何形成、成果如何延续。",
+        facts: [["Canopy", "一眼浏览完整树结构。"], ["Obsidian links", "导出后继续维护双链知识树。"]],
+      },
     ] as const;
 
-    treeStories.forEach(([title, body]) => {
-      expect(landingSource).toContain(`title: "${title}"`);
-      expect(landingSource).toContain(`body: "${body}"`);
-    });
-    expect(screen.getByRole("heading", { level: 2, name: treeStories[0][0] })).toBeInTheDocument();
-    expect(screen.getByText(treeStories[0][1])).toBeInTheDocument();
+    chapters.forEach((chapter, index) => {
+      scrollTop = stopTops[index];
+      fireEvent.scroll(window);
+      act(() => pendingFrame?.(index));
 
-    expect(screen.getByText("Prospect / 应用前景")).toBeInTheDocument();
-    expect(screen.getByRole("heading", {
-      level: 2,
-      name: "让每一次提问都有位置，让每一次探索都有路径",
-    })).toBeInTheDocument();
-    ["深度学习", "研究与方案", "公共治理", "负责任智能"].forEach((title) => {
-      expect(screen.getByRole("heading", { level: 3, name: title })).toBeInTheDocument();
+      const heading = screen.getByRole("heading", { level: 2, name: chapter.title });
+      expect(heading).toHaveAttribute("id", "tree-story-title");
+      expect([...heading.querySelectorAll<HTMLElement>(":scope > .landing-title-line")].map((line) => line.textContent)).toEqual(chapter.lines);
+      expect(screen.getByText(chapter.body)).toBeInTheDocument();
+      const facts = [...document.querySelectorAll<HTMLElement>(".landing-tree-facts .landing-feature-pill")].map((pill) => [
+        pill.querySelector("strong")?.textContent,
+        pill.querySelector("small")?.textContent,
+      ]);
+      expect(facts).toEqual(chapter.facts);
+
+      const exitHint = document.querySelector<HTMLElement>(".landing-tree-exit-hint");
+      if (index === chapters.length - 1) {
+        expect(exitHint).not.toBeNull();
+        expect(exitHint?.textContent).toContain("继续下滑");
+        expect(exitHint?.textContent).toContain("应用前景");
+      } else {
+        expect(exitHint).toBeNull();
+      }
+
+      if (index === chapters.length - 1) {
+        expect([...document.querySelectorAll<HTMLElement>(".landing-canopy-orbit > span")].map((keyword) => keyword.textContent)).toEqual([
+          "SEED", "BRANCH", "LEAF", "GRAFT", "PRUNE", "AUXO", "RINGS", "NUTRIENT", "HARVEST", "TREE-OBS",
+        ]);
+      }
     });
-    expect(screen.getByRole("heading", {
-      level: 3,
-      name: "SCENARIO PROOF / 场景验证",
-    })).toBeInTheDocument();
-    expect(screen.getByRole("heading", {
-      level: 3,
-      name: "SOCIAL RESPONSIBILITY / 社会责任",
-    })).toBeInTheDocument();
-    expect(pageText).toContain("暴雨内涝居民疏散与安置");
-    expect(pageText).toContain("海姆立克急救法");
-    expect(pageText).toContain(
-      "项目承担的社会责任，是让 AI 增强人的判断力、知识组织能力和数字素养，并让有价值的探索沉淀为可复用成果。",
-    );
-    expect(pageText).not.toContain("开放与反思");
-    expect(pageText).not.toContain("需要模型连接");
-    expect(pageText).not.toContain("状态不跨设备");
-    expect(document.querySelector(".landing-limitation-grid")).toBeNull();
   });
 });

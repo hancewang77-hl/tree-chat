@@ -23,7 +23,11 @@ import { useEffect, useRef, useState } from "react";
 import { BrandLogo } from "@/src/components/brand/BrandLogo";
 import type { LandingPresentation } from "@/src/lib/siteProfile";
 import { resolveTreeScrollState } from "./landingScroll";
-import { NarrativeTreeScene } from "./NarrativeTreeScene";
+import {
+  LandingVideoScrub,
+  VIDEO_CHAPTER_TIMES,
+  type TreeFlipControl,
+} from "./LandingVideoScrub";
 
 type RevealAnimation = { pause: () => void };
 
@@ -33,6 +37,17 @@ const LANDING_MOTION = {
   sprout: { duration: 900, ease: "out(4)" },
   chapter: { duration: 460, ease: "out(3)" },
 } as const;
+const TREE_MOTION_SETTLE_DELAY = 220;
+
+// Page 4–8 翻页式吸附：树叙事区内由 JS 全权接管吸附（区内关闭原生 snap，
+// 避免浏览器中点规则与 1/4 阈值互相拉扯导致卡顿）。手势结束后按滚动
+// 方向 + 阈值判定——向相邻停靠点滚过 TREE_FLIP_THRESHOLD（1/4）的距离
+// 就翻到那一帧，不足则弹回当前帧。翻页交给浏览器原生平滑滚动（与
+// page 1–3 的跳转手感一致），视频在吸附期间由滚动事件直接驱动、跟随
+// 浏览器缓动曲线变速播放，落点精确停在五个关键帧上。
+const TREE_FLIP_SETTLE_MS = 150;
+const TREE_FLIP_INSTANT_PX = 60;
+const TREE_FLIP_THRESHOLD = 0.25;
 
 const SEED_MATURE_TREE_DELAY = 480;
 const SEED_MATURE_TREE_DURATION = 760;
@@ -68,62 +83,63 @@ const TREE_STORIES: Array<{
   {
     chapter: "主干",
     kicker: "One workspace, many directions",
-    title: "让复杂思考长成一棵树",
-    titleLines: ["让复杂思考", "长成一棵树"],
-    body: "把每轮提问与回答放进父子路径，把不同方案留在并列枝条。你可以沿一条路线深入，也能退回主干比较、整理，让复杂任务始终保有全貌。",
+    title: "一棵树，承载一次完整的思考。",
+    titleLines: ["一棵树，", "承载一次完整的思考。"],
+    body: "每轮问答成为一个节点。沿父子路径深入，在并列枝条间比较，再回到主干整理，让复杂思考始终保有全貌。",
     accent: "var(--landing-moss-light)",
     facts: [
-      { label: "树状结构", text: "从任意节点继续探索", icon: Network },
-      { label: "2D / 3D", text: "在平面与空间之间切换", icon: Trees },
+      { label: "非线性结构", text: "从任意节点继续探索，关系可以重组、回溯。", icon: Network },
+      { label: "树感知上下文", text: "AI 沿有效路径理解，只带上相关语义、笔记与资料。", icon: Trees },
     ],
   },
   {
     chapter: "枝条",
     kicker: "Branch · Graft · Prune · Leaf",
-    title: "每一根枝条，都是可继续的思路",
-    titleLines: ["每一根枝条，", "都是可继续的思路"],
-    body: "从当前节点展开新分支，用 Leaf 留下判断，用 Graft 调整归属，再以 Prune 清理失效路径。思路可以先发散，随后收束成可继续加工的结构。",
+    title: "让思考自由生长，也允许它重新长对方向。",
+    titleLines: ["让思考自由生长，", "也允许它重新长对方向。"],
+    body: "从任意节点继续追问，让不同假设并行生长；用 Leaf 留下判断，用 Graft 重新归位，再以 Prune 收束无效路径。",
     accent: "var(--landing-moss-light)",
     facts: [
-      { label: "Branch", text: "从同一问题展开另一条路径", icon: GitBranch },
-      { label: "Graft", text: "把成熟思路接回主干", icon: GitFork },
-      { label: "Prune", text: "移除不再需要的分支", icon: Scissors },
-      { label: "Leaf", text: "为节点留下可回看的批注", icon: BookOpen },
+      { label: "Branch", text: "同一个问题，长出多条路。", icon: GitBranch },
+      { label: "Graft", text: "保留内容，重组关系。", icon: GitFork },
+      { label: "Prune", text: "剪掉无效路径，让主干清晰。", icon: Scissors },
+      { label: "Leaf", text: "留下人的判断，默认不打扰 AI。", icon: BookOpen },
     ],
   },
   {
     chapter: "树干",
     kicker: "Auxo · Rings",
-    title: "让规划成为主线，让历史保留年轮",
-    titleLines: ["让规划成为主线，", "让历史保留年轮"],
-    body: "Auxo 先把根任务拆成可审阅的任务树，Rings 记录移动、扩展和修剪的变化。规划沿主线推进，试错也有可撤销、可重做的回路。",
+    title: "复杂思考需要支撑，也需要留下年轮。",
+    titleLines: ["复杂思考需要支撑，", "也需要留下年轮。"],
+    body: "Auxo 把长任务拆成任务组与原子任务，先规划，再逐项推进。Rings 保留结构变化，让每次试错都能回看、撤销、重做。",
     accent: "var(--landing-moss-light)",
     facts: [
-      { label: "Auxo", text: "先规划，再逐项回答", icon: BrainCircuit },
-      { label: "Rings", text: "安全撤销与重做", icon: History },
+      { label: "Auxo", text: "先规划，再逐节点推进。", icon: BrainCircuit },
+      { label: "Rings", text: "撤销、重做，随时回到关键节点。", icon: History },
     ],
   },
   {
     chapter: "树根",
     kicker: "Nutrient · Harvest",
-    title: "让资料扎根，让成果被收获",
-    titleLines: ["让资料扎根，", "让成果被收获"],
-    body: "将课程讲义、论文摘要和项目材料纳入当前上下文，再把整理后的整棵树导出为 Markdown 或 JSON。资料有归属，成果也能带走。",
+    title: "从资料中汲取养分，把思考沉淀成知识。",
+    titleLines: ["从资料中汲取养分，", "把思考沉淀成知识。"],
+    body: "Nutrient 将本地文档转成可用片段，只把与当前问题相关的内容带入上下文。Harvest 导出 Markdown 或 JSON；配合 tree-obs，父子关系还能在 Obsidian 中继续生长。",
     accent: "var(--landing-moss-light)",
     facts: [
-      { label: "Nutrient", text: "关联本地资料与搜索", icon: Upload },
-      { label: "Harvest", text: "导出 Markdown 或 JSON", icon: Download },
+      { label: "Nutrient", text: "只把相关片段带入上下文。", icon: Upload },
+      { label: "Harvest → tree-obs", text: "导出整棵思考，在 Obsidian 重建双链树。", icon: Download },
     ],
   },
   {
     chapter: "树冠",
     kicker: "A canopy of connected ideas",
-    title: "从局部回答，回到全局知识地图",
-    titleLines: ["从局部回答，", "回到全局知识地图"],
-    body: "分支、批注、资料、历史与导出在树冠视角重新汇合。你可以从单个节点回到全局结构，看清问题如何展开、判断如何形成、成果如何沉淀。",
+    title: "从一粒种子，到一整片知识树冠。",
+    titleLines: ["从一粒种子，", "到一整片知识树冠。"],
+    body: "从 Seed 到 Harvest，发散、整理、回溯、引用与迁移，都在同一套结构里完成。回到树冠，一眼看见问题如何展开、判断如何形成、成果如何延续。",
     accent: "var(--landing-moss-light)",
     facts: [
-      { label: "Canopy", text: "一眼浏览完整树结构", icon: Waves },
+      { label: "Canopy", text: "一眼浏览完整树结构。", icon: Waves },
+      { label: "Obsidian links", text: "导出后继续维护双链知识树。", icon: GitFork },
     ],
   },
 ];
@@ -171,7 +187,7 @@ const TREE_MAP_EDGES = [
 function FeaturePill({ icon: Icon, label, text }: { icon: LucideIcon; label: string; text: string }) {
   return (
     <div className="landing-feature-pill">
-      <span className="landing-feature-pill__icon"><Icon size={16} strokeWidth={1.7} /></span>
+      <span className="landing-feature-pill__icon"><Icon size={18} strokeWidth={1.8} /></span>
       <span><strong>{label}</strong><small>{text}</small></span>
     </div>
   );
@@ -197,10 +213,15 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
       typeof window.matchMedia === "function" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
+  const [treeMotionState, setTreeMotionState] = useState<"moving" | "settled">("settled");
   const activeChapterRef = useRef(0);
   const treeChapterRef = useRef(0);
   const treeProgressRef = useRef(0);
+  const previousTreeProgressRef = useRef<number | null>(null);
+  const treeMotionTimerRef = useRef<number | null>(null);
+  const reducedMotionRef = useRef(reducedMotion);
   const requestTreeRenderRef = useRef<(() => void) | null>(null);
+  const treeFlipRef = useRef<TreeFlipControl | null>(null);
   const treeStopTopsRef = useRef<number[]>([]);
   const scrolledRef = useRef(false);
   const treeStoryRef = useRef<HTMLElement | null>(null);
@@ -213,22 +234,13 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
   const seedHintRef = useRef<HTMLParagraphElement | null>(null);
   const seedAnimations = useRef<RevealAnimation[]>([]);
 
-  const storyBase = TREE_STORIES[treeChapter];
-  const story = treeChapter === TREE_STORIES.length - 1
-    ? {
-        ...storyBase,
-        facts: [
-          storyBase.facts[0],
-          { ...profile.canopyFact, icon: GitFork },
-        ],
-      }
-    : storyBase;
+  const story = TREE_STORIES[treeChapter];
 
   useEffect(() => {
     // The scrolling element is normally <html>, but embedded shells and
     // WebKit-based browsers can delegate document scrolling to <body>. Keep
     // the same snap contract on both roots so every review frame (including
-    // the five sticky tree stops) settles on an intentional 1080px boundary.
+    // the five sticky tree stops) settles on its measured frame boundary.
     document.documentElement.classList.add("landing-scroll-root");
     document.body.classList.add("landing-scroll-root");
     return () => {
@@ -257,7 +269,16 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
     }
     const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     const sync = () => {
-      setReducedMotion(motionQuery.matches);
+      const nextReducedMotion = motionQuery.matches;
+      reducedMotionRef.current = nextReducedMotion;
+      if (nextReducedMotion) {
+        if (treeMotionTimerRef.current !== null) {
+          window.clearTimeout(treeMotionTimerRef.current);
+          treeMotionTimerRef.current = null;
+        }
+        setTreeMotionState("settled");
+      }
+      setReducedMotion(nextReducedMotion);
     };
     sync();
     if (motionQuery.addEventListener) {
@@ -414,6 +435,10 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
 
   useEffect(() => {
     let frame = 0;
+    let treeSnapTimer: number | null = null;
+    let snapTargetTop: number | null = null;
+    let scrollDirection = 0;
+    let previousScrollTop = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop;
     const update = () => {
       frame = 0;
       const commitActiveChapter = (next: number) => {
@@ -427,6 +452,23 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
         setTreeChapter(next);
       };
       const scrollTop = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop;
+      if (scrollTop !== previousScrollTop) {
+        scrollDirection = scrollTop > previousScrollTop ? 1 : -1;
+        previousScrollTop = scrollTop;
+      }
+      const snapStops = treeStopTopsRef.current;
+      if (snapStops.length >= 2) {
+        // 树叙事区内（两个边界停靠点之间）关闭原生 snap，由 JS 接管吸附；
+        // 边界停靠点与 page 1–3 / 页脚保持原生 snap 行为。
+        const inFlipZone = scrollTop > snapStops[0] && scrollTop < snapStops[snapStops.length - 1];
+        document.documentElement.classList.toggle("landing-scroll-flipping", inFlipZone);
+        document.body.classList.toggle("landing-scroll-flipping", inFlipZone);
+        // 原生平滑滚动到达目标停靠点后结束吸附跟随。
+        if (snapTargetTop !== null && Math.abs(scrollTop - snapTargetTop) <= 4) {
+          snapTargetTop = null;
+          treeFlipRef.current?.end();
+        }
+      }
       const lastTreeStopTop = treeStopTopsRef.current.at(-1);
       const releaseTail = lastTreeStopTop !== undefined && scrollTop + 1 >= lastTreeStopTop;
       document.documentElement.classList.toggle("landing-scroll-tail-free", releaseTail);
@@ -439,9 +481,20 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
       const treeScrollState = resolveTreeScrollState(scrollTop, treeStopTopsRef.current);
       treeProgressRef.current = treeScrollState.progress;
       requestTreeRenderRef.current?.();
+      const previousProgress = previousTreeProgressRef.current;
+      const progressChanged = previousProgress !== null && Math.abs(treeScrollState.progress - previousProgress) > 1e-4;
+      previousTreeProgressRef.current = treeScrollState.progress;
+      if (progressChanged && !reducedMotionRef.current) {
+        setTreeMotionState("moving");
+        if (treeMotionTimerRef.current !== null) window.clearTimeout(treeMotionTimerRef.current);
+        treeMotionTimerRef.current = window.setTimeout(() => {
+          treeMotionTimerRef.current = null;
+          setTreeMotionState("settled");
+        }, TREE_MOTION_SETTLE_DELAY);
+      }
       const storyRect = treeStoryRef.current?.getBoundingClientRect();
       if (storyRect && storyRect.top <= window.innerHeight * 0.78) {
-        // Switch copy and masks only when the camera reaches the next 1080px
+        // Switch copy and masks only when the camera reaches the next measured
         // story stop. Midpoint rounding changed overlays while the camera was
         // still between two compositions, which produced visible seams.
         const nextTreeChapter = treeScrollState.chapter;
@@ -471,8 +524,70 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
         commitActiveChapter(nextIndex);
       }
     };
-    const onScroll = () => {
+    const currentScrollTop = () =>
+      window.scrollY || document.documentElement.scrollTop || document.body.scrollTop;
+
+    // 原生平滑吸附：滚动动画交给浏览器合成器（与 page 1–3 的跳转同源），
+    // 视频在吸附期间由滚动事件直接驱动（跳过阻尼），跟随浏览器缓动曲线
+    // 播放过渡，落点精确停在参考帧上。
+    const startTreeSnap = (targetStopTop: number, targetVideoTime: number) => {
+      if (reducedMotionRef.current) {
+        window.scrollTo(0, targetStopTop);
+        treeFlipRef.current?.apply(targetVideoTime);
+        return;
+      }
+      const distance = targetStopTop - currentScrollTop();
+      if (Math.abs(distance) < 1) {
+        treeFlipRef.current?.apply(targetVideoTime);
+        return;
+      }
+      if (Math.abs(distance) <= TREE_FLIP_INSTANT_PX) {
+        window.scrollTo(0, targetStopTop);
+        treeFlipRef.current?.apply(targetVideoTime);
+        return;
+      }
+      snapTargetTop = targetStopTop;
+      treeFlipRef.current?.begin();
+      window.scrollTo({ top: targetStopTop, behavior: "smooth" });
+    };
+
+    // 手势结束后的翻页判定：向滚动方向越过相邻停靠点 1/4 的距离即翻页，
+    // 不足则弹回当前帧。Page 9 尾巴释放区保持自由滚动，交还给原生衔接。
+    const settleFlip = () => {
+      const scrollTop = currentScrollTop();
+      const stops = treeStopTopsRef.current;
+      if (stops.length < 2) return;
+      const firstStopTop = stops[0];
+      const lastStopTop = stops[stops.length - 1];
+      if (scrollTop <= firstStopTop || scrollTop >= lastStopTop) return;
+      const segmentSpan = stops[1] - stops[0];
+      // 定位当前所在的停靠段：scrollTop ∈ [stops[lowerIndex], stops[lowerIndex+1])
+      let lowerIndex = 0;
+      for (let index = 1; index < stops.length - 1; index += 1) {
+        if (scrollTop >= stops[index]) lowerIndex = index;
+      }
+      const offset = scrollTop - stops[lowerIndex];
+      if (offset <= 4) return; // 已停在关键帧上
+      const threshold = segmentSpan * TREE_FLIP_THRESHOLD;
+      let targetIndex: number;
+      if (scrollDirection > 0) {
+        targetIndex = offset >= threshold ? lowerIndex + 1 : lowerIndex;
+      } else if (scrollDirection < 0) {
+        targetIndex = offset <= segmentSpan - threshold ? lowerIndex : lowerIndex + 1;
+      } else {
+        targetIndex = offset < segmentSpan / 2 ? lowerIndex : lowerIndex + 1;
+      }
+      startTreeSnap(stops[targetIndex], VIDEO_CHAPTER_TIMES[targetIndex]);
+    };
+    const onScroll = (event: Event) => {
       if (!frame) frame = window.requestAnimationFrame(update);
+      if (snapTargetTop !== null && event.isTrusted) {
+        // 吸附动画期间用户主动滚动：取消本次吸附跟随，交还用户控制。
+        snapTargetTop = null;
+        treeFlipRef.current?.end();
+      }
+      if (treeSnapTimer !== null) window.clearTimeout(treeSnapTimer);
+      treeSnapTimer = window.setTimeout(settleFlip, TREE_FLIP_SETTLE_MS);
     };
     update();
     window.addEventListener("scroll", onScroll, { passive: true });
@@ -483,8 +598,15 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
       window.removeEventListener("scroll", onScroll);
       document.removeEventListener("scroll", onScroll, { capture: true });
       if (frame) window.cancelAnimationFrame(frame);
+      if (treeSnapTimer !== null) window.clearTimeout(treeSnapTimer);
+      if (treeMotionTimerRef.current !== null) {
+        window.clearTimeout(treeMotionTimerRef.current);
+        treeMotionTimerRef.current = null;
+      }
       document.documentElement.classList.remove("landing-scroll-tail-free");
       document.body.classList.remove("landing-scroll-tail-free");
+      document.documentElement.classList.remove("landing-scroll-flipping");
+      document.body.classList.remove("landing-scroll-flipping");
     };
   }, []);
 
@@ -704,22 +826,24 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
 
       <section ref={treeStoryRef} className="landing-tree-story" aria-labelledby="tree-story-title">
         <div className="landing-tree-sticky">
-          <NarrativeTreeScene
-            progress={treeChapter / (TREE_STORIES.length - 1)}
+          <LandingVideoScrub
             progressRef={treeProgressRef}
             requestRenderRef={requestTreeRenderRef}
+            flipRef={treeFlipRef}
             reducedMotion={reducedMotion}
           />
           <div className="landing-tree-vignette" aria-hidden="true" />
-          <div className="landing-tree-overlay" data-tree-composition={`chapter-${treeChapter + 4}`}>
+          <div className="landing-tree-overlay" data-tree-composition={`chapter-${treeChapter + 4}`} data-tree-motion={reducedMotion ? "settled" : treeMotionState}>
             <div ref={treeCopyRef} className={`landing-tree-copy landing-tree-copy--chapter-${treeChapter + 4}`} key={story.chapter}>
-              <div className="landing-tree-copy__intro">
-                <p className="landing-tree-copy__kicker" style={{ color: story.accent }}>{story.chapter} <span aria-hidden="true">·</span> {story.kicker}</p>
-                <EditorialTitle id="tree-story-title" title={story.title} lines={story.titleLines} />
-                <p>{story.body}</p>
-              </div>
-              <div className="landing-tree-facts">
-                {story.facts.map((fact) => <FeaturePill key={fact.label} {...fact} />)}
+              <div className="landing-tree-copy__rail">
+                <div className="landing-tree-copy__intro">
+                  <p className="landing-tree-copy__kicker" style={{ color: story.accent }}>{story.chapter} <span aria-hidden="true">·</span> {story.kicker}</p>
+                  <EditorialTitle id="tree-story-title" title={story.title} lines={story.titleLines} />
+                  <p>{story.body}</p>
+                </div>
+                <div className="landing-tree-facts">
+                  {story.facts.map((fact) => <FeaturePill key={fact.label} {...fact} />)}
+                </div>
               </div>
             </div>
             {treeChapter === TREE_STORIES.length - 1 && (
@@ -727,14 +851,20 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
                 <div className="landing-canopy-orbit__ring landing-canopy-orbit__ring--one" />
                 <div className="landing-canopy-orbit__ring landing-canopy-orbit__ring--two" />
                 <div className="landing-canopy-orbit__core"><Trees size={30} strokeWidth={1.2} /></div>
-                <span style={{ "--x": "-46%", "--y": "-6%" } as CSSProperties}>Branch</span>
-                <span style={{ "--x": "-5%", "--y": "-51%" } as CSSProperties}>Graft</span>
-                <span style={{ "--x": "33%", "--y": "-35%" } as CSSProperties}>Nutrient</span>
-                <span style={{ "--x": "52%", "--y": "-4%" } as CSSProperties}>Prune</span>
-                <span style={{ "--x": "35%", "--y": "35%" } as CSSProperties}>Rings</span>
-                <span style={{ "--x": "4%", "--y": "51%" } as CSSProperties}>Leaf</span>
-                <span style={{ "--x": "-48%", "--y": "34%" } as CSSProperties}>Harvest</span>
+                <span style={{ "--x": "-62%", "--y": "-8%" } as CSSProperties}>SEED</span>
+                <span style={{ "--x": "-40%", "--y": "-52%" } as CSSProperties}>BRANCH</span>
+                <span style={{ "--x": "-7%", "--y": "-69%" } as CSSProperties}>LEAF</span>
+                <span style={{ "--x": "31%", "--y": "-61%" } as CSSProperties}>GRAFT</span>
+                <span style={{ "--x": "61%", "--y": "-30%" } as CSSProperties}>PRUNE</span>
+                <span style={{ "--x": "71%", "--y": "11%" } as CSSProperties}>AUXO</span>
+                <span style={{ "--x": "48%", "--y": "48%" } as CSSProperties}>RINGS</span>
+                <span style={{ "--x": "6%", "--y": "69%" } as CSSProperties}>NUTRIENT</span>
+                <span style={{ "--x": "-39%", "--y": "61%" } as CSSProperties}>HARVEST</span>
+                <span style={{ "--x": "-65%", "--y": "20%" } as CSSProperties}>TREE-OBS</span>
               </div>
+            )}
+            {treeChapter === TREE_STORIES.length - 1 && (
+              <p className="landing-tree-exit-hint" aria-hidden="true">继续下滑 · 应用前景 <ArrowDown size={14} aria-hidden="true" /></p>
             )}
           </div>
         </div>
@@ -759,24 +889,25 @@ export function LandingPage({ profile }: { profile: LandingPresentation }) {
           <div className="landing-footer-reflection">
             <div className="landing-footer-reflection__intro">
               <p className="landing-kicker">Prospect / 应用前景</p>
-              <EditorialTitle id="footer-title" title="让每一次提问都有位置，让每一次探索都有路径" lines={["让每一次提问都有位置，", "让每一次探索都有路径"]} />
-              <p className="landing-footer-reflection__lede">Tree Chat（智构树语）面向课程学习、研究资料整理、竞赛方案推演与公共治理，把 AI 回答、用户判断和资料上下文组织成可浏览、可调整、可导出的知识树，降低回看、比较和整理成本。</p>
+              <EditorialTitle id="footer-title" title="我们仍在生长。" lines={["我们仍在", "生长。"]} />
+              <p className="landing-footer-reflection__lede">TreeChat 把 AI 回答、人的判断与资料上下文组织成可分支、可回看、可导出的知识树。让学习、研究、治理与责任 AI，都留下清晰的依据与路径。</p>
+              <p className="landing-footer-reflection__keywords">TREE-AWARE CONTEXT · LOCAL-FIRST · MARKDOWN → OBSIDIAN GRAPH</p>
             </div>
             <div className="landing-prospect-content">
               <div className="landing-prospect-grid">
-                <article><span>LEARNING PATH</span><h3>深度学习</h3><p>围绕一个知识点展开定义、推导、例题、易错点和个人笔记。学习者可以沿路径深入，也能回到上层补充分支，形成可复习的个人知识树。</p></article>
-                <article><span>RESEARCH &amp; PLANNING</span><h3>研究与方案</h3><p>把文献观点、实验方法、需求分析与技术路线放在可比较的枝条上，结合项目资料推进论证，再以 Markdown 或 JSON 导出结果。</p></article>
-                <article><span>PUBLIC GOVERNANCE</span><h3>公共治理</h3><p>围绕风险地图、预警触发、分层疏散、物资调配与临时安置拆解复杂预案，让总体目标和执行细节在同一结构中接受复盘。</p></article>
-                <article><span>RESPONSIBLE AI</span><h3>负责任智能</h3><p>AI 提供内容，用户负责比较、取舍与校正。树状路径保留问题来源和人工批注，让智能工具服务于人的判断与数字素养。</p></article>
+                <article><span>LEARNING PATH</span><h3>深度学习</h3><p>沿路径深入，也能回到上层补充分支。</p></article>
+                <article><span>RESEARCH &amp; PLANNING</span><h3>研究与方案</h3><p>并列比较路线，保留资料与决策依据。</p></article>
+                <article><span>PUBLIC GOVERNANCE</span><h3>公共治理</h3><p>拆解复杂预案，复盘风险与执行细节。</p></article>
+                <article><span>RESPONSIBLE AI</span><h3>负责任智能</h3><p>AI 生成，人在比较、取舍与校正。</p></article>
               </div>
               <div className="landing-prospect-notes">
                 <article>
                   <h3>SCENARIO PROOF / 场景验证</h3>
-                  <p>在“暴雨内涝居民疏散与安置”演示中，风险地图、预警触发、物资调配、过程监管和临时安置分别落在对应枝条；在“海姆立克急救法”学习中，概念、适用情形、原理、操作要领与记忆口诀形成可回溯路径。两类场景分别验证复杂方案推演与递进学习。</p>
+                  <p>暴雨疏散、急救学习——同一棵树承载不同复杂度的任务。</p>
                 </article>
                 <article>
                   <h3>SOCIAL RESPONSIBILITY / 社会责任</h3>
-                  <p>教育数字化带来了充足内容，也把整理、辨别和复盘能力推到前台。Tree Chat 以低门槛、高可视的树状交互帮助学习者保存自己的理解路径，帮助方案制定者保留依据与分歧。项目承担的社会责任，是让 AI 增强人的判断力、知识组织能力和数字素养，并让有价值的探索沉淀为可复用成果。</p>
+                  <p>让 AI 增强判断、组织与复盘，而不是替人决定。</p>
                 </article>
               </div>
             </div>
